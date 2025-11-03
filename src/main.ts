@@ -16,6 +16,7 @@ import type MarkdownIt from 'markdown-it'
 import anchorsPlugin from './wysiwyg/render/anchorsPlugin'
 import { buildAnchors, syncByAnchor, type Anchor } from './wysiwyg/sync/anchors'
 import { createWysiwygWheelHandler } from './wysiwyg/sync/scroll'
+import { enableWysiwygV2, disableWysiwygV2, isWysiwygV2Enabled } from './wysiwyg/v2/index'
 
 // Tauri 插件（v2）
 // Tauri 对话框：使用 ask 提供原生确认，避免浏览器 confirm 在关闭事件中失效
@@ -141,6 +142,7 @@ let fileTreeReady = false
 let mode: Mode = 'edit'
 // 所见即所得开关（Overlay 模式）
 let wysiwyg = false
+let wysiwygV2Active = false
 let _wysiwygRaf = 0
 // 仅在按回车时触发渲染（可选开关，默认关闭）
 let wysiwygEnterToRenderOnly = false
@@ -536,6 +538,7 @@ const status = document.getElementById('status') as HTMLDivElement
 function syncScrollEditorToPreview() {
   try {
     if (!wysiwyg) return
+    if (wysiwygV2Active) return
     const er = editor.scrollHeight - editor.clientHeight
     const pr = preview.scrollHeight - preview.clientHeight
     // 优先使用“锚点法”：用光标位置（selectionStart）映射到预览 top
@@ -555,6 +558,7 @@ function syncScrollEditorToPreview() {
 function scheduleWysiwygRender() {
   try {
     if (!wysiwyg) return
+    if (wysiwygV2Active) return
     if (shouldDeferWysiwygRender()) { updateWysiwygLineHighlight(); return }
     if (_wysiwygRaf) cancelAnimationFrame(_wysiwygRaf)
     _wysiwygRaf = requestAnimationFrame(async () => {
@@ -688,8 +692,29 @@ async function setWysiwygEnabled(enable: boolean) {
     if (wysiwyg === enable) return
     wysiwyg = enable
     const container = document.querySelector('.container') as HTMLDivElement | null
-    if (container) container.classList.toggle('wysiwyg', wysiwyg)
+    if (container) container.classList.toggle('wysiwyg', wysiwyg && !wysiwygV2Active)
+    if (container) container.classList.toggle('wysiwyg-v2', wysiwyg && wysiwygV2Active)
   if (wysiwyg) {
+      // 优先启用 V2：真实所见编辑视图
+      try {
+        let root = document.getElementById('md-wysiwyg-root') as HTMLDivElement | null
+        if (!root) {
+          root = document.createElement('div')
+          root.id = 'md-wysiwyg-root'
+          const host = document.querySelector('.container') as HTMLDivElement | null
+          if (host) host.appendChild(root)
+        }
+        await enableWysiwygV2(root!, editor.value, (mdNext) => {
+          try { editor.value = mdNext; dirty = true; refreshTitle(); refreshStatus() } catch {}
+        })
+        wysiwygV2Active = true
+        if (container) { container.classList.add('wysiwyg-v2'); container.classList.remove('wysiwyg') }
+        try { preview.classList.add('hidden') } catch {}
+        return
+      } catch (e) {
+        console.error('启用所见V2失败，将回退到旧模式', e)
+        wysiwygV2Active = false
+      }
       // 进入所见模式时，清理一次延迟标记，避免历史状态影响
       wysiwygHoldInlineDollarUntilEnter = false
       wysiwygHoldFenceUntilEnter = false
@@ -702,6 +727,11 @@ async function setWysiwygEnabled(enable: boolean) {
       syncScrollEditorToPreview()
       updateWysiwygLineHighlight(); updateWysiwygCaretDot(); startDotBlink()
     } else {
+      if (wysiwygV2Active) {
+        try { await disableWysiwygV2() } catch {}
+        wysiwygV2Active = false
+        if (container) container.classList.remove('wysiwyg-v2')
+      }
       if (mode !== 'preview') {
         try { preview.classList.add('hidden') } catch {}
       }

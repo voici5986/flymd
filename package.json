@@ -27,8 +27,19 @@
     "markdown-it": "^13.0.2",
     "markdown-it-katex": "^2.0.3",
     "katex": "^0.16.10",
-    "mermaid": "^10.9.1",
-    "punycode": "^2.3.0"
+    "mermaid": "^11.10.0",
+    "punycode": "^2.3.0",
+    "@milkdown/core": "^7.17.1",
+    "@milkdown/prose": "^7.17.1",
+    "@milkdown/kit": "^7.17.1",
+    "@milkdown/crepe": "^7.17.1",
+    "@milkdown/preset-commonmark": "^7.17.1",
+    "@milkdown/preset-gfm": "^7.17.1",
+    "@milkdown/plugin-automd": "^7.17.1",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.38.1",
+    "@codemirror/commands": "^6.6.0",
+    "@codemirror/lang-markdown": "^6.3.4"
   }
 }
 
