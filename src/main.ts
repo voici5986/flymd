@@ -15,6 +15,7 @@ import type MarkdownIt from 'markdown-it'
 // WYSIWYG: 锚点插件与锚点同步（用于替换纯比例同步）
 import anchorsPlugin from './wysiwyg/render/anchorsPlugin'
 import { buildAnchors, syncByAnchor, type Anchor } from './wysiwyg/sync/anchors'
+import { createWysiwygWheelHandler } from './wysiwyg/sync/scroll'
 
 // Tauri 插件（v2）
 // Tauri 对话框：使用 ask 提供原生确认，避免浏览器 confirm 在关闭事件中失效
@@ -1118,79 +1119,17 @@ const containerEl = document.querySelector('.container') as HTMLDivElement
   // 修复在所见模式中滚轮无法滚动编辑区的问题：
   // 在容器层捕获 wheel 事件，直接驱动 textarea 的滚动并同步预览
   try {
-    const handleWysiwygWheel = (e: WheelEvent) => {
-      if (!wysiwyg) return
-      try {
-        const rawDelta = Number.isFinite(e.deltaY) ? e.deltaY : 0
-        if (rawDelta === 0) return
-        const style = window.getComputedStyle(editor)
-        const fallbackFontSize = parseFloat(style.fontSize || '14') || 14
-        const rawLineHeight = parseFloat(style.lineHeight || '')
-        const lineHeight = Number.isFinite(rawLineHeight) && rawLineHeight > 0 ? rawLineHeight : fallbackFontSize * 1.6
-        const padTop = parseFloat(style.paddingTop || '0') || 0
-        let dy = rawDelta
-        if (e.deltaMode === 1 /* WheelEvent.DOM_DELTA_LINE */) {
-          dy *= lineHeight || 16
-        } else if (e.deltaMode === 2 /* WheelEvent.DOM_DELTA_PAGE */) {
-          dy *= editor.clientHeight || window.innerHeight || 400
-        }
-        if (!Number.isFinite(dy) || dy === 0) return
-        const er = Math.max(0, editor.scrollHeight - editor.clientHeight)
-        const pr = Math.max(0, preview.scrollHeight - preview.clientHeight)
-        if (er <= 0 && pr > 0) {
-          try { e.preventDefault() } catch {}
-          const pcur = (preview.scrollTop || 0) >>> 0
-          const pnext = Math.max(0, Math.min(pr, pcur + dy))
-          if (Math.abs(pnext - pcur) < 0.5) return
-          preview.scrollTop = pnext
-          // move caret by lines to reflect scroll when editor has no scroll range
-          let caretAdjusted = false
-          try {
-            if (editor.selectionStart === editor.selectionEnd) {
-              const lineHeightPx = (lineHeight || 16)
-              let linesToMove = 0
-              if (Number.isFinite(lineHeightPx) && lineHeightPx > 0) {
-                linesToMove = Math.round(dy / lineHeightPx)
-              }
-              if (linesToMove === 0) linesToMove = dy > 0 ? 1 : -1
-              const moved = moveWysiwygCaretByLines(linesToMove, _wysiwygCaretVisualColumn)
-              if (moved !== 0) { _wysiwygCaretLineIndex += moved; caretAdjusted = true }
-            }
-          } catch {}
-          try { editor.scrollTop = 0 } catch {}
-          if (caretAdjusted) { try { updateWysiwygLineHighlight(); updateWysiwygCaretDot(); ensureWysiwygCaretDotInView() } catch {} }
-          if (caretAdjusted && !wysiwygEnterToRenderOnly) { try { scheduleWysiwygRender() } catch {} }
-          return
-        }
-        const max = Math.max(0, editor.scrollHeight - editor.clientHeight)
-        const currentTop = editor.scrollTop || 0
-        const next = Math.max(0, Math.min(max, currentTop + dy))
-        if (Math.abs(next - currentTop) < 0.1) return
-        e.preventDefault()
-        editor.scrollTop = next
-        syncScrollEditorToPreview()
-        let caretAdjusted = false
-        if (editor.selectionStart === editor.selectionEnd) {
-          const lineHeightPx = lineHeight || 16
-          const targetLine = Math.max(0, Math.floor((next - padTop) / lineHeightPx))
-          const diff = targetLine - _wysiwygCaretLineIndex
-          if (diff !== 0) {
-            const moved = moveWysiwygCaretByLines(diff, _wysiwygCaretVisualColumn)
-            if (moved !== 0) {
-              _wysiwygCaretLineIndex += moved
-              caretAdjusted = true
-            }
-          }
-        }
-        updateWysiwygLineHighlight()
-        updateWysiwygCaretDot()
-        startDotBlink()
-        if (caretAdjusted && !wysiwygEnterToRenderOnly) {
-          scheduleWysiwygRender()
-        }
-      } catch {}
-    }
-    containerEl.addEventListener('wheel', handleWysiwygWheel, { passive: false } as any)
+    const wheelHandler = createWysiwygWheelHandler(editor as any, preview as any, {
+      isWysiwyg: () => wysiwyg,
+      moveCaretByLines: (d, col) => moveWysiwygCaretByLines(d, col),
+      applyCaretMoved: (delta) => { try { _wysiwygCaretLineIndex += delta } catch {} },
+      getCaretVisualColumn: () => _wysiwygCaretVisualColumn,
+      updateLineHighlight: () => updateWysiwygLineHighlight(),
+      updateCaretDot: () => { updateWysiwygCaretDot(); startDotBlink() },
+      ensureCaretDotInView: () => ensureWysiwygCaretDotInView(),
+      scheduleRenderIfNeeded: () => { if (!wysiwygEnterToRenderOnly) scheduleWysiwygRender() },
+    })
+    containerEl.addEventListener('wheel', wheelHandler, { passive: false } as any)
   } catch {}
   // 所见模式：当前行高亮覆盖层
   try {
