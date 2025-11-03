@@ -187,6 +187,8 @@ let selectedNodeEl: HTMLElement | null = null
 let libraryDocked = true
 // 非固定模式下：离开侧栏后自动隐藏的延迟定时器
 let _libLeaveTimer: number | null = null
+// 左侧“边缘唤醒”热区元素（非固定且隐藏时显示，鼠标靠近自动展开库）
+let _libEdgeEl: HTMLDivElement | null = null
 function selectLibraryNode(el: HTMLElement | null, path: string | null, isDir: boolean) {
   try {
     if (selectedNodeEl) selectedNodeEl.classList.remove('selected')
@@ -1170,6 +1172,22 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
     <div class="lib-tree" id="lib-tree"></div>
   `
   containerEl.appendChild(library)
+  // 创建左侧边缘唤醒热区（默认隐藏）
+  try {
+    _libEdgeEl = document.createElement('div') as HTMLDivElement
+    _libEdgeEl.id = 'lib-edge'
+    _libEdgeEl.style.position = 'absolute'
+    _libEdgeEl.style.left = '0'
+    _libEdgeEl.style.top = '0'
+    _libEdgeEl.style.bottom = '0'
+    _libEdgeEl.style.width = '6px' // 热区宽度
+    _libEdgeEl.style.zIndex = '14'
+    _libEdgeEl.style.pointerEvents = 'auto'
+    _libEdgeEl.style.background = 'transparent'
+    _libEdgeEl.style.display = 'none'
+    _libEdgeEl.addEventListener('mouseenter', () => { try { if (!libraryDocked) showLibrary(true) } catch {} })
+    containerEl.appendChild(_libEdgeEl)
+  } catch {}
   try {
     const elPath = library.querySelector('#lib-path') as HTMLDivElement | null
     const elChoose = library.querySelector('#lib-choose') as HTMLButtonElement | null
@@ -2927,6 +2945,12 @@ function applyLibraryLayout() {
     if (visible && libraryDocked) container.classList.add('with-library')
     else container.classList.remove('with-library')
   } catch {}
+  // 同步边缘热区可见性：仅在非固定且库隐藏时启用
+  try {
+    const lib = document.getElementById('library') as HTMLDivElement | null
+    const visible = !!lib && !lib.classList.contains('hidden')
+    if (_libEdgeEl) _libEdgeEl.style.display = (!libraryDocked && !visible) ? 'block' : 'none'
+  } catch {}
 }
 
 // 库面板显示/隐藏：使用覆盖式抽屉为默认；若开启“固定”，则并排显示
@@ -2958,6 +2982,8 @@ function showLibrary(show: boolean) {
       }
     } catch {}
   }
+  // 更新边缘热区可见性
+  try { if (_libEdgeEl) { const libVisible = !lib.classList.contains('hidden'); _libEdgeEl.style.display = (!libraryDocked && !libVisible) ? 'block' : 'none' } } catch {}
 }
 
 async function setLibraryDocked(docked: boolean) {
