@@ -12,6 +12,9 @@ import './mobile.css'  // 移动端样式
 
 // markdown-it 和 DOMPurify 改为按需动态 import，类型仅在编译期引用
 import type MarkdownIt from 'markdown-it'
+// WYSIWYG: 锚点插件与锚点同步（用于替换纯比例同步）
+import anchorsPlugin from './wysiwyg/render/anchorsPlugin'
+import { buildAnchors, syncByAnchor, type Anchor } from './wysiwyg/sync/anchors'
 
 // Tauri 插件（v2）
 // Tauri 对话框：使用 ask 提供原生确认，避免浏览器 confirm 在关闭事件中失效
@@ -51,6 +54,8 @@ let mermaidReady = false
 // Mermaid 渲染缓存（按源代码文本缓存 SVG，避免重复渲染导致布局抖动）
 const mermaidSvgCache = new Map<string, { svg: string; renderId: string }>()
 let mermaidSvgCacheVersion = 0
+// 所见模式：用于滚动同步的“源位锚点”表
+let _wysiwygAnchors: Anchor[] = []
 
 function hashMermaidCode(code: string): string {
   try {
@@ -532,8 +537,15 @@ function syncScrollEditorToPreview() {
     if (!wysiwyg) return
     const er = editor.scrollHeight - editor.clientHeight
     const pr = preview.scrollHeight - preview.clientHeight
-    const ratio = er > 0 ? (editor.scrollTop / er) : 0
-    const dest = Math.max(0, Math.round(ratio * Math.max(0, pr)))
+    // 优先使用“锚点法”：用光标位置（selectionStart）映射到预览 top
+    let dest = 0
+    if (_wysiwygAnchors && _wysiwygAnchors.length > 0) {
+      const pos = editor.selectionStart >>> 0
+      dest = syncByAnchor(pos, _wysiwygAnchors, Math.max(0, pr))
+    } else {
+      const ratio = er > 0 ? (editor.scrollTop / er) : 0
+      dest = Math.max(0, Math.round(ratio * Math.max(0, pr)))
+    }
     if (!Number.isNaN(dest)) preview.scrollTop = dest
     updateWysiwygLineHighlight()
   } catch {}
@@ -1456,6 +1468,8 @@ async function ensureRenderer() {
         return `<pre><code class="hljs">${esc}</code></pre>`
       }
     })
+    // 启用锚点插件（为块级 token 注入 data-pos-start/data-line）
+    try { (md as any).use(anchorsPlugin as any) } catch {}
     // 启用 KaTeX 支持（$...$ / $$...$$）
     try {
       const katexPlugin = (await import('markdown-it-katex')).default as any
@@ -1605,7 +1619,7 @@ async function renderPreview() {
   const safe = sanitizeHtml!(html, {
     // 允许基础 SVG/Math 相关标签
     ADD_TAGS: ['svg', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'g', 'text', 'tspan', 'defs', 'marker', 'use', 'clipPath', 'mask', 'pattern', 'foreignObject'],
-    ADD_ATTR: ['viewBox', 'xmlns', 'fill', 'stroke', 'stroke-width', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'transform', 'class', 'id', 'style', 'points', 'preserveAspectRatio', 'markerWidth', 'markerHeight', 'refX', 'refY', 'orient', 'markerUnits', 'fill-opacity', 'stroke-dasharray'],
+    ADD_ATTR: ['viewBox', 'xmlns', 'fill', 'stroke', 'stroke-width', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'transform', 'class', 'id', 'style', 'points', 'preserveAspectRatio', 'markerWidth', 'markerHeight', 'refX', 'refY', 'orient', 'markerUnits', 'fill-opacity', 'stroke-dasharray', 'data-pos-start', 'data-line'],
     KEEP_CONTENT: true,
     RETURN_DOM: false,
     RETURN_DOM_FRAGMENT: false,
@@ -1695,6 +1709,8 @@ async function renderPreview() {
       try { decorateCodeBlocks(preview) } catch {}
     } catch {}
   } catch {} finally { try { preview.classList.remove('rendering') } catch {} }
+  // 重新计算所见模式锚点表
+  try { if (wysiwyg) { _wysiwygAnchors = buildAnchors(preview) } } catch {}
   // 所见模式下，确保“模拟光标 _”在预览区可见
   try { if (wysiwyg) ensureWysiwygCaretDotInView() } catch {}
   // 外链安全属性

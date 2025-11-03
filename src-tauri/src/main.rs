@@ -757,7 +757,7 @@ async fn android_pick_document() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn android_create_document(filename: String, mime_type: String) -> Result<String, String> {
+async fn android_create_document(_filename: String, _mime_type: String) -> Result<String, String> {
   #[cfg(target_os = "android")]
   {
     // TODO: 实现 JNI 调用 Intent ACTION_CREATE_DOCUMENT
@@ -773,7 +773,7 @@ async fn android_create_document(filename: String, mime_type: String) -> Result<
 }
 
 #[tauri::command]
-async fn android_read_uri(uri: String) -> Result<String, String> {
+async fn android_read_uri(_uri: String) -> Result<String, String> {
   #[cfg(target_os = "android")]
   {
     // TODO: 实现 JNI 调用 ContentResolver.openInputStream
@@ -788,7 +788,7 @@ async fn android_read_uri(uri: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn android_write_uri(uri: String, content: String) -> Result<(), String> {
+async fn android_write_uri(_uri: String, _content: String) -> Result<(), String> {
   #[cfg(target_os = "android")]
   {
     // TODO: 实现 JNI 调用 ContentResolver.openOutputStream
@@ -804,7 +804,7 @@ async fn android_write_uri(uri: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn android_persist_uri_permission(uri: String) -> Result<(), String> {
+async fn android_persist_uri_permission(_uri: String) -> Result<(), String> {
   #[cfg(target_os = "android")]
   {
     // TODO: 实现 JNI 调用 takePersistableUriPermission
