@@ -651,6 +651,40 @@ async function renderPreviewLight() {
   // 旧所见模式移除：不再重建锚点表
 }
 
+// 供所见 V2 调用：将粘贴/拖拽的图片保存到本地，并返回可写入 Markdown 的路径
+async function saveImageToLocalAndGetPath(file: File, fname: string): Promise<string | null> {
+  try {
+    const alwaysLocal = await getAlwaysSaveLocalImages()
+    // 若未启用直连图床，或启用了“总是保存到本地”，尝试本地保存
+    const upCfg = await getUploaderConfig()
+    if (alwaysLocal || !upCfg) {
+      if (isTauriRuntime() && currentFilePath) {
+        const base = currentFilePath.replace(/[\\/][^\\/]*$/, '')
+        const sep = base.includes('\\') ? '\\' : '/'
+        const imgDir = base + sep + 'images'
+        try { await ensureDir(imgDir) } catch {}
+        const dst = imgDir + sep + fname
+        const buf = new Uint8Array(await file.arrayBuffer())
+        await writeFile(dst as any, buf as any)
+        return dst
+      }
+      if (isTauriRuntime() && !currentFilePath) {
+        const baseDir = await getDefaultPasteDir()
+        if (baseDir) {
+          const base2 = baseDir.replace(/[\\/]+$/, '')
+          const sep = base2.includes('\\') ? '\\' : '/'
+          try { await ensureDir(base2) } catch {}
+          const dst = base2 + sep + fname
+          const buf = new Uint8Array(await file.arrayBuffer())
+          await writeFile(dst as any, buf as any)
+          return dst
+        }
+      }
+    }
+    return null
+  } catch { return null }
+}
+
 async function setWysiwygEnabled(enable: boolean) {
   try {
     if (wysiwyg === enable) return
@@ -729,6 +763,8 @@ async function setWysiwygEnabled(enable: boolean) {
       }
       try { if (container) container.classList.remove('no-caret') } catch {}
       try { if (wysiwygStatusEl) wysiwygStatusEl.classList.remove('show') } catch {}
+      // 退出所见后确保编辑器可编辑并聚焦
+      try { (editor as HTMLTextAreaElement).disabled = false; (editor as HTMLTextAreaElement).style.pointerEvents = 'auto'; (editor as HTMLTextAreaElement).focus() } catch {}
       if (wysiwygLineEl) wysiwygLineEl.classList.remove('show')
       if (wysiwygCaretEl) wysiwygCaretEl.classList.remove('show')
       // 退出所见模式时清理延迟标记
@@ -2776,6 +2812,10 @@ async function getUploaderConfig(): Promise<UploaderConfig | null> {
 try {
   if (typeof window !== 'undefined') {
     ;(window as any).flymdGetUploaderConfig = getUploaderConfig
+    ;(window as any).flymdGetCurrentFilePath = () => currentFilePath
+    ;(window as any).flymdGetDefaultPasteDir = () => getDefaultPasteDir()
+    ;(window as any).flymdAlwaysSaveLocalImages = () => getAlwaysSaveLocalImages()
+    ;(window as any).flymdSaveImageToLocalAndGetPath = (file: File, name: string) => saveImageToLocalAndGetPath(file, name)
   }
 } catch {}
 
@@ -3902,6 +3942,10 @@ function bindEvents() {
             if (md) { void openFile2(md); return }
             const imgs = paths.filter((p) => /\.(png|jpe?g|gif|svg|webp|bmp|avif|ico)$/i.test(p))
             if (imgs.length > 0) {
+              // 若所见 V2 激活：交由所见模式自身处理（支持拖拽到编辑区）
+              if (wysiwygV2Active) {
+                return
+              }
               // Always-save-local: prefer local images folder for dropped files
               try {
                 const alwaysLocal = await getAlwaysSaveLocalImages()
