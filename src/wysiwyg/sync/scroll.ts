@@ -52,13 +52,13 @@ export function createWysiwygWheelHandler(
       }
 
       const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
-      e.preventDefault()
 
       if (lastTarget === 'preview') {
         const pmax = Math.max(0, preview.scrollHeight - preview.clientHeight)
         const pcur = (preview.scrollTop || 0) >>> 0
         const pnext = clamp(pcur + dy, 0, pmax)
         if (Math.abs(pnext - pcur) < 0.5) return
+        e.preventDefault()
         preview.scrollTop = pnext
         // 反推编辑器滚动，保持大致比例（若 er>0）
         if (er > 0) {
@@ -68,7 +68,9 @@ export function createWysiwygWheelHandler(
           ;(editor as any).scrollTop = 0
           // 推动光标随滚轮移动，避免 keep-in-view 拉回
           try {
-            const moved = deps.moveCaretByLines(Math.sign(dy) || 1, deps.getCaretVisualColumn())
+            let lines = Math.round(dy / (lh || 16))
+            if (lines === 0) lines = (dy > 0 ? 1 : -1)
+            const moved = deps.moveCaretByLines(lines, deps.getCaretVisualColumn())
             if (moved !== 0) deps.applyCaretMoved(moved)
           } catch {}
         }
@@ -82,6 +84,7 @@ export function createWysiwygWheelHandler(
       const ecur = ((editor as any).scrollTop || 0) >>> 0
       const enext = clamp(ecur + dy, 0, emax)
       if (Math.abs(enext - ecur) < 0.1) return
+      e.preventDefault()
       ;(editor as any).scrollTop = enext
       // 同步预览（由上层的 syncScrollEditorToPreview 做精准映射，这里用比例兜底）
       const pmax = Math.max(0, preview.scrollHeight - preview.clientHeight)
@@ -89,9 +92,9 @@ export function createWysiwygWheelHandler(
 
       // 光标随滚轮移动（保持当前行视口位置变动时不突兀）
       try {
-        const padTop = parseFloat(getComputedStyle(editor).paddingTop || '0') || 0
-        const targetLine = Math.max(0, Math.floor((enext - padTop) / (lh || 16)))
-        const moved = deps.moveCaretByLines(targetLine /* 目标行索引 */ - 0, deps.getCaretVisualColumn())
+        let lines = Math.round(dy / (lh || 16))
+        if (lines === 0) lines = (dy > 0 ? 1 : -1)
+        const moved = deps.moveCaretByLines(lines, deps.getCaretVisualColumn())
         if (moved !== 0) deps.applyCaretMoved(moved)
       } catch {}
       deps.updateLineHighlight(); deps.updateCaretDot()
@@ -99,4 +102,3 @@ export function createWysiwygWheelHandler(
     } catch {}
   }
 }
-
