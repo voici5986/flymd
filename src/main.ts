@@ -557,13 +557,129 @@ function scheduleWysiwygRender() {
     if (shouldDeferWysiwygRender()) { updateWysiwygLineHighlight(); return }
     if (_wysiwygRaf) cancelAnimationFrame(_wysiwygRaf)
     _wysiwygRaf = requestAnimationFrame(async () => {
-      try { await renderPreview() } catch {}
+      // 先进行“轻渲染”：快速输出安全 HTML，避免整屏重排与闪烁
+      try { await renderPreviewLight() } catch {}
       try { updateWysiwygVirtualPadding() } catch {}
       syncScrollEditorToPreview()
       try { ensureWysiwygCaretDotInView() } catch {}
       updateWysiwygCaretDot()
+      // 再在空闲时机进行“重渲染”：Mermaid/代码高亮等重块
+      try {
+        const idle = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 120))
+        idle(async () => {
+          try { await renderPreview() } catch {}
+          try { updateWysiwygVirtualPadding() } catch {}
+          syncScrollEditorToPreview()
+          try { ensureWysiwygCaretDotInView() } catch {}
+          updateWysiwygCaretDot()
+        })
+      } catch {}
     })
   } catch {}
+}
+
+// 轻渲染：仅生成安全的 HTML，不执行 Mermaid/代码高亮等重块
+async function renderPreviewLight() {
+  await ensureRenderer()
+  let raw = editor.value
+  try {
+    if (wysiwyg) {
+      const st = editor.selectionStart >>> 0
+      const before = raw.slice(0, st)
+      const after = raw.slice(st)
+      const lineStart = before.lastIndexOf('\n') + 1
+      const curLine = before.slice(lineStart)
+      const fenceRE = /^ {0,3}(```+|~~~+)/
+      const preText = raw.slice(0, lineStart)
+      const preLines = preText.split('\n')
+      let insideFence = false
+      let fenceCh = ''
+      for (const ln of preLines) {
+        const m = ln.match(fenceRE)
+        if (m) {
+          const ch = m[1][0]
+          if (!insideFence) { insideFence = true; fenceCh = ch }
+          else if (ch === fenceCh) { insideFence = false; fenceCh = '' }
+        }
+      }
+      const isFenceLine = fenceRE.test(curLine)
+      let injectAt = st
+      if (st === lineStart) {
+        const mBQ = curLine.match(/^ {0,3}> ?/)
+        const mH = curLine.match(/^ {0,3}#{1,6} +/)
+        const mUL = curLine.match(/^ {0,3}[-*+] +/)
+        const mOL = curLine.match(/^ {0,3}\d+\. +/)
+        const prefixLen = (mBQ?.[0]?.length || mH?.[0]?.length || mUL?.[0]?.length || mOL?.[0]?.length || 0)
+        if (prefixLen > 0) injectAt = lineStart + prefixLen
+      }
+      if (isFenceLine) {
+        const m = curLine.match(fenceRE)
+        if (m) {
+          const ch = m[1][0]
+          if (!insideFence) { injectAt = lineStart + m[0].length }
+          else if (ch === fenceCh) { injectAt = -1 }
+        }
+      }
+      if (injectAt >= 0) {
+        const dotStr = insideFence && !isFenceLine ? '_' : '<span class="caret-dot">_</span>'
+        raw = raw.slice(0, injectAt) + dotStr + raw.slice(injectAt)
+      }
+      try {
+        const lines = raw.split('\n')
+        // 对未闭合 fenced 与单 $ 进行最小阻断，避免即时渲染抖动
+        let openFenceIdx = -1
+        let openFenceChar = ''
+        for (let i = 0; i < lines.length; i++) {
+          const m = lines[i].match(/^ {0,3}(`{3,}|~{3,})/)
+          if (m) {
+            const ch = m[1][0]
+            if (openFenceIdx < 0) { openFenceIdx = i; openFenceChar = ch }
+            else if (ch === openFenceChar) { openFenceIdx = -1; openFenceChar = '' }
+          }
+        }
+        if (openFenceIdx >= 0) {
+          lines[openFenceIdx] = lines[openFenceIdx].replace(/^(\s*)(`{3,}|~{3,})/, (_all, s: string, fence: string) => s + fence[0] + '\u200B' + fence.slice(1))
+        }
+        const curIdx = (() => { try { return before.split('\n').length - 1 } catch { return -1 } })()
+        if (curIdx >= 0 && curIdx < lines.length) {
+          const line = lines[curIdx]
+          const singlePos: number[] = []
+          for (let i = 0; i < line.length; i++) {
+            if (line[i] !== '$') continue
+            if (i + 1 < line.length && line[i + 1] === '$') { i++; continue }
+            let bs = 0
+            for (let j = i - 1; j >= 0 && line[j] === '\\'; j--) bs++
+            if ((bs & 1) === 1) continue
+            singlePos.push(i)
+          }
+          if ((singlePos.length & 1) === 1) {
+            const idx = singlePos[singlePos.length - 1]
+            lines[curIdx] = line.slice(0, idx + 1) + '\u200B' + line.slice(idx + 1)
+          }
+        }
+        raw = lines.join('\n')
+      } catch {}
+    }
+  } catch {}
+  const html = md!.render(raw)
+  if (!sanitizeHtml) {
+    try {
+      const mod: any = await import('dompurify')
+      const DOMPurify = mod?.default || mod
+      sanitizeHtml = (h: string, cfg?: any) => DOMPurify.sanitize(h, cfg)
+    } catch { sanitizeHtml = (h: string) => h }
+  }
+  const safe = sanitizeHtml!(html, {
+    ADD_TAGS: ['svg','path','circle','rect','line','polyline','polygon','g','text','tspan','defs','marker','use','clipPath','mask','pattern','foreignObject'],
+    ADD_ATTR: ['viewBox','xmlns','fill','stroke','stroke-width','d','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height','transform','class','id','style','points','preserveAspectRatio','markerWidth','markerHeight','refX','refY','orient','markerUnits','fill-opacity','stroke-dasharray','data-pos-start','data-line'],
+    KEEP_CONTENT: true,
+    RETURN_DOM: false,
+    RETURN_DOM_FRAGMENT: false,
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|asset|data|blob|file):|\/|\.\.?[\/\\]|[a-zA-Z]:(?:[\/\\]|%5[cC]|%2[fF])|(?:%5[cC]){2})/i
+  })
+  try { preview.innerHTML = `<div class="preview-body">${safe}</div>` } catch {}
+  // 轻渲染后也生成锚点，提升滚动同步体验
+  try { if (wysiwyg) { _wysiwygAnchors = buildAnchors(preview) } } catch {}
 }
 
 async function setWysiwygEnabled(enable: boolean) {
