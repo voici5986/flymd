@@ -1184,7 +1184,7 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
       elPin.className = 'lib-btn'
       elPin.id = 'lib-pin'
       hdr.appendChild(elPin)
-      ;(async () => { try { libraryDocked = await getLibraryDocked(); elPin.textContent = libraryDocked ? '\\u53d6\\u6d88\\u56fa\\u5b9a' : '\\u56fa\\u5b9a'; applyLibraryLayout() } catch {} })()
+      ;(async () => { try { libraryDocked = await getLibraryDocked(); elPin.textContent = libraryDocked ? '取消固定' : '固定'; applyLibraryLayout() } catch {} })()
       elPin.addEventListener('click', () => { void setLibraryDocked(!libraryDocked) })
     }
   } catch {}
@@ -2941,7 +2941,7 @@ async function setLibraryDocked(docked: boolean) {
   // 更新按钮文案
   try {
     const btn = document.getElementById('lib-pin') as HTMLButtonElement | null
-    if (btn) btn.textContent = libraryDocked ? '\u53d6\u6d88\u56fa\u5b9a' : '\u56fa\u5b9a'
+    if (btn) btn.textContent = libraryDocked ? '取消固定' : '固定'
   } catch {}
   applyLibraryLayout()
 }
