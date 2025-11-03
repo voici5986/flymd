@@ -512,11 +512,14 @@ const app = document.getElementById('app')!
 app.innerHTML = `
   <div class="titlebar">
     <div class="menubar">
-      <div class="menu-item" id="btn-new" title="新建 (Ctrl+N)">新建</div>
-      <div class="menu-item" id="btn-open" title="打开 (Ctrl+O)">文件</div>
-      <div class="menu-item" id="btn-save" title="保存 (Ctrl+S)">保存</div>
-      <div class="menu-item" id="btn-saveas" title="另存为 (Ctrl+Shift+S)">另存为</div>
-      <div class="menu-item" id="btn-toggle" title="编辑/阅读 (Ctrl+E)">阅读</div>
+      <!-- 顶级菜单：文件 / 模式（参考 Windows 文本菜单） -->
+      <div class="menu-item" id="btn-open" title="文件">文件</div>
+      <div class="menu-item" id="btn-mode" title="模式">模式</div>
+      <!-- 旧按钮保留但隐藏，避免破坏现有逻辑引用 -->
+      <div class="menu-item" id="btn-new" style="display:none;" title="新建 (Ctrl+N)">新建</div>
+      <div class="menu-item" id="btn-save" style="display:none;" title="保存 (Ctrl+S)">保存</div>
+      <div class="menu-item" id="btn-saveas" style="display:none;" title="另存为 (Ctrl+Shift+S)">另存为</div>
+      <div class="menu-item" id="btn-toggle" style="display:none;" title="编辑/阅读 (Ctrl+E)">阅读</div>
       <div class="menu-item" id="btn-extensions" title="扩展与插件管理">扩展</div>
     </div>
     <div class="filename" id="filename">未命名</div>
@@ -811,7 +814,7 @@ async function setWysiwygEnabled(enable: boolean) {
     // 更新按钮提示
     try {
       const b = document.getElementById('btn-wysiwyg') as HTMLDivElement | null
-      if (b) b.title = (wysiwyg ? '\u9000\u51fa' : '\u5f00\u542f') + '\u6240\u89c1\u6a21\u5f0f (Ctrl+Shift+E)\n' + (wysiwygEnterToRenderOnly ? '\u5f53\u524d: \u56de\u8f66\u518d\u6e32\u67d3 (Ctrl+Shift+R \u5207\u6362)' : '\u5f53\u524d: \u5373\u65f6\u6e32\u67d3 (Ctrl+Shift+R \u5207\u6362)')
+      if (b) b.title = (wysiwyg ? '\u9000\u51fa' : '\u5f00\u542f') + '\u6240\u89c1\u6a21\u5f0f (Ctrl+W)\n' + (wysiwygEnterToRenderOnly ? '\u5f53\u524d: \u56de\u8f66\u518d\u6e32\u67d3 (Ctrl+Shift+R \u5207\u6362)' : '\u5f53\u524d: \u5373\u65f6\u6e32\u67d3 (Ctrl+Shift+R \u5207\u6362)')
     } catch {}
   } catch {}
 }
@@ -1126,9 +1129,9 @@ function autoNewlineAfterInlineDollarInWysiwyg() {
 // 动态添加"最近文件"菜单项
 const menubar = document.querySelector('.menubar') as HTMLDivElement
 if (menubar) {
-  // 统一“打开”按钮文案
+  // 顶级“文件”按钮文案
   const btnOpen0 = document.getElementById('btn-open') as HTMLDivElement | null
-  if (btnOpen0) { btnOpen0.textContent = '\u6253\u5f00'; btnOpen0.title = '\u6253\u5f00 (Ctrl+O)' }
+  if (btnOpen0) { btnOpen0.textContent = '\u6587\u4ef6'; btnOpen0.title = '\u6587\u4ef6' }
   const recentBtn = document.createElement('div')
   recentBtn.id = 'btn-recent'
   recentBtn.className = 'menu-item'
@@ -1153,12 +1156,7 @@ if (menubar) {
           menubar.appendChild(extBtn)
         }
       } catch {}
-      // 所见模式按钮（放在“关于”左侧）
-      const wBtn = document.createElement('div')
-      wBtn.id = 'btn-wysiwyg'
-      wBtn.className = 'menu-item'
-      wBtn.title = '\u6240\u89c1\u6a21\u5f0f (Ctrl+Shift+E)'
-      wBtn.textContent = '\u6240\u89c1'
+      // 取消单独的“所见”顶栏按钮，改入“模式”菜单
   const libBtn = document.createElement('div')
   libBtn.id = 'btn-library'
   libBtn.className = 'menu-item'
@@ -1183,7 +1181,7 @@ const aboutBtn = document.createElement('div')
   aboutBtn.className = 'menu-item'
   aboutBtn.title = '关于'
       aboutBtn.textContent = '\u5173\u4e8e'
-      menubar.appendChild(wBtn)
+      // 顶层的“模式”按钮已在模板中渲染，这里无需添加
       // 检查更新按钮
       const updBtn = document.createElement('div')
       updBtn.id = 'btn-update'
@@ -1307,6 +1305,7 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
                 <div class="sc-act">\u53e6\u5b58\u4e3a</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></div>
                 <div class="sc-act">\u65b0\u5efa</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>N</kbd></div>
                 <div class="sc-act">\u7f16\u8f91/\u9884\u89c8</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>E</kbd></div>
+                <div class="sc-act">\u9605\u8bfb</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>R</kbd></div>
                 <div class="sc-act">\u63d2\u5165\u94fe\u63a5</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>K</kbd></div>
                 <div class="sc-act">\u52a0\u7c97</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>B</kbd></div>
                 <div class="sc-act">\u659c\u4f53</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>I</kbd></div>
@@ -2417,10 +2416,7 @@ async function toggleMode() {
 // 打开文件
 async function openFile(preset?: string) {
   try {
-    if (!preset && dirty) {
-      const confirmed = await confirmNative('当前文件尚未保存，是否放弃更改并继续打开？', '打开文件')
-      if (!confirmed) { logDebug('用户取消打开文件操作（未保存）'); return }
-    }
+    // 切换前不再在未选择目标时询问，改在明确了目标文件后判断是否需要保存
 
     if (!preset) {
       // 检查 Tauri API 是否可用
@@ -2513,6 +2509,15 @@ async function openFile2(preset?: unknown) {
     const selectedPath = normalizePath(selected)
     logDebug('openFile2.selected', { typeof: typeof selected, selected })
     logDebug('openFile2.normalizedPath', { typeof: typeof selectedPath, selectedPath })
+
+    // 若当前有未保存更改，且目标文件不同，则先询问是否保存
+    if (dirty && selectedPath && selectedPath !== currentFilePath) {
+      const doSave = await confirmNative('当前文档已修改，是否保存后再切换？', '切换文档')
+      if (doSave) {
+        await saveFile()
+      }
+      // 选择“否”时直接继续切换；取消由 confirmNative 返回 false 的语义中无法区分“否/取消”，因此默认视为不保存继续
+    }
 
     // PDF 预览分支：在读取文本前拦截处理
     try {
@@ -2663,8 +2668,9 @@ async function saveAs() {
 // 新建
 async function newFile() {
   if (dirty) {
-    const confirmed = await confirmNative('当前文件尚未保存，是否放弃更改并新建？', '新建文件')
-    if (!confirmed) return
+    const saveIt = await confirmNative('当前文档已修改，是否保存后再新建？', '新建文件')
+    if (saveIt) { await saveFile() }
+    // 选择否/取消：继续新建但不保存（confirmNative 无法区分，按否处理）
   }
   editor.value = ''
   currentFilePath = null
@@ -3338,6 +3344,93 @@ function showAbout(show: boolean) {
   else overlay.classList.add('hidden')
 }
 
+// 顶级菜单下拉（参考库右键菜单的样式实现，纯 JS 内联样式，避免全局 CSS 入侵）
+type TopMenuItemSpec = { label: string; accel?: string; action: () => void; disabled?: boolean }
+function showTopMenu(anchor: HTMLElement, items: TopMenuItemSpec[]) {
+  try {
+    let menu = document.getElementById('top-ctx') as HTMLDivElement | null
+    if (!menu) {
+      menu = document.createElement('div') as HTMLDivElement
+      menu.id = 'top-ctx'
+      menu.style.position = 'absolute'
+      menu.style.zIndex = '9999'
+      menu.style.background = getComputedStyle(document.documentElement).getPropertyValue('--bg') || '#fff'
+      menu.style.color = getComputedStyle(document.documentElement).getPropertyValue('--fg') || '#111'
+      menu.style.border = '1px solid ' + (getComputedStyle(document.documentElement).getPropertyValue('--border') || '#e5e7eb')
+      menu.style.borderRadius = '8px'
+      menu.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)'
+      menu.style.minWidth = '200px'
+      menu.style.padding = '6px 0'
+      menu.addEventListener('click', (e) => e.stopPropagation())
+      document.body.appendChild(menu)
+    }
+    const hide = () => { if (menu) menu.style.display = 'none'; document.removeEventListener('click', onDoc) }
+    const onDoc = () => hide()
+    menu.innerHTML = ''
+    const mkRow = (spec: TopMenuItemSpec) => {
+      const row = document.createElement('div') as HTMLDivElement
+      row.style.display = 'flex'
+      row.style.alignItems = 'center'
+      row.style.justifyContent = 'space-between'
+      row.style.gap = '16px'
+      row.style.padding = '6px 12px'
+      row.style.cursor = spec.disabled ? 'not-allowed' : 'pointer'
+      const l = document.createElement('span')
+      l.textContent = spec.label
+      const r = document.createElement('span')
+      r.textContent = spec.accel || ''
+      r.style.opacity = '0.7'
+      row.appendChild(l)
+      row.appendChild(r)
+      if (!spec.disabled) {
+        row.addEventListener('mouseenter', () => row.style.background = 'rgba(127,127,127,0.12)')
+        row.addEventListener('mouseleave', () => row.style.background = 'transparent')
+        row.addEventListener('click', () => { try { spec.action() } finally { hide() } })
+      } else {
+        row.style.opacity = '0.5'
+      }
+      return row
+    }
+    for (const it of items) menu.appendChild(mkRow(it))
+
+    // 定位：锚点左下
+    const rc = anchor.getBoundingClientRect()
+    const left = Math.max(0, Math.min(rc.left, window.innerWidth - (menu.offsetWidth || 220)))
+    const top = Math.min(window.innerHeight - 10, rc.bottom)
+    menu.style.left = left + 'px'
+    menu.style.top = top + 'px'
+    menu.style.display = 'block'
+    setTimeout(() => document.addEventListener('click', onDoc), 0)
+  } catch {}
+}
+
+function showFileMenu() {
+  const anchor = document.getElementById('btn-open') as HTMLDivElement | null
+  if (!anchor) return
+  showTopMenu(anchor, [
+    { label: '新建', accel: 'Ctrl+N', action: () => { void newFile() } },
+    { label: '打开…', accel: 'Ctrl+O', action: () => { void openFile2() } },
+    { label: '保存', accel: 'Ctrl+S', action: () => { void saveFile() } },
+    { label: '另存为…', accel: 'Ctrl+Shift+S', action: () => { void saveAs() } },
+  ])
+}
+
+function showModeMenu() {
+  const anchor = document.getElementById('btn-mode') as HTMLDivElement | null
+  if (!anchor) return
+  showTopMenu(anchor, [
+    { label: '编辑', accel: 'Ctrl+E', action: async () => {
+      try { if (wysiwyg) await setWysiwygEnabled(false) } catch {}
+      if (mode !== 'edit') { mode = 'edit'; try { preview.classList.add('hidden') } catch {}; try { editor.focus() } catch {}; try { syncToggleButton() } catch {} }
+    } },
+    { label: '阅读', accel: 'Ctrl+R', action: async () => {
+      try { if (wysiwyg) await setWysiwygEnabled(false) } catch {}
+      if (mode !== 'preview') { mode = 'preview'; try { preview.classList.remove('hidden') } catch {}; try { await renderPreview() } catch {}; try { syncToggleButton() } catch {} }
+    } },
+    { label: '所见', accel: 'Ctrl+W', action: () => { void setWysiwygEnabled(true) } },
+  ])
+}
+
 function bindEvents() {
   // 全局错误捕获
   window.addEventListener('error', (e) => {
@@ -3351,6 +3444,7 @@ function bindEvents() {
 
   // 菜单项点击事件
   const btnOpen = document.getElementById('btn-open')
+  const btnMode = document.getElementById('btn-mode')
   const btnSave = document.getElementById('btn-save')
   const btnSaveas = document.getElementById('btn-saveas')
   const btnToggle = document.getElementById('btn-toggle')
@@ -3362,7 +3456,8 @@ function bindEvents() {
   const btnUploader = document.getElementById('btn-uploader')
   const btnWysiwyg = document.getElementById('btn-wysiwyg')
 
-  if (btnOpen) btnOpen.addEventListener('click', guard(() => openFile2()))
+  if (btnOpen) btnOpen.addEventListener('click', guard(() => showFileMenu()))
+  if (btnMode) btnMode.addEventListener('click', guard(() => showModeMenu()))
   if (btnSave) btnSave.addEventListener('click', guard(() => saveFile()))
   if (btnSaveas) btnSaveas.addEventListener('click', guard(() => saveAs()))
   if (btnToggle) btnToggle.addEventListener('click', guard(() => toggleMode()))
@@ -3503,8 +3598,9 @@ function bindEvents() {
     } catch {}
     // 编辑快捷键（全局）：插入链接 / 加粗 / 斜体
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); guard(insertLink)(); return }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') { e.preventDefault(); await toggleWysiwyg(); return }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); wysiwygEnterToRenderOnly = !wysiwygEnterToRenderOnly; try { const b = document.getElementById('btn-wysiwyg') as HTMLDivElement | null; if (b) b.title = (wysiwyg ? '\u6240\u89c1\u6a21\u5f0f' : '') + (wysiwygEnterToRenderOnly ? ' - \u56de\u8f66\u518d\u6e32\u67d3' : ' - \u5373\u65f6\u6e32\u67d3') + ' (Ctrl+Shift+E)'; } catch {}; return }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'w') { e.preventDefault(); await toggleWysiwyg(); return }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); wysiwygEnterToRenderOnly = !wysiwygEnterToRenderOnly; try { const b = document.getElementById('btn-wysiwyg') as HTMLDivElement | null; if (b) b.title = (wysiwyg ? '\u6240\u89c1\u6a21\u5f0f' : '') + (wysiwygEnterToRenderOnly ? ' - \u56de\u8f66\u518d\u6e32\u67d3' : ' - \u5373\u65f6\u6e32\u67d3') + ' (Ctrl+W)'; } catch {}; return }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); try { if (wysiwyg) await setWysiwygEnabled(false) } catch {}; if (mode !== 'preview') { mode = 'preview'; try { preview.classList.remove('hidden') } catch {}; try { await renderPreview() } catch {}; try { syncToggleButton() } catch {} } return }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); await toggleMode(); return }
     if (e.ctrlKey && e.key.toLowerCase() === 'b') { e.preventDefault(); guard(formatBold)(); if (mode === 'preview') void renderPreview(); else if (wysiwyg) scheduleWysiwygRender(); return }
     if (e.ctrlKey && e.key.toLowerCase() === 'i') { e.preventDefault(); guard(formatItalic)(); if (mode === 'preview') void renderPreview(); else if (wysiwyg) scheduleWysiwygRender(); return }
