@@ -407,8 +407,8 @@ body > .block-menu { display: none !important; }
 /* Markdown 基础排版（预览） */
 .preview h1,.preview h2,.preview h3,.preview h4,.preview h5,.preview h6 { margin: 1.2em 0 0.6em; }
 .preview p { margin: 0.6em 0; }
-.preview pre { background: rgba(127,127,127,0.08); padding: 10px; border-radius: 8px; overflow: auto; }
-.preview code { font-family: inherit; background: rgba(127,127,127,0.08); padding: 2px 4px; border-radius: 4px; }
+.preview pre { background: var(--code-bg); border: 1px solid var(--code-border); padding: 16px; border-radius: 8px; overflow: auto; }
+.preview code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background: var(--code-bg); border: 1px solid var(--code-border); padding: 2px 6px; border-radius: 4px; }
 .preview blockquote { border-left: 3px solid var(--border); margin: 0.8em 0; padding: 4px 10px; color: var(--muted); }
 .preview table { border-collapse: collapse; }
 .preview table th, .preview table td { border: 1px solid var(--border); padding: 6px 8px; }
@@ -589,8 +589,8 @@ html, body { overflow: hidden; }
 }
 
 /* 块级代码 */
-.preview pre { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 10px; padding: 12px 14px; overflow: auto; -webkit-overflow-scrolling: touch; margin: 12px 0; }
-.preview pre code { background: transparent; color: var(--code-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.1; }
+.preview pre { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 8px; padding: 16px; overflow: auto; -webkit-overflow-scrolling: touch; margin: 12px 0; }
+.preview pre code { background: transparent; color: var(--code-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.6; }
 /* 行内代码 */
 .preview :not(pre) > code { background: var(--code-bg); color: var(--code-fg); border: 1px solid var(--code-border); border-radius: 6px; padding: 0 6px; font-size: 0.9em; }
 
@@ -606,13 +606,13 @@ html, body { overflow: hidden; }
 /* .preview pre::-webkit-scrollbar-thumb { background: rgba(127,127,127,0.35); border-radius: 999px; } */
 
 /* === 代码块装饰（语言角标、行号、复制）=== */
-.codebox { position: relative; }
-.codebox .code-lang { position: absolute; top: 6px; left: 8px; padding: 2px 6px; border: 1px solid var(--code-border); border-radius: 999px; background: var(--bg); color: var(--muted); font-size: 12px; line-height: 1; }
-.codebox .code-copy { position: absolute; top: 6px; right: 8px; padding: 2px 8px; border: 1px solid var(--code-border); border-radius: 999px; background: rgba(127,127,127,0.08); color: var(--fg); font-size: 12px; cursor: pointer; }
-.codebox .code-copy:hover { background: rgba(127,127,127,0.14); }
-.codebox pre { margin-top: 8px; counter-reset: ln; }
-.codebox .cb-ln { display: block; position: relative; padding-left: 2.8em; }
-.codebox .cb-ln::before { content: counter(ln); counter-increment: ln; position: absolute; left: 0; width: 2.2em; text-align: right; color: var(--muted); }
+.codebox { position: relative; margin: 12px 0; }
+.codebox .code-lang { position: absolute; top: 10px; left: 12px; padding: 3px 8px; border: 1px solid var(--code-border); border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 11px; line-height: 1; font-weight: 500; }
+.codebox .code-copy { position: absolute; top: 10px; right: 12px; padding: 4px 10px; border: 1px solid var(--code-border); border-radius: 6px; background: rgba(127,127,127,0.08); color: var(--fg); font-size: 11px; cursor: pointer; font-weight: 500; transition: all 0.15s ease; }
+.codebox .code-copy:hover { background: rgba(127,127,127,0.16); border-color: var(--fg); }
+.codebox pre { margin: 0; counter-reset: ln; }
+.codebox .cb-ln { display: block; position: relative; padding-left: 3.2em; }
+.codebox .cb-ln::before { content: counter(ln); counter-increment: ln; position: absolute; left: 0; width: 2.8em; text-align: right; color: var(--code-muted); font-size: 12px; user-select: none; }
 
 /* === 侧栏文档图标色（按扩展名）=== */
 .library .lib-node.file-ext-md .lib-ico-file,
@@ -669,12 +669,12 @@ html, body { overflow: hidden; }
 .container.wysiwyg .preview { background: var(--wysiwyg-bg); padding-top: 14px; }
 .container.wysiwyg .editor { padding-top: 14px; }
 
-/* === 行距压缩（代码块）=== */
-/* 预览模式：将代码块行距压缩到 0.8 */
-.preview pre code { line-height: 0.8 !important; }
-/* 所见模式：更小（0.7），同时作用于 pre 容器与 code 元素 */
+/* === 行距优化（代码块）=== */
+/* 预览模式：使用舒适的行距以提高可读性 */
+.preview pre code { line-height: 1.2 !important; }
+/* 所见模式：保持一致的行距 */
 .container.wysiwyg .preview pre,
-.container.wysiwyg .preview pre code { line-height: 0.8 !important; }
+.container.wysiwyg .preview pre code { line-height: 1.6 !important; }
 
 /* WYSIWYG 下的 KaTeX 行内公式在某些字体/缩放下会出现下探溢出，
    导致与下一行内容视觉重叠。仅在所见模式中为 .katex 增加少量底部留白，
