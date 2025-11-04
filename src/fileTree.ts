@@ -375,7 +375,8 @@ async function renderRoot(root: string) {
 
 async function refresh() {
   const root = await state.opts!.getRoot()
-  if (!root) { if (state.container) state.container.innerHTML = '<div class="lib-empty">尚未选择库目录</div>'; return }
+  // 若未选择库目录，不再在侧栏显示提示，保持空白即可，避免误导用户
+  if (!root) { if (state.container) state.container.innerHTML = ''; return }
   // 刷新前清理目录缓存，确保显示与实际文件状态一致
   try { hasDocCache.clear(); hasDocPending.clear() } catch {}
   await renderRoot(root)
