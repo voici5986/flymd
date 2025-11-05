@@ -38,6 +38,7 @@
             "core:default",
             "core:window:allow-close",
             "core:window:allow-destroy",
+            "core:window:allow-set-title",
             "dialog:default",
             "dialog:allow-ask",
             "dialog:allow-open",
@@ -192,7 +193,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "飞速MarkDown v0.1.5",
+        "title": "飞速MarkDown v0.1.5-fix",
         "width": 960,
         "height": 640,
         "resizable": true,
@@ -232,5 +233,9 @@
     ]
   }
 }
+
+
+
+
 
 
