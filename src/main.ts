@@ -29,6 +29,7 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import fileTree from './fileTree'
 import { uploadImageToS3R2, type UploaderConfig } from './uploader/s3'
 import appIconUrl from '../flymd.png?url'
+import goodImgUrl from '../good.png?url'
 import { decorateCodeBlocks } from './decorate'
 import pkg from '../package.json'
 import { htmlToMarkdown } from './html2md'
@@ -1347,24 +1348,17 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
           const aboutBody = about.querySelector('.about-body') as HTMLDivElement | null
           if (aboutBody) {
             aboutBody.innerHTML = `
-              <p>\u4e00\u6b3e\u8de8\u5e73\u53f0\u3001\u8f7b\u91cf\u7a33\u5b9a\u597d\u7528\u7684 Markdown \u7f16\u8f91\u9884\u89c8\u5668\u3002</p>
-              <div class="about-subtitle">\u5feb\u6377\u952e</div>
-              <div class="about-shortcuts">
-                <div class="sc-act">\u6253\u5f00\u6587\u4ef6</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>O</kbd></div>
-                <div class="sc-act">\u4fdd\u5b58</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>S</kbd></div>
-                <div class="sc-act">\u53e6\u5b58\u4e3a</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></div>
-                <div class="sc-act">\u65b0\u5efa</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>N</kbd></div>
-                <div class="sc-act">\u7f16\u8f91/\u9884\u89c8</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>E</kbd></div>
-                <div class="sc-act">\u6240\u89c1\u6a21\u5f0f</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>W</kbd></div>
-                <div class="sc-act">\u9605\u8bfb</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>R</kbd></div>
-                <div class="sc-act">\u63d2\u5165\u94fe\u63a5</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>K</kbd></div>
-                <div class="sc-act">\u52a0\u7c97</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>B</kbd></div>
-                <div class="sc-act">\u659c\u4f53</div><div class="sc-keys"><kbd>Ctrl</kbd> + <kbd>I</kbd></div>
-                <div class="sc-act">\u9000\u51fa\u9884\u89c8/\u5173\u95ed\u5f39\u7a97</div><div class="sc-keys"><kbd>Esc</kbd></div>
-              </div>
-              <div class="about-links">
-                <p>\u4e2a\u4eba\u7f51\u7ad9\uff1a<a href="https://www.llingfei.com" target="_blank" rel="noopener noreferrer">https://www.llingfei.com</a></p>
-                <p>GitHub \u5730\u5740\uff1a<a href="https://github.com/flyhunterl/flymd" target="_blank" rel="noopener noreferrer">https://github.com/flyhunterl/flymd</a></p>
+              <div style="display:flex;align-items:flex-start;gap:12px;">
+                <img src="${goodImgUrl}" alt="flyMD" style="width:72px;height:72px;border-radius:8px;object-fit:cover;"/>
+                <div>
+                  <p>一款跨平台、轻量稳定好用的 Markdown 编辑与PDF阅读工具。</p>
+                  <p style="margin:6px 0 0;color:var(--muted);font-size:12px;">开源协议：非商业开源（NC 1.0）。商业使用需授权。</p>
+                  <p style="margin:4px 0 0;"><a href="https://github.com/flyhunterl/flymd/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">查看完整许可文本</a></p>
+                  <div class="about-links" style="margin-top:6px;">
+                    <p>个人网站：<a href="https://www.llingfei.com" target="_blank" rel="noopener noreferrer">https://www.llingfei.com</a></p>
+                    <p>GitHub：<a href="https://github.com/flyhunterl/flymd" target="_blank" rel="noopener noreferrer">https://github.com/flyhunterl/flymd</a></p>
+                  </div>
+                </div>
               </div>
             `
           }
@@ -1372,6 +1366,24 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
           if (aboutTitle) aboutTitle.textContent = `\u5173\u4e8e \u98de\u901fMarkDown (flyMD) v${APP_VERSION}`
           const aboutClose = about.querySelector('#about-close') as HTMLButtonElement | null
           if (aboutClose) { aboutClose.textContent = '\u00D7'; aboutClose.title = '\u5173\u95ed' }
+          // 覆盖关于内容：移除快捷键，加入离线二维码与许可说明
+          try {
+            const bodyEl = about.querySelector('.about-body') as HTMLDivElement | null
+            if (bodyEl) {
+              bodyEl.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+                  <p>一款跨平台、轻量稳定好用的 Markdown 编辑 PDF 阅读工具。</p>
+                  <img src="${goodImgUrl}" alt="二维码" style="width:320px;height:320px;border-radius:0;object-fit:contain;image-rendering:pixelated;"/>
+                  <div style="text-align:center;">
+                    <p style="margin:6px 0 0;color:var(--muted);font-size:12px;">开源协议：非商业开源（NC 1.0）。商业使用需授权。</p>
+                    <p style="margin:4px 0 0;"><a href="https://github.com/flyhunterl/flymd/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">查看完整许可文本</a></p>
+                    <p style="margin:6px 0 0;">个人网站：<a href="https://www.llingfei.com" target="_blank" rel="noopener noreferrer">https://www.llingfei.com</a></p>
+                    <p style="margin:2px 0 0;">GitHub：<a href="https://github.com/flyhunterl/flymd" target="_blank" rel="noopener noreferrer">https://github.com/flyhunterl/flymd</a></p>
+                  </div>
+                </div>
+              `
+            }
+          } catch {}
         } catch {}
     try {
     const overlay = document.getElementById('about-overlay') as HTMLDivElement | null

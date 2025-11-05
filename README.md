@@ -1,10 +1,12 @@
-# 飞速MarkDown
+# 飞速MarkDown（flyMD）
 
 [简体中文](README.md) | [English](README.en.md)
 
 [![Version](https://img.shields.io/badge/version-v0.1.4-blue.svg)](https://github.com/flyhunterl/flymd)
 [![License](https://img.shields.io/badge/license-NonCommercial-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyhunterl/flymd)
+
+一款跨平台、轻量稳定好用的 Markdown 编辑 PDF 阅读工具。
 
 ![lv_0_20251028184941](https://github.com/user-attachments/assets/3d6a5b6a-82e8-4d9d-9657-c9b66ef48f82)
 
@@ -56,9 +58,14 @@
 - 外链自动添加 `target="_blank"` 和 `rel="noopener noreferrer"`
 - 本地图片路径自动转换为 `asset:`，Tauri 中本地图片可正常显示
 - KaTeX（LaTeX 公式）与 Mermaid（流程/时序图等）
-> Latex示例 `$E=MC^2$`  （实时渲染，双击进行修改）
-> 所见模式中mermaid编辑的时候实时渲染，编辑完成后鼠标悬浮激活渲染。其他时候不渲染
-> 所见模式使用ctrl+enter跳出代码区
+> LaTeX 示例 `$E=MC^2$`（实时渲染，双击可修改）
+> 所见模式下 Mermaid 编辑静默、完成后再渲染；渲染失败静默，不打断输入
+> 所见模式使用 `Ctrl+Enter` 跳出代码区
+
+### 📚 侧栏大纲（Markdown / PDF）
+- Markdown：自动提取 H1~H6 生成可点击目录，支持滚动同步、高亮当前章节、折叠/展开（≤H2）与记忆
+- PDF：解析 PDF 书签（Outline），生成可点击目录，支持跳页；目录结果按文件缓存、按 mtime 自动失效
+- 说明：开发/构建环境需安装一次 `pdfjs-dist`（应用按需加载，打包后用户无需安装）
 
 ### 💾 文件
 - 打开 (`Ctrl+O`)：支持 `.md`、`.markdown`、`.txt`
@@ -69,7 +76,7 @@
   - Tauri：`tauri://drag-drop`；拖拽 `.md` 打开、拖拽图片自动插入 Markdown
   - 浏览器：拖拽 `.md` 在未保存时先确认；拖拽图片自动插入 data URL
 
-### 图床支持
+### 🖼 图床支持
 - 支持S3/R2图床设置，粘贴/拖动图片直接上传图床 方便网络分发
 **默认优先级**
       - 已启用并配置图床→直接上传并插入公网 URL（本地不保存）
@@ -81,7 +88,18 @@
 ### 🎨 界面体验
 - Windows 记事本风格菜单栏
 - 顶栏采用“文件 / 模式”一级菜单，展开后展示对应快捷键
-- 跟随系统主题（浅色/深色）
+- 跟随系统主题（浅色/深色）；侧栏文件图标区分度高（PDF 红、TXT 紫、MD 保持原样）
+
+### 📦 开发与构建
+- 运行
+  - 开发：`npm run dev`
+  - Tauri 开发：`npm run tauri:dev`
+- 构建
+  - 前端：`npm run build`
+  - Tauri 打包：`npm run tauri:build`
+- 可选依赖（用于 PDF 目录）：
+  - `npm i pdfjs-dist`
+  - 说明：应用按需加载 PDF.js 以解析 PDF 书签，仅在打开 PDF 且查看“大纲”页签时加载；
 - 预览覆盖层设计，切换无闪烁
 - 窗口状态持久化（尺寸、位置）
 - “最近”面板、“关于”弹窗（含快捷键说明）
@@ -150,7 +168,7 @@ flyMD 支持通过扩展插件来增强功能。你可以：
 
 ## 🗺️ 路线图
 
-## 更新 v0.1.5（即将发布）
+## 更新 v0.1.5
 - 隐藏所见模式中mermaid渲染错误提示，避免影响输入体验
 - 为库/文件列表不同格式设置图标区分
 - 新增Markdown目录大纲（所见和阅读模式）及PDF书签目录
@@ -239,6 +257,8 @@ flyMD 支持通过扩展插件来增强功能。你可以：
 - 优化：为mermaid图标增加缓存
 
 
+
+
 ## 更新 v0.0.6-fix
 - 修复：所见模式编辑到最下方时，无法聚焦输入框的问题
 - 优化:   所见模式滚动逻辑
@@ -308,7 +328,7 @@ flyMD 支持通过扩展插件来增强功能。你可以：
 - 本项目采用“飞速MarkDown（flyMD）非商业开源许可协议（NC 1.0）”。
 - 允许：在非商业前提下自由使用、修改、复制与再分发；必须保留署名与来源。
 - 商业使用：未经书面授权禁止。商业授权请联系：flyhunterl <flyhunterl@gmail.com>。
-- 许可全文见：[LICENSE](LICENSE)
+- 许可全文见：[LICENSE](LICENSE)（附英文翻译，中文为主版本）
 - 第三方组件许可见：[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 
 ## 🙏 致谢

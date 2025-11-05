@@ -51,3 +51,37 @@ Copyright (c) 2024-2025, flyhunterl <flyhunterl@gmail.com>
 • 可以做：个人/教学/非营利研究使用；在非商业前提下自由修改、二次分发并保留署名与许可；在博客、视频或活动中展示并说明来源。
 • 不可以做：任何形式的商业化（收费、广告变现、企业生产/对外服务、SaaS/托管）未经书面授权；移除版权与来源信息；违反第三方组件许可。
 
+----------------------------------------
+English Translation (Informative)
+----------------------------------------
+
+flyMD Non-Commercial Open Source License (NC 1.0)
+
+Copyright (c) 2024-2025, flyhunterl <flyhunterl@gmail.com>
+
+This English text is an informative translation of the original Chinese license. In the event of any inconsistency or ambiguity, the Chinese version shall prevail.
+
+1. Scope
+This software is open source for Non-Commercial use only. You may use, copy, distribute, modify, and create derivative works for non-commercial purposes, provided that you:
+- keep the original copyright notice, license link, and project source (e.g., “Source: flyMD – https://github.com/flyhunterl/flymd”);
+- clearly indicate any changes you make (what/when/who) and do not imply endorsement by the original author;
+- include this license text with any redistribution; and
+- comply with third-party licenses included in this project.
+
+2. Non-Commercial vs. Commercial
+Non-Commercial: personal study/research, non-profit education/academia, or internal non-profit demos.
+Commercial: any activity for commercial gain or value, including but not limited to selling the software, providing paid/monetized services (ads, subscription, value-added), using in enterprise production (including SaaS/cloud/hosted services), or delivering for commercial projects. Commercial use requires prior written authorization from the copyright holder (flyhunterl <flyhunterl@gmail.com>).
+
+3. Restrictions
+Do not remove/hide/alter copyright, trademark, source link, or license notice. Do not use the software illegally or to infringe others’ rights. Do not circumvent security/compliance measures.
+
+4. Disclaimer
+Provided “as is”, without any warranty. To the maximum extent permitted by law, the authors/contributors are not liable for any damages arising from use, inability to use, or distribution of the software.
+
+5. Termination
+Any breach terminates your rights automatically; you must cease use and destroy copies. Non-breaching downstream recipients remain bound by this license.
+
+6. Third-Party Components
+Third-party components remain under their respective licenses (e.g., MIT/Apache-2.0/BSD-3-Clause). See THIRD-PARTY-NOTICES.md.
+
+License link: https://github.com/flyhunterl/flymd/blob/main/LICENSE

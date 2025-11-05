@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-NonCommercial-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyhunterl/flymd)
 
-A fast, lightweight, and privacy‑friendly Markdown editor powered by Tauri.
+A cross‑platform, lightweight and polished Markdown editor & PDF reader.
 
 Highlights
 - Small and instant: tiny installer, millisecond cold start, one‑click code copy
@@ -34,10 +34,16 @@ Core Features
   - markdown‑it + highlight.js; DOMPurify for safe HTML
   - External links get `target="_blank"` and `rel="noopener"`
   - Local images auto‑converted to `asset:` in Tauri; KaTeX & Mermaid support
+  - In WYSIWYG, Mermaid editing is silent; it renders after you leave the code block. Parse errors are suppressed to avoid interrupting typing.
 - Files
   - Open (`Ctrl+O`) for .md/.markdown/.txt; Save/Save As/New `Ctrl+S`/`Ctrl+Shift+S`/`Ctrl+N`
   - Recent (up to 5); unsaved indicator `*` in title bar; unified native dialogs
   - Drag & drop: open `.md`; drop images to insert markdown
+
+Sidebar Outline (Markdown / PDF)
+- Markdown: extract H1–H6 to build a clickable outline; scroll‑sync the active section; highlight the current heading; fold/unfold at H1/H2 with remembered state
+- PDF: parse PDF bookmarks (Outline) and build a clickable TOC; jump to pages; cache per file and auto‑invalidate by mtime
+- Note: `pdfjs-dist` must be installed in dev/build environments; the app lazy‑loads it only when opening the PDF Outline. End users do not need to install it.
 
 Image Upload (S3/R2)
 - Priority
@@ -53,6 +59,17 @@ UI/UX
 Performance
 - Lazy load highlighter and renderer; pure TypeScript; lean event wiring
 
+Development & Build
+- Run
+  - Dev: `npm run dev`
+  - Tauri Dev: `npm run tauri:dev`
+- Build
+  - Frontend: `npm run build`
+  - Tauri Package: `npm run tauri:build`
+- Optional dependency (for PDF Outline only):
+  - `npm i pdfjs-dist`
+  - The app lazy‑loads PDF.js to parse PDF bookmarks and only when the “Outline” tab is viewed for a PDF.
+
 Install
 - Download the latest assets from Releases and run the installer
 - Requirements: Windows 10/11 (x64) / Linux / macOS; WebView2 on Windows
@@ -67,6 +84,13 @@ Extensions
 - Example: Typecho Publisher — https://github.com/TGU-HansJack/typecho-publisher-flymd
 
 Changelog
+- v0.1.5 (in progress)
+  - WYSIWYG: silence Mermaid rendering errors to avoid disrupting input
+  - File icons by format: MD unchanged; PDF in red; TXT in purple
+  - New Sidebar Outline: Markdown (Edit/Read) and PDF bookmarks
+  - Fix: remove the persistent “no library selected” prompt after selecting a library
+  - Restore vertical scrollbars with a clean, consistent UI; avoid horizontal scrolling
+  - Tabs: show file name (append parent for duplicates), unsaved marker `*`, window title sync, tooltip shows full path
 - v0.1.4
   - Sync: add root/dir snapshots to speed up remote scanning
   - Fix: LaTeX rendering errors in Reading mode; LaTeX global render in WYSIWYG
@@ -88,6 +112,7 @@ License & Compliance
 - Allowed: use/modify/copy/redistribute for non-commercial purposes with attribution and source link.
 - Commercial use: prohibited without prior written authorization. Contact: flyhunterl <flyhunterl@gmail.com>.
 - Third-party licenses: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- Translation note: in case of any discrepancy, the Chinese original in LICENSE prevails.
 
 Acknowledgements
 - Tauri, markdown‑it, DOMPurify, highlight.js, KaTeX, Mermaid
