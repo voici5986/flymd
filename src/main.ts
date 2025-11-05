@@ -8,6 +8,7 @@
 
 import './style.css'
 import './mobile.css'  // 移动端样式
+import { t, fmtStatus, getLocalePref, setLocalePref, getLocale } from './i18n'
 // KaTeX 样式改为按需动态加载（首次检测到公式时再加载）
 
 // markdown-it 和 DOMPurify 改为按需动态 import，类型仅在编译期引用
@@ -523,21 +524,21 @@ app.innerHTML = `
   <div class="titlebar">
     <div class="menubar">
       <!-- 顶级菜单：文件 / 模式（参考 Windows 文本菜单） -->
-      <div class="menu-item" id="btn-open" title="文件">文件</div>
-      <div class="menu-item" id="btn-mode" title="模式">模式</div>
+      <div class="menu-item" id="btn-open" title="${t('menu.file')}">${t('menu.file')}</div>
+      <div class="menu-item" id="btn-mode" title="${t('menu.mode')}">${t('menu.mode')}</div>
       <!-- 旧按钮保留但隐藏，避免破坏现有逻辑引用 -->
-      <div class="menu-item" id="btn-new" style="display:none;" title="新建 (Ctrl+N)">新建</div>
-      <div class="menu-item" id="btn-save" style="display:none;" title="保存 (Ctrl+S)">保存</div>
-      <div class="menu-item" id="btn-saveas" style="display:none;" title="另存为 (Ctrl+Shift+S)">另存为</div>
-      <div class="menu-item" id="btn-toggle" style="display:none;" title="编辑/阅读 (Ctrl+E)">阅读</div>
-      <div class="menu-item" id="btn-extensions" title="扩展与插件管理">扩展</div>
+      <div class="menu-item" id="btn-new" style="display:none;" title="${t('file.new')} (Ctrl+N)">${t('file.new')}</div>
+      <div class="menu-item" id="btn-save" style="display:none;" title="${t('file.save')} (Ctrl+S)">${t('file.save')}</div>
+      <div class="menu-item" id="btn-saveas" style="display:none;" title="${t('file.saveas')} (Ctrl+Shift+S)">${t('file.saveas')}</div>
+      <div class="menu-item" id="btn-toggle" style="display:none;" title="${t('mode.edit')}/${t('mode.read')} (Ctrl+E)">${t('mode.read')}</div>
+      <div class="menu-item" id="btn-extensions" title="${t('menu.extensions')}">${t('menu.extensions')}</div>
     </div>
-    <div class="filename" id="filename">未命名</div>
+    <div class="filename" id="filename">${t('filename.untitled')}</div>
   </div>
   <div class="container">
-    <textarea id="editor" class="editor" spellcheck="false" placeholder="在此输入 Markdown 文本……（关闭图床且未选择或新建文档情况下直接粘贴图片，编辑模式将把图片放到系统默认图片文件夹/所见模式将使用base64；选择或新建了文档，图片将保存到文档同目录的images文件夹下）"></textarea>
+    <textarea id="editor" class="editor" spellcheck="false" placeholder="${t('editor.placeholder')}"></textarea>
     <div id="preview" class="preview hidden"></div>
-    <div class="statusbar" id="status">行 1, 列 1</div>
+    <div class="statusbar" id="status">${fmtStatus(1,1)}</div>
   </div>
 `
 try { logInfo('打点:DOM就绪') } catch {}
@@ -1160,18 +1161,18 @@ const menubar = document.querySelector('.menubar') as HTMLDivElement
 if (menubar) {
   // 顶级“文件”按钮文案
   const btnOpen0 = document.getElementById('btn-open') as HTMLDivElement | null
-  if (btnOpen0) { btnOpen0.textContent = '\u6587\u4ef6'; btnOpen0.title = '\u6587\u4ef6' }
+  if (btnOpen0) { btnOpen0.textContent = t('menu.file'); btnOpen0.title = t('menu.file') }
   const recentBtn = document.createElement('div')
   recentBtn.id = 'btn-recent'
   recentBtn.className = 'menu-item'
-  recentBtn.title = '最近文件'
-  recentBtn.textContent = '\u6700\u8fd1'
+  recentBtn.title = t('menu.recent')
+  recentBtn.textContent = t('menu.recent')
   menubar.appendChild(recentBtn)
   const uplBtn = document.createElement('div')
   uplBtn.id = 'btn-uploader'
   uplBtn.className = 'menu-item'
-  uplBtn.title = '图床设置'
-  uplBtn.textContent = '\u56fe\u5e8a'
+  uplBtn.title = t('menu.uploader')
+  uplBtn.textContent = t('menu.uploader')
       menubar.appendChild(uplBtn)
       // 扩展按钮（如未在首屏模板中渲染，则此处补充）
       try {
@@ -1180,8 +1181,8 @@ if (menubar) {
           const extBtn = document.createElement('div')
           extBtn.id = 'btn-extensions'
           extBtn.className = 'menu-item'
-          extBtn.title = '扩展与插件管理'
-          extBtn.textContent = '\u6269\u5c55'
+          extBtn.title = t('menu.extensions')
+          extBtn.textContent = t('menu.extensions')
           menubar.appendChild(extBtn)
         }
       } catch {}
@@ -1189,8 +1190,8 @@ if (menubar) {
   const libBtn = document.createElement('div')
   libBtn.id = 'btn-library'
   libBtn.className = 'menu-item'
-  libBtn.title = "\u6587\u6863\u5e93\u4fa7\u680f"
-  libBtn.textContent = "\u5e93"
+  libBtn.title = t('lib.choose')
+  libBtn.textContent = t('lib.choose')
   // 将“库”按钮插入到“打开”按钮左侧（若获取不到则放到最左）
   const openBtnRef = document.getElementById('btn-open') as HTMLDivElement | null
   if (openBtnRef && openBtnRef.parentElement === menubar) {
@@ -1208,17 +1209,23 @@ if (menubar) {
 const aboutBtn = document.createElement('div')
   aboutBtn.id = 'btn-about'
   aboutBtn.className = 'menu-item'
-  aboutBtn.title = '关于'
-      aboutBtn.textContent = '\u5173\u4e8e'
+  aboutBtn.title = t('menu.about')
+      aboutBtn.textContent = t('menu.about')
       // 顶层的“模式”按钮已在模板中渲染，这里无需添加
       // 检查更新按钮
       const updBtn = document.createElement('div')
       updBtn.id = 'btn-update'
       updBtn.className = 'menu-item'
-      updBtn.title = '检查更新'
-      updBtn.textContent = '\u66f4\u65b0'
+      updBtn.title = t('menu.update')
+      updBtn.textContent = t('menu.update')
       menubar.appendChild(updBtn)
       menubar.appendChild(aboutBtn)
+      const langBtn = document.createElement('div')
+      langBtn.id = 'btn-lang'
+      langBtn.className = 'menu-item'
+      langBtn.title = t('menu.language')
+      langBtn.textContent = '🌍'
+      menubar.appendChild(langBtn)
       // 将“扩展”按钮移到窗口最右侧（紧随文件名标签之后，靠右）
       try {
         const titlebar = document.querySelector('.titlebar') as HTMLDivElement | null
@@ -1266,8 +1273,8 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
       <button class="lib-btn" id="lib-choose"></button>
       <div class="lib-path" id="lib-path"></div>
       <div class="lib-tabs">
-        <button class="lib-tab active" id="lib-tab-files">文件</button>
-        <button class="lib-tab" id="lib-tab-outline">大纲</button>
+        <button class="lib-tab active" id="lib-tab-files">${t('tab.files')}</button>
+        <button class="lib-tab" id="lib-tab-outline">${t('tab.outline')}</button>
       </div>
       <button class="lib-btn" id="lib-refresh"></button>
     </div>
@@ -1297,8 +1304,8 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
     const elRefresh = library.querySelector('#lib-refresh') as HTMLButtonElement | null
     // 去除“未选择库目录”默认提示，保持为空，避免长期提示误导
     if (elPath) elPath.textContent = ''
-    if (elChoose) elChoose.textContent = '\u5e93'
-    if (elRefresh) elRefresh.textContent = '\u5237\u65b0'
+    if (elChoose) elChoose.textContent = t('lib.choose')
+    if (elRefresh) elRefresh.textContent = t('lib.refresh')
     // 绑定二级标签：文件 / 大纲
     const tabFiles = library.querySelector('#lib-tab-files') as HTMLButtonElement | null
     const tabOutline = library.querySelector('#lib-tab-outline') as HTMLButtonElement | null
@@ -1324,7 +1331,7 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
       elPin.className = 'lib-btn'
       elPin.id = 'lib-pin'
       hdr.appendChild(elPin)
-      ;(async () => { try { libraryDocked = await getLibraryDocked(); elPin.textContent = libraryDocked ? '自动' : '固定'; applyLibraryLayout() } catch {} })()
+      ;(async () => { try { libraryDocked = await getLibraryDocked(); elPin.textContent = libraryDocked ? t('lib.pin.auto') : t('lib.pin.fixed'); applyLibraryLayout() } catch {} })()
       elPin.addEventListener('click', () => { void setLibraryDocked(!libraryDocked) })
     }
   } catch {}
@@ -1335,11 +1342,11 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
         about.innerHTML = `
           <div class="about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-title">
             <div class="about-header">
-              <div id="about-title">关于  v${APP_VERSION}</div>
-              <button id="about-close" class="about-close" title="关闭">×</button>
+              <div id="about-title">${t('about.title')}  v${APP_VERSION}</div>
+              <button id="about-close" class="about-close" title="${t('about.close')}">×</button>
             </div>
             <div class="about-body">
-              <p>跨平台的轻量的Markdown 编辑阅读工具</p>
+              <p>${t('about.tagline')}</p>
             </div>
           </div>
         `
@@ -1363,22 +1370,22 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
             `
           }
           const aboutTitle = about.querySelector('#about-title') as HTMLDivElement | null
-          if (aboutTitle) aboutTitle.textContent = `\u5173\u4e8e \u98de\u901fMarkDown (flyMD) v${APP_VERSION}`
+          if (aboutTitle) aboutTitle.textContent = `${t('about.title')} flyMD v${APP_VERSION}`
           const aboutClose = about.querySelector('#about-close') as HTMLButtonElement | null
-          if (aboutClose) { aboutClose.textContent = '\u00D7'; aboutClose.title = '\u5173\u95ed' }
+          if (aboutClose) { aboutClose.textContent = '×'; aboutClose.title = t('about.close') }
           // 覆盖关于内容：移除快捷键，加入离线二维码与许可说明
           try {
             const bodyEl = about.querySelector('.about-body') as HTMLDivElement | null
             if (bodyEl) {
               bodyEl.innerHTML = `
                 <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
-                  <p>一款跨平台、轻量稳定好用的 Markdown 编辑 PDF 阅读工具。</p>
+                  <p>${t('about.tagline')}</p>
                   <img src="${goodImgUrl}" alt="二维码" style="width:320px;height:320px;border-radius:0;object-fit:contain;image-rendering:pixelated;"/>
                   <div style="text-align:center;">
-                    <p style="margin:6px 0 0;color:var(--muted);font-size:12px;">开源协议：非商业开源（NC 1.0）。商业使用需授权。</p>
-                    <p style="margin:4px 0 0;"><a href="https://github.com/flyhunterl/flymd/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">查看完整许可文本</a></p>
-                    <p style="margin:6px 0 0;">个人网站：<a href="https://www.llingfei.com" target="_blank" rel="noopener noreferrer">https://www.llingfei.com</a></p>
-                    <p style="margin:2px 0 0;">GitHub：<a href="https://github.com/flyhunterl/flymd" target="_blank" rel="noopener noreferrer">https://github.com/flyhunterl/flymd</a></p>
+                    <p style="margin:6px 0 0;color:var(--muted);font-size:12px;">${t('about.license.brief')}</p>
+                    <p style="margin:4px 0 0;"><a href="https://github.com/flyhunterl/flymd/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">${t('about.license.link')}</a></p>
+                    <p style="margin:6px 0 0;">${t('about.blog')}<a href="https://www.llingfei.com" target="_blank" rel="noopener noreferrer">https://www.llingfei.com</a></p>
+                    <p style="margin:2px 0 0;">${t('about.github')}<a href="https://github.com/flyhunterl/flymd" target="_blank" rel="noopener noreferrer">https://github.com/flyhunterl/flymd</a></p>
                   </div>
                 </div>
               `
@@ -1411,21 +1418,21 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
   link.innerHTML = `
       <div class="link-dialog" role="dialog" aria-modal="true" aria-labelledby="link-title">
         <div class="link-header">
-          <div id="link-title">插入链接</div>
-          <button id="link-close" class="about-close" title="关闭">×</button>
+          <div id="link-title">${t('dlg.link')}</div>
+          <button id="link-close" class="about-close" title="${t('about.close')}">×</button>
         </div>
         <form class="link-body" id="link-form">
           <label class="link-field">
-            <span>文本</span>
-            <input id="link-text" type="text" placeholder="链接文本" />
+            <span>${t('dlg.text')}</span>
+            <input id="link-text" type="text" placeholder="${t('dlg.link.text.ph')}" />
           </label>
           <label class="link-field">
-            <span>URL</span>
-            <input id="link-url" type="text" placeholder="https://" />
+            <span>${t('dlg.url')}</span>
+            <input id="link-url" type="text" placeholder="${t('dlg.url.ph')}" />
           </label>
           <div class="link-actions">
-            <button type="button" id="link-cancel">取消</button>
-            <button type="submit" id="link-ok">插入</button>
+            <button type="button" id="link-cancel">${t('dlg.cancel')}</button>
+            <button type="submit" id="link-ok">${t('dlg.insert')}</button>
           </div>
         </form>
     </div>
@@ -1439,21 +1446,21 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
   rename.innerHTML = `
       <div class="link-dialog" role="dialog" aria-modal="true" aria-labelledby="rename-title">
         <div class="link-header">
-          <div id="rename-title">重命名</div>
-          <button id="rename-close" class="about-close" title="关闭">×</button>
+          <div id="rename-title">${t('dlg.rename')}</div>
+          <button id="rename-close" class="about-close" title="${t('about.close')}">×</button>
         </div>
         <form class="link-body" id="rename-form">
           <label class="link-field">
-            <span>名称</span>
-            <input id="rename-text" type="text" placeholder="请输入新名称" />
+            <span>${t('dlg.name')}</span>
+            <input id="rename-text" type="text" placeholder="${t('dlg.name.ph')}" />
           </label>
           <label class="link-field">
-            <span>后缀</span>
+            <span>${t('dlg.ext')}</span>
             <input id="rename-ext" type="text" disabled />
           </label>
           <div class="link-actions">
-            <button type="button" id="rename-cancel">取消</button>
-            <button type="submit" id="rename-ok">确定</button>
+            <button type="button" id="rename-cancel">${t('dlg.cancel')}</button>
+            <button type="submit" id="rename-ok">${t('dlg.ok')}</button>
           </div>
         </form>
     </div>
@@ -1467,63 +1474,63 @@ let _wheelHandlerRef: ((e: WheelEvent)=>void) | null = null
   upl.innerHTML = `
     <div class="upl-dialog" role="dialog" aria-modal="true" aria-labelledby="upl-title">
       <div class="upl-header">
-        <div id="upl-title">图床设置（S3 / R2）</div>
-        <button id="upl-close" class="about-close" title="关闭">×</button>
+        <div id="upl-title">${t('upl.title')}</div>
+        <button id="upl-close" class="about-close" title="${t('about.close')}">×</button>
       </div>
-      <div class="upl-desc">用于将粘贴/拖拽的图片自动上传到对象存储，保存后即生效（仅在启用时）。</div>
+      <div class="upl-desc">${t('upl.desc')}</div>
       <form class="upl-body" id="upl-form">
         <div class="upl-grid">
-          <div class="upl-section-title">基础配置</div>
-          <label for="upl-enabled">启用</label>
+          <div class="upl-section-title">${t('upl.section.basic')}</div>
+          <label for="upl-enabled">${t('upl.enable')}</label>
           <div class="upl-field">
             <label class="switch">
               <input id="upl-enabled" type="checkbox" />
               <span class="trk"></span><span class="kn"></span>
             </label>
           </div>
-          <label for="upl-always-local">总是保存到本地</label>
+          <label for="upl-always-local">${t('upl.alwaysLocal')}</label>
           <div class="upl-field">
             <label class="switch">
               <input id="upl-always-local" type="checkbox" />
               <span class="trk"></span><span class="kn"></span>
             </label>
-            <div class="upl-hint">开启后，无论图床是否启用，粘贴/拖拽/链接插入的图片都会复制到当前文档同目录的 images 文件夹，并立即生效</div>
+            <div class="upl-hint">${t('upl.hint.alwaysLocal')}</div>
           </div>
-          <label for="upl-ak">AccessKeyId</label>
-          <div class="upl-field"><input id="upl-ak" type="text" placeholder="必填" /></div>
-          <label for="upl-sk">SecretAccessKey</label>
-          <div class="upl-field"><input id="upl-sk" type="password" placeholder="必填" /></div>
-          <label for="upl-bucket">Bucket</label>
-          <div class="upl-field"><input id="upl-bucket" type="text" placeholder="必填" /></div>
-          <label for="upl-endpoint">自定义节点地址</label>
+          <label for="upl-ak">${t('upl.ak')}</label>
+          <div class="upl-field"><input id="upl-ak" type="text" placeholder="${t('upl.ak.ph')}" /></div>
+          <label for="upl-sk">${t('upl.sk')}</label>
+          <div class="upl-field"><input id="upl-sk" type="password" placeholder="${t('upl.sk.ph')}" /></div>
+          <label for="upl-bucket">${t('upl.bucket')}</label>
+          <div class="upl-field"><input id="upl-bucket" type="text" placeholder="${t('upl.bucket.ph')}" /></div>
+          <label for="upl-endpoint">${t('upl.endpoint')}</label>
           <div class="upl-field">
-            <input id="upl-endpoint" type="url" placeholder="例如 https://xxx.r2.cloudflarestorage.com" />
-            <div class="upl-hint">R2: https://<accountid>.r2.cloudflarestorage.com；S3: https://s3.<region>.amazonaws.com</div>
+            <input id="upl-endpoint" type="url" placeholder="${t('upl.endpoint.ph')}" />
+            <div class="upl-hint">${t('upl.endpoint.hint')}</div>
           </div>
-          <label for="upl-region">Region（可选）</label>
-          <div class="upl-field"><input id="upl-region" type="text" placeholder="R2 用 auto；S3 如 ap-southeast-1" /></div>
-          <div class="upl-section-title">访问域名与路径</div>
-          <label for="upl-domain">自定义域名</label>
+          <label for="upl-region">${t('upl.region')}</label>
+          <div class="upl-field"><input id="upl-region" type="text" placeholder="${t('upl.region.ph')}" /></div>
+          <div class="upl-section-title">${t('upl.section.access')}</div>
+          <label for="upl-domain">${t('upl.domain')}</label>
           <div class="upl-field">
-            <input id="upl-domain" type="url" placeholder="例如 https://img.example.com" />
-            <div class="upl-hint">填写后将使用该域名生成公开地址</div>
+            <input id="upl-domain" type="url" placeholder="${t('upl.domain.ph')}" />
+            <div class="upl-hint">${t('upl.domain.hint')}</div>
           </div>
-          <label for="upl-template">上传路径模板</label>
+          <label for="upl-template">${t('upl.template')}</label>
           <div class="upl-field">
-            <input id="upl-template" type="text" placeholder="{year}/{month}{fileName}{md5}.{extName}" />
-            <div class="upl-hint">可用变量：{year}{month}{day}{fileName}{md5}{extName}</div>
+            <input id="upl-template" type="text" placeholder="${t('upl.template.ph')}" />
+            <div class="upl-hint">${t('upl.template.hint')}</div>
           </div>
-          <div class="upl-section-title">高级选项</div>
-          <label for="upl-pathstyle">Path-Style（R2 建议）</label>
+          <div class="upl-section-title">${t('upl.section.advanced')}</div>
+          <label for="upl-pathstyle">${t('upl.pathstyle')}</label>
           <div class="upl-field"><input id="upl-pathstyle" type="checkbox" /></div>
-          <label for="upl-acl">public-read</label>
+          <label for="upl-acl">${t('upl.acl')}</label>
           <div class="upl-field"><input id="upl-acl" type="checkbox" checked /></div>
         </div>
         <div class="upl-actions">
           <div id="upl-test-result"></div>
-          <button type="button" id="upl-test" class="btn-secondary">测试连接</button>
-          <button type="button" id="upl-cancel" class="btn-secondary">取消</button>
-          <button type="submit" id="upl-save" class="btn-primary">保存</button>
+          <button type="button" id="upl-test" class="btn-secondary">${t('dlg.test')}</button>
+          <button type="button" id="upl-cancel" class="btn-secondary">${t('dlg.cancel')}</button>
+          <button type="submit" id="upl-save" class="btn-primary">${t('file.save')}</button>
         </div>
       </form>
     </div>
@@ -1630,7 +1637,7 @@ async function openLinkDialog(presetLabel: string, presetUrl = 'https://'): Prom
 function refreshTitle() {
   // 以文件名为主；未保存附加 *；悬浮显示完整路径；同步 OS 窗口标题
   const full = currentFilePath || ''
-  const name = full ? (full.split(/[/\\]/).pop() || '未命名') : '未命名'
+  const name = full ? (full.split(/[/\\]/).pop() || t('filename.untitled')) : t('filename.untitled')
   const label = name + (dirty ? ' *' : '')
   filenameLabel.textContent = label
   try { filenameLabel.title = full || name } catch {}
@@ -1645,7 +1652,7 @@ function refreshStatus() {
   const lines = until.split(/\n/)
   const row = lines.length
   const col = (lines[lines.length - 1] || '').length + 1
-  status.textContent = `行 ${row}, 列 ${col}`
+  status.textContent = fmtStatus(row, col)
 }
 
 // 初始化存储（Tauri Store），失败则退化为内存模式
@@ -3953,10 +3960,10 @@ function showFileMenu() {
   const anchor = document.getElementById('btn-open') as HTMLDivElement | null
   if (!anchor) return
   showTopMenu(anchor, [
-    { label: '新建', accel: 'Ctrl+N', action: () => { void newFile() } },
-    { label: '打开…', accel: 'Ctrl+O', action: () => { void openFile2() } },
-    { label: '保存', accel: 'Ctrl+S', action: () => { void saveFile() } },
-    { label: '另存为…', accel: 'Ctrl+Shift+S', action: () => { void saveAs() } },
+    { label: t('file.new'), accel: 'Ctrl+N', action: () => { void newFile() } },
+    { label: t('file.open'), accel: 'Ctrl+O', action: () => { void openFile2() } },
+    { label: t('file.save'), accel: 'Ctrl+S', action: () => { void saveFile() } },
+    { label: t('file.saveas'), accel: 'Ctrl+Shift+S', action: () => { void saveAs() } },
   ])
 }
 
@@ -3964,11 +3971,11 @@ function showModeMenu() {
   const anchor = document.getElementById('btn-mode') as HTMLDivElement | null
   if (!anchor) return
   showTopMenu(anchor, [
-    { label: '编辑', accel: 'Ctrl+E', action: async () => {
+    { label: t('mode.edit'), accel: 'Ctrl+E', action: async () => {
       try { if (wysiwyg) await setWysiwygEnabled(false) } catch {}
       if (mode !== 'edit') { mode = 'edit'; try { preview.classList.add('hidden') } catch {}; try { editor.focus() } catch {}; try { syncToggleButton() } catch {} }
     } },
-    { label: '阅读', accel: 'Ctrl+R', action: async () => {
+    { label: t('mode.read'), accel: 'Ctrl+R', action: async () => {
       // 先切到预览再退出所见，避免退出所见时根据旧 mode 隐藏预览
       if (mode !== 'preview') {
         mode = 'preview'
@@ -3978,8 +3985,124 @@ function showModeMenu() {
       try { if (wysiwyg) await setWysiwygEnabled(false) } catch {}
       try { syncToggleButton() } catch {}
     } },
-    { label: '所见', accel: 'Ctrl+W', action: () => { void setWysiwygEnabled(true) } },
+    { label: t('mode.wysiwyg'), accel: 'Ctrl+W', action: () => { void setWysiwygEnabled(true) } },
   ])
+}
+
+function showLangMenu() {
+  const anchor = document.getElementById('btn-lang') as HTMLDivElement | null
+  if (!anchor) return
+  const pref = getLocalePref()
+  const items: TopMenuItemSpec[] = [
+    { label: `${pref === 'auto' ? '✓ ' : ''}${t('lang.auto')}`, action: () => { setLocalePref('auto'); applyI18nUi() } },
+    { label: `${pref === 'zh' ? '✓ ' : ''}${t('lang.zh')}`, action: () => { setLocalePref('zh'); applyI18nUi() } },
+    { label: `${pref === 'en' ? '✓ ' : ''}${t('lang.en')}`, action: () => { setLocalePref('en'); applyI18nUi() } },
+  ]
+  showTopMenu(anchor, items)
+}
+
+function applyI18nUi() {
+  try {
+    // 菜单
+    const map: Array<[string, string]> = [
+      ['btn-open', t('menu.file')],
+      ['btn-mode', t('menu.mode')],
+      ['btn-recent', t('menu.recent')],
+      ['btn-uploader', t('menu.uploader')],
+      ['btn-extensions', t('menu.extensions')],
+      ['btn-library', t('lib.choose')],
+      ['btn-update', t('menu.update')],
+      ['btn-about', t('menu.about')],
+    ]
+    for (const [id, text] of map) {
+      const el = document.getElementById(id) as HTMLDivElement | null
+      if (el) { el.textContent = text; el.title = text }
+    }
+    // 文件名/状态/编辑器占位
+    try { (document.getElementById('editor') as HTMLTextAreaElement | null)?.setAttribute('placeholder', t('editor.placeholder')) } catch {}
+    try { refreshTitle() } catch {}
+    try { refreshStatus() } catch {}
+    // 库页签/按钮
+    try { const el = document.getElementById('lib-tab-files'); if (el) el.textContent = t('tab.files') } catch {}
+    try { const el = document.getElementById('lib-tab-outline'); if (el) el.textContent = t('tab.outline') } catch {}
+    try { const el = document.getElementById('lib-choose'); if (el) (el as HTMLButtonElement).textContent = t('lib.choose') } catch {}
+    try { const el = document.getElementById('lib-refresh'); if (el) (el as HTMLButtonElement).textContent = t('lib.refresh') } catch {}
+    try { const el = document.getElementById('lib-pin'); if (el) (el as HTMLButtonElement).textContent = libraryDocked ? t('lib.pin.auto') : t('lib.pin.fixed') } catch {}
+    // 图床设置（若已创建）
+    try {
+      const uplRoot = document.getElementById('uploader-overlay') as HTMLDivElement | null
+      if (uplRoot) {
+        const titleEl = uplRoot.querySelector('#upl-title') as HTMLDivElement | null
+        const descEl = uplRoot.querySelector('.upl-desc') as HTMLDivElement | null
+        if (titleEl) titleEl.textContent = t('upl.title')
+        if (descEl) descEl.textContent = t('upl.desc')
+        const setLabel = (forId: string, txt: string) => {
+          const lab = uplRoot.querySelector(`label[for="${forId}"]`) as HTMLLabelElement | null
+          if (lab) lab.textContent = txt
+        }
+        setLabel('upl-enabled', t('upl.enable'))
+        setLabel('upl-always-local', t('upl.alwaysLocal'))
+        setLabel('upl-ak', t('upl.ak'))
+        setLabel('upl-sk', t('upl.sk'))
+        setLabel('upl-bucket', t('upl.bucket'))
+        setLabel('upl-endpoint', t('upl.endpoint'))
+        setLabel('upl-region', t('upl.region'))
+        setLabel('upl-domain', t('upl.domain'))
+        setLabel('upl-template', t('upl.template'))
+        setLabel('upl-pathstyle', t('upl.pathstyle'))
+        setLabel('upl-acl', t('upl.acl'))
+        const setPh = (id: string, ph: string) => { const inp = uplRoot.querySelector(`#${id}`) as HTMLInputElement | null; if (inp) inp.placeholder = ph }
+        setPh('upl-ak', t('upl.ak.ph'))
+        setPh('upl-sk', t('upl.sk.ph'))
+        setPh('upl-bucket', t('upl.bucket.ph'))
+        setPh('upl-endpoint', t('upl.endpoint.ph'))
+        setPh('upl-region', t('upl.region.ph'))
+        setPh('upl-domain', t('upl.domain.ph'))
+        setPh('upl-template', t('upl.template.ph'))
+        const secs = uplRoot.querySelectorAll('.upl-section-title') as NodeListOf<HTMLDivElement>
+        if (secs[0]) secs[0].textContent = t('upl.section.basic')
+        if (secs[1]) secs[1].textContent = t('upl.section.access')
+        if (secs[2]) secs[2].textContent = t('upl.section.advanced')
+        const hints = uplRoot.querySelectorAll('.upl-hint') as NodeListOf<HTMLDivElement>
+        if (hints[0]) hints[0].textContent = t('upl.hint.alwaysLocal')
+        if (hints[1]) hints[1].textContent = t('upl.endpoint.hint')
+        if (hints[2]) hints[2].textContent = t('upl.domain.hint')
+        if (hints[3]) hints[3].textContent = t('upl.template.hint')
+      }
+    } catch {}
+    // 扩展管理（若已创建）：重绘或更新文本
+    try {
+      const extOverlay = document.getElementById('extensions-overlay') as HTMLDivElement | null
+      if (extOverlay) {
+        // 简单做法：刷新整块 UI 的静态文案
+        const titleEl = extOverlay.querySelector('.ext-header div') as HTMLDivElement | null
+        if (titleEl) titleEl.textContent = t('ext.title')
+        const stTitles = extOverlay.querySelectorAll('.ext-subtitle') as NodeListOf<HTMLDivElement>
+        if (stTitles[0]) stTitles[0].textContent = t('ext.install.section')
+        // 第二/第三个小节标题在 refreshExtensionsUI 中按需重建
+        const input = extOverlay.querySelector('#ext-install-input') as HTMLInputElement | null
+        if (input) input.placeholder = t('ext.install.placeholder')
+        const btnInstall = extOverlay.querySelector('#ext-install-btn') as HTMLButtonElement | null
+        if (btnInstall) btnInstall.textContent = t('ext.install.btn')
+        // 列表区域走 refresh 重建，确保按钮文本（设置/启用/禁用/移除/刷新）也同步
+        void refreshExtensionsUI()
+      }
+    } catch {}
+    // WebDAV 同步窗口（若已创建）：仅更新标题与按钮
+    try {
+      const syncOverlay = document.getElementById('sync-overlay') as HTMLDivElement | null
+      if (syncOverlay) {
+        const tEl = syncOverlay.querySelector('#sync-title') as HTMLDivElement | null
+        if (tEl) tEl.textContent = t('sync.title')
+        const closeEl = syncOverlay.querySelector('#sync-close') as HTMLButtonElement | null
+        if (closeEl) closeEl.title = t('about.close')
+        const openLog = syncOverlay.querySelector('#sync-openlog') as HTMLButtonElement | null
+        if (openLog) openLog.textContent = t('sync.openlog')
+        const saveBtn = syncOverlay.querySelector('#sync-save') as HTMLButtonElement | null
+        if (saveBtn) saveBtn.textContent = t('sync.save')
+      }
+    } catch {}
+  } catch {}
 }
 
 function bindEvents() {
@@ -4006,9 +4129,11 @@ function bindEvents() {
   const btnUpdate = document.getElementById('btn-update')
   const btnUploader = document.getElementById('btn-uploader')
   const btnWysiwyg = document.getElementById('btn-wysiwyg')
+  const btnLang = document.getElementById('btn-lang')
 
   if (btnOpen) btnOpen.addEventListener('click', guard(() => showFileMenu()))
   if (btnMode) btnMode.addEventListener('click', guard(() => showModeMenu()))
+  if (btnLang) btnLang.addEventListener('click', guard(() => showLangMenu()))
   if (btnSave) btnSave.addEventListener('click', guard(() => saveFile()))
   if (btnSaveas) btnSaveas.addEventListener('click', guard(() => saveAs()))
   if (btnToggle) btnToggle.addEventListener('click', guard(() => toggleMode()))
@@ -5331,7 +5456,7 @@ async function refreshExtensionsUI(): Promise<void> {
   // Builtins
   const builtinsEl = document.createElement('div')
   builtinsEl.className = 'ext-section'
-  const st1 = document.createElement('div'); st1.className = 'ext-subtitle'; st1.textContent = '内置扩展'
+  const st1 = document.createElement('div'); st1.className = 'ext-subtitle'; st1.textContent = t('ext.installed')
   builtinsEl.appendChild(st1)
   const list1 = document.createElement('div'); list1.className = 'ext-list'
   builtinsEl.appendChild(list1)
@@ -5345,21 +5470,21 @@ async function refreshExtensionsUI(): Promise<void> {
   if (b.id === 'uploader-s3') {
     try {
       const upCfg = await (async () => { try { if (store) return (await store.get('uploader')) as any } catch { return null } })()
-      const tag = document.createElement('span'); tag.className = 'ext-tag'; tag.textContent = upCfg?.enabled ? '✓ 已启用' : '未启用'
+      const tag = document.createElement('span'); tag.className = 'ext-tag'; tag.textContent = upCfg?.enabled ? t('ext.enabled.tag.on') : t('ext.enabled.tag.off')
       tag.style.opacity = '0.75'; tag.style.marginRight = '8px'; tag.style.color = upCfg?.enabled ? '#22c55e' : '#94a3b8'
       actions.appendChild(tag)
     } catch {}
-    const btn = document.createElement('button'); btn.className = 'btn primary'; btn.textContent = '设置'
+    const btn = document.createElement('button'); btn.className = 'btn primary'; btn.textContent = t('ext.settings')
     btn.addEventListener('click', () => { try { void showExtensionsOverlay(false); void openUploaderDialog() } catch {} })
     actions.appendChild(btn)
   } else if (b.id === 'webdav-sync') {
     try {
       const cfg = await getWebdavSyncConfig()
-      const tag = document.createElement('span'); tag.className = 'ext-tag'; tag.textContent = cfg.enabled ? '✓ 已启用' : '未启用'
+      const tag = document.createElement('span'); tag.className = 'ext-tag'; tag.textContent = cfg.enabled ? t('ext.enabled.tag.on') : t('ext.enabled.tag.off')
       tag.style.opacity = '0.75'; tag.style.marginRight = '8px'; tag.style.color = cfg.enabled ? '#22c55e' : '#94a3b8'
       actions.appendChild(tag)
     } catch {}
-    const btn2 = document.createElement('button'); btn2.className = 'btn primary'; btn2.textContent = '设置'
+    const btn2 = document.createElement('button'); btn2.className = 'btn primary'; btn2.textContent = t('ext.settings')
     btn2.addEventListener('click', () => { try { void showExtensionsOverlay(false); void openWebdavSyncDialog() } catch {} })
     actions.appendChild(btn2)
   }
@@ -5370,7 +5495,7 @@ async function refreshExtensionsUI(): Promise<void> {
 
   // Installed
   const st2wrap = document.createElement('div'); st2wrap.className = 'ext-section'
-  const st2 = document.createElement('div'); st2.className = 'ext-subtitle'; st2.textContent = '已安装扩展'
+  const st2 = document.createElement('div'); st2.className = 'ext-subtitle'; st2.textContent = t('ext.installed')
   st2wrap.appendChild(st2)
   const list2 = document.createElement('div'); list2.className = 'ext-list'
   st2wrap.appendChild(list2)
@@ -5388,7 +5513,7 @@ async function refreshExtensionsUI(): Promise<void> {
       meta.appendChild(name); meta.appendChild(desc)
       const actions = document.createElement('div'); actions.className = 'ext-actions'
       if (p.enabled) {
-        const btnSet = document.createElement('button'); btnSet.className = 'btn'; btnSet.textContent = '设置'
+        const btnSet = document.createElement('button'); btnSet.className = 'btn'; btnSet.textContent = t('ext.settings')
         btnSet.addEventListener('click', async () => {
           try {
             const mod = activePlugins.get(p.id)
@@ -5405,25 +5530,25 @@ async function refreshExtensionsUI(): Promise<void> {
               setEditorValue: (v: string) => { try { editor.value = v; dirty = true; refreshTitle(); refreshStatus(); if (mode === 'preview') { void renderPreview() } else if (wysiwyg) { scheduleWysiwygRender() } } catch {} },
             }
             if (mod && typeof mod.openSettings === 'function') { await mod.openSettings(ctx) }
-            else pluginNotice('该扩展未提供设置', 'err', 1600)
-          } catch (e) { showError('打开扩展设置失败', e) }
+            else pluginNotice(t('ext.settings.notProvided'), 'err', 1600)
+          } catch (e) { showError(t('ext.settings.openFail'), e) }
         })
         actions.appendChild(btnSet)
       }
-      const btnToggle = document.createElement('button'); btnToggle.className = 'btn'; btnToggle.textContent = p.enabled ? '禁用' : '启用'
+      const btnToggle = document.createElement('button'); btnToggle.className = 'btn'; btnToggle.textContent = p.enabled ? t('ext.toggle.disable') : t('ext.toggle.enable')
       btnToggle.addEventListener('click', async () => {
-        try { p.enabled = !p.enabled; map[p.id] = p; await setInstalledPlugins(map); if (p.enabled) await activatePlugin(p); else await deactivatePlugin(p.id); await refreshExtensionsUI() } catch (e) { showError('切换扩展失败', e) }
+        try { p.enabled = !p.enabled; map[p.id] = p; await setInstalledPlugins(map); if (p.enabled) await activatePlugin(p); else await deactivatePlugin(p.id); await refreshExtensionsUI() } catch (e) { showError(t('ext.toggle.fail'), e) }
       })
-      const btnRemove = document.createElement('button'); btnRemove.className = 'btn warn'; btnRemove.textContent = '移除'
+      const btnRemove = document.createElement('button'); btnRemove.className = 'btn warn'; btnRemove.textContent = t('ext.remove')
       btnRemove.addEventListener('click', async () => {
-        const ok = await confirmNative(`确定移除扩展 ${p.name || p.id} ？`)
+        const ok = await confirmNative(t('ext.remove.confirm', { name: p.name || p.id }))
         if (!ok) return
         try {
           await deactivatePlugin(p.id)
           await removeDirRecursive(p.dir)
           delete map[p.id]; await setInstalledPlugins(map)
-          await refreshExtensionsUI(); pluginNotice('已移除扩展', 'ok', 1200)
-        } catch (e) { showError('移除扩展失败', e) }
+          await refreshExtensionsUI(); pluginNotice(t('ext.removed'), 'ok', 1200)
+        } catch (e) { showError(t('ext.remove.fail'), e) }
       })
       actions.appendChild(btnToggle)
       actions.appendChild(btnRemove)
@@ -5435,8 +5560,8 @@ async function refreshExtensionsUI(): Promise<void> {
   // 可安装的扩展
   try {
     const st3wrap = document.createElement('div'); st3wrap.className = 'ext-section'
-const hd = document.createElement('div'); hd.className = 'ext-subtitle'; hd.textContent = '可安装的扩展'
-const btnRefresh = document.createElement('button'); btnRefresh.className = 'btn'; btnRefresh.textContent = '刷新'
+const hd = document.createElement('div'); hd.className = 'ext-subtitle'; hd.textContent = t('ext.available')
+const btnRefresh = document.createElement('button'); btnRefresh.className = 'btn'; btnRefresh.textContent = t('ext.refresh')
 btnRefresh.style.marginLeft = '8px'
 btnRefresh.addEventListener('click', async () => { try { (btnRefresh as HTMLButtonElement).disabled = true; await loadInstallablePlugins(true); await refreshExtensionsUI() } finally { (btnRefresh as HTMLButtonElement).disabled = false } })
 hd.appendChild(btnRefresh)
@@ -5458,28 +5583,28 @@ for (const it of items) {
   if (it.author || it.homepage) {
     const spacing = document.createTextNode('  ')
     desc.appendChild(spacing)
-    if (it.author) {
-      const authorSpan = document.createElement('span'); authorSpan.textContent = '作者:' + (it.author || '')
+  if (it.author) {
+      const authorSpan = document.createElement('span'); authorSpan.textContent = t('ext.author') + (it.author || '')
       desc.appendChild(authorSpan)
       if (it.homepage) { desc.appendChild(document.createTextNode(' ')) }
     }
     if (it.homepage) {
-      const a = document.createElement('a'); a.href = it.homepage!; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = '主页'
+      const a = document.createElement('a'); a.href = it.homepage!; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = t('ext.homepage')
       a.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); try { void openInBrowser(it.homepage!) } catch {} })
       desc.appendChild(a)
     }
   }
   meta.appendChild(name); meta.appendChild(desc)
   const actions = document.createElement('div'); actions.className = 'ext-actions'
-  const btnInstall = document.createElement('button'); btnInstall.className = 'btn primary'; btnInstall.textContent = '安装'
+  const btnInstall = document.createElement('button'); btnInstall.className = 'btn primary'; btnInstall.textContent = t('ext.install.btn')
   try {
     const installedMap = await getInstalledPlugins()
     const exists = installedMap[it.id]
-    if (exists) { btnInstall.textContent = '已安装'; (btnInstall as HTMLButtonElement).disabled = true }
+    if (exists) { btnInstall.textContent = t('ext.install.ok'); (btnInstall as HTMLButtonElement).disabled = true }
   } catch {}
   btnInstall.addEventListener('click', async () => {
     try {
-      btnInstall.textContent = '安装中...'; (btnInstall as HTMLButtonElement).disabled = true
+      btnInstall.textContent = t('ext.install.btn') + '...'; (btnInstall as HTMLButtonElement).disabled = true
       const rec = await installPluginFromGit(it.install.ref)
       await activatePlugin(rec)
       await refreshExtensionsUI()
@@ -5517,15 +5642,15 @@ function ensureExtensionsOverlayMounted() {
   overlay.innerHTML = `
     <div class=\"ext-dialog\" role=\"dialog\" aria-modal=\"true\">
       <div class=\"ext-header\">
-        <div>扩展与插件管理</div>
+        <div>${t('ext.title')}</div>
         <button class=\"ext-close\" id=\"ext-close\">×</button>
       </div>
       <div class=\"ext-body\">
         <div class=\"ext-section\">
-          <div class=\"ext-subtitle\">安装扩展（GitHub 或 URL）</div>
+          <div class=\"ext-subtitle\">${t('ext.install.section')}</div>
           <div class=\"ext-install\">
-            <input type=\"text\" id=\"ext-install-input\" placeholder=\"输入 URL 或 username/repository@branch（branch 可省略）\">
-            <button class=\"primary\" id=\"ext-install-btn\">安装</button>
+            <input type=\"text\" id=\"ext-install-input\" placeholder=\"${t('ext.install.placeholder')}\">
+            <button class=\"primary\" id=\"ext-install-btn\">${t('ext.install.btn')}</button>
           </div>
         </div>
         <div class=\"ext-section\" id=\"ext-list-host\"></div>
@@ -5548,9 +5673,9 @@ function ensureExtensionsOverlayMounted() {
       await activatePlugin(rec)
       _extInstallInput!.value = ''
       await refreshExtensionsUI()
-      pluginNotice('安装成功', 'ok', 1500)
+      pluginNotice(t('ext.install.ok'), 'ok', 1500)
     } catch (e) {
-      showError('安装扩展失败', e)
+      showError(t('ext.install.fail'), e)
     }
   })
 }

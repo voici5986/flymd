@@ -7,6 +7,7 @@ import { readDir, stat, readFile, writeFile, mkdir, exists, open as openFileHand
 import { appLocalDataDir } from '@tauri-apps/api/path'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { ask } from '@tauri-apps/plugin-dialog'
+import { t } from '../i18n'
 
 // 更新状态栏显示
 function updateStatus(msg: string) {
@@ -1224,38 +1225,38 @@ export async function openWebdavSyncDialog(): Promise<void> {
     overlay.innerHTML = `
       <div class="upl-dialog" role="dialog" aria-modal="true" aria-labelledby="sync-title">
         <div class="upl-header">
-          <div id="sync-title">WebDAV 同步设置</div>
-          <button id="sync-close" class="about-close" title="关闭">×</button>
+          <div id="sync-title">${t('sync.title')}</div>
+          <button id="sync-close" class="about-close" title="${t('about.close')}">×</button>
         </div>
-        <div class="upl-desc">自动同步库文件到 WebDAV 服务器。首次上传需要计算哈希值，耗时较长。</div>
+        <div class="upl-desc">${t('sync.desc')}</div>
         <div class="upl-hint warn pad-1ch" style="margin-top: 8px; margin-bottom: 8px;">
-          ⚠️  同步功能上线不久，仍在测试。请务必备份数据。
+          ${t('sync.warn.global')}
         </div>
         <form class="upl-body" id="sync-form">
           <div class="upl-grid">
-            <div class="upl-section-title">基础配置</div>\n            <div class="sync-toggles">\n              <div class="item">\n                <span class="lbl">启用同步</span>\n                <label class="switch" for="sync-enabled">\n                  <input id="sync-enabled" type="checkbox"/>\n                  <span class="trk"></span><span class="kn"></span>\n                </label>\n              </div>\n              <div class="item">\n                <span class="lbl">启动时同步</span>\n                <label class="switch" for="sync-onstartup">\n                  <input id="sync-onstartup" type="checkbox"/>\n                  <span class="trk"></span><span class="kn"></span>\n                </label>\n              </div>\n              <div class="item">\n                <span class="lbl">关闭前同步</span>\n                <label class="switch" for="sync-onshutdown">\n                  <input id="sync-onshutdown" type="checkbox"/>\n                  <span class="trk"></span><span class="kn"></span>\n                </label>\n              </div>\n              <div class="upl-hint warn pad-1ch" style="white-space: nowrap;">\n                ⚠️ 启用后，关闭窗口会隐藏到后台继续同步，同步完成后自动退出\n              </div>\n            </div>\n<label for="sync-timeout">超时(毫秒)</label>
+            <div class="upl-section-title">${t('sync.section.basic')}</div>\n            <div class="sync-toggles">\n              <div class="item">\n                <span class="lbl">${t('sync.enable')}</span>\n                <label class=\"switch\" for=\"sync-enabled\">\n                  <input id=\"sync-enabled\" type=\"checkbox\"/>\n                  <span class=\"trk\"></span><span class=\"kn\"></span>\n                </label>\n              </div>\n              <div class=\"item\">\n                <span class=\"lbl\">${t('sync.onstartup')}</span>\n                <label class=\"switch\" for=\"sync-onstartup\">\n                  <input id=\"sync-onstartup\" type=\"checkbox\"/>\n                  <span class=\"trk\"></span><span class=\"kn\"></span>\n                </label>\n              </div>\n              <div class=\"item\">\n                <span class=\"lbl\">${t('sync.onshutdown')}</span>\n                <label class=\"switch\" for=\"sync-onshutdown\">\n                  <input id=\"sync-onshutdown\" type=\"checkbox\"/>\n                  <span class=\"trk\"></span><span class=\"kn\"></span>\n                </label>\n              </div>\n              <div class=\"upl-hint warn pad-1ch\" style=\"white-space: nowrap;\">\n                ${t('sync.warn.onshutdown')}\n              </div>\n            </div>\n<label for=\"sync-timeout\">${t('sync.timeout.label')}<\/label>
             <div class="upl-field">
               <input id="sync-timeout" type="number" min="1000" step="1000" placeholder="120000"/>
-              <div class="upl-hint">建议 120000（2分钟），网络较慢时可适当增加</div>
+              <div class="upl-hint">${t('sync.timeout.suggest')}</div>
             </div>
 
-            <label for="sync-conflict-strategy">冲突策略</label>
+            <label for="sync-conflict-strategy">${t('sync.conflict')}</label>
             <div class="upl-field">
               <select id="sync-conflict-strategy" style="width: 100%; padding: 8px; border: 1px solid var(--border-color, #ccc); border-radius: 4px; background: var(--input-bg, #fff); color: var(--text-color, #333); font-size: 14px;">
-                <option value="newest">自动选择较新文件（推荐）</option>
-                <option value="ask">每次询问用户</option>
-                <option value="last-wins">总是保留远程版本</option>
+                <option value="newest">${t('sync.conflict.newest')}</option>
+                <option value="ask">${t('sync.conflict.ask')}</option>
+                <option value="last-wins">${t('sync.conflict.remote')}</option>
               </select>
               <div class="upl-hint">当本地和远程文件都被修改时的处理策略</div>
             </div>
 
-            <label for="sync-skip-minutes">智能跳过远程扫描（分钟）</label>
+            <label for="sync-skip-minutes">${t('sync.smartSkip')}</label>
             <div class="upl-field">
               <input id="sync-skip-minutes" type="number" min="0" step="1" placeholder="5"/>
-              <div class="upl-hint">若本地无修改且距上次同步未超过此时间，将跳过远程扫描（设为0则每次都扫描）</div>
+              <div class="upl-hint">${t('sync.smartSkip.hint')}</div>
             </div>
 
-            <div class="upl-section-title">WebDAV 服务器</div>
+            <div class="upl-section-title">${t('sync.server')}</div>
             <label for="sync-baseurl">Base URL</label>
             <div class="upl-field">
               <input id="sync-baseurl" type="url" placeholder="https://dav.example.com/remote.php/dav/files/user"/>
@@ -1267,17 +1268,17 @@ export async function openWebdavSyncDialog(): Promise<void> {
             <label for="sync-root">Root Path</label>
             <div class="upl-field">
               <input id="sync-root" type="text" placeholder="/flymd"/>
-              <div class="upl-hint">文件将同步到此路径下</div>
+              <div class="upl-hint">${t('sync.root.hint')}</div>
             </div>
-            <label for="sync-user">用户名</label>
-            <div class="upl-field"><input id="sync-user" type="text" placeholder="必填"/></div>
-            <label for="sync-pass">密码</label>
-            <div class="upl-field"><input id="sync-pass" type="password" placeholder="必填"/></div>
+            <label for="sync-user">${t('sync.user')}</label>
+            <div class="upl-field"><input id="sync-user" type="text" placeholder="${t('upl.ak.ph')}"/></div>
+            <label for="sync-pass">${t('sync.pass')}</label>
+            <div class="upl-field"><input id="sync-pass" type="password" placeholder="${t('upl.sk.ph')}"/></div>
           </div>
           <div class="upl-actions">
-            <button type="button" id="sync-openlog" class="btn-secondary">打开日志</button>
-            <button type="button" id="sync-test" class="btn-secondary">立即同步(F5)</button>
-            <button type="submit" id="sync-save" class="btn-primary">保存</button>
+            <button type="button" id="sync-openlog" class="btn-secondary">${t('sync.openlog')}</button>
+            <button type="button" id="sync-test" class="btn-secondary">${t('sync.now')}</button>
+            <button type="submit" id="sync-save" class="btn-primary">${t('sync.save')}</button>
           </div>
         </form>
       </div>
@@ -1335,10 +1336,10 @@ export async function openWebdavSyncDialog(): Promise<void> {
         password: elPass.value,
       })
       // 反馈
-      try { const el = document.getElementById('status'); if (el) { el.textContent = '已保存 WebDAV 同步配置'; setTimeout(() => { try { el.textContent = '' } catch {} }, 1200) } } catch {}
+      try { const el = document.getElementById('status'); if (el) { el.textContent = t('sync.saved'); setTimeout(() => { try { el.textContent = '' } catch {} }, 1200) } } catch {}
       show(false)
     } catch (e) {
-      alert('保存失败: ' + (e?.message || e))
+      alert(t('sync.save.fail', { msg: (e as any)?.message || String(e) }))
     }
   }
 

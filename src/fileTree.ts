@@ -1,4 +1,5 @@
 import { readDir, stat, mkdir, rename, remove, exists, writeTextFile, writeFile, readFile, watchImmediate } from '@tauri-apps/plugin-fs'
+import { t } from './i18n'
 import appIconUrl from '../flymd.png?url'
 
 export type FileTreeOptions = {
@@ -256,9 +257,9 @@ async function buildDir(root: string, dir: string, parent: HTMLElement) {
           if (!src) return
           const dst = join(e.path, nameOf(src))
           if (src === dst) return
-          if (!isInside(root, src) || !isInside(root, dst)) return alert('仅允许在库目录内移动')
+          if (!isInside(root, src) || !isInside(root, dst)) return alert(t('ft.move.within'))
           if (await exists(dst)) {
-            const choice = await conflictModal('目标已存在', ['覆盖', '自动改名', '取消'], 1)
+            const choice = await conflictModal(t('ft.exists'), [t('action.overwrite'), t('action.renameAuto'), t('action.cancel')], 1)
             if (choice === 2) return
             if (choice === 1) {
               const nm = nameOf(src)
@@ -366,9 +367,9 @@ async function renderRoot(root: string) {
       if (!src) return
       const dst = join(root, nameOf(src))
       if (src === dst) return
-      if (!isInside(root, src) || !isInside(root, dst)) return alert('仅允许在库目录内移动')
+      if (!isInside(root, src) || !isInside(root, dst)) return alert(t('ft.move.within'))
       if (await exists(dst)) {
-        const choice = await conflictModal('目标已存在', ['覆盖', '自动改名', '取消'], 1)
+        const choice = await conflictModal(t('ft.exists'), [t('action.overwrite'), t('action.renameAuto'), t('action.cancel')], 1)
         if (choice === 2) return
         if (choice === 1) {
           const nm = nameOf(src)
@@ -458,7 +459,7 @@ async function conflictModal(title: string, actions: string[], defaultIndex = 1)
       const bd = box.children[1] as HTMLDivElement
       const ft = box.children[2] as HTMLDivElement
       hd.textContent = title
-      bd.textContent = '请选择处理方式'
+      bd.textContent = t('ft.conflict.prompt')
       ft.innerHTML = ''
       actions.forEach((txt, idx) => {
         const b = document.createElement('button') as HTMLButtonElement
