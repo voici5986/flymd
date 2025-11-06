@@ -1,3 +1,4 @@
+import './imePatch'
 /*
 
 
@@ -107,6 +108,143 @@ function hashMermaidCode(code: string): string {
     for (let i = 0; i < code.length; i++) {
       hash ^= code.charCodeAt(i)
       hash = Math.imul(hash, 16777619)
+      function handleBeforeInput(ev: any) {
+      // 记忆上次值与选区（用于 input 兜底计算差异）
+      function rememberPrev() {
+        try {
+          const ta = getEditor(); if (!ta) return
+          const w = window as any
+          w._edPrevVal = String(ta.value || '')
+          w._edPrevSelS = ta.selectionStart >>> 0
+          w._edPrevSelE = ta.selectionEnd >>> 0
+        } catch {}
+      }
+
+      function handleInput(ev: any) {
+        try {
+          const ta = getEditor(); if (!ta) return
+          if (ev.target !== ta) return
+          if (!isEditMode()) return
+          const w = window as any
+          const prev = String(w._edPrevVal ?? '')
+          const ps = (w._edPrevSelS >>> 0) || 0
+          const pe = (w._edPrevSelE >>> 0) || ps
+          const cur = String(ta.value || '')
+          const curS = ta.selectionStart >>> 0
+          // 仅处理插入类（粘贴/输入/合成结束），删除等跳过
+          if (cur.length >= prev.length) {
+            const insertedLen = Math.max(0, curS - ps)
+            const hadSel = (pe > ps)
+            const inserted = (insertedLen > 0) ? cur.slice(ps, ps + insertedLen) : ''
+            // 三连反引号围栏
+            if (inserted === '```') {
+              const before = prev.slice(0, ps)
+              const mid = hadSel ? prev.slice(ps, pe) : ''
+              const after = prev.slice(pe)
+              const content = hadSel ? ('\n' + mid + '\n') : ('\n\n')
+              ta.value = before + '```' + content + '```' + after
+              const caret = hadSel ? (ps + content.length + 3) : (ps + 4)
+              ta.selectionStart = ta.selectionEnd = caret
+              try { dirty = true; refreshTitle(); refreshStatus() } catch {}
+              if (mode === 'preview') { try { void renderPreview() } catch {} } else if (wysiwyg) { try { scheduleWysiwygRender() } catch {} }
+              rememberPrev();
+              return
+            }
+            // 单个左标记：自动/环绕补全（含全角）
+            if (inserted.length === 1) {
+              const close = (openClose as any)[inserted]
+              if (close) {
+                if (hadSel) {
+                  const before = prev.slice(0, ps)
+                  const mid = prev.slice(ps, pe)
+                  const after = prev.slice(pe)
+                  ta.value = before + inserted + mid + close + after
+                  ta.selectionStart = ps + 1; ta.selectionEnd = ps + 1 + mid.length
+                } else {
+                  // 光标插入：在当前结果右侧补一个闭合
+                  const before = cur.slice(0, curS)
+                  const after = cur.slice(curS)
+                  ta.value = before + close + after
+                  ta.selectionStart = ta.selectionEnd = curS
+                }
+                try { dirty = true; refreshTitle(); refreshStatus() } catch {}
+                if (mode === 'preview') { try { void renderPreview() } catch {} } else if (wysiwyg) { try { scheduleWysiwygRender() } catch {} }
+                rememberPrev();
+                return
+              }
+              // 右标记跳过
+              if ((closers as any).has && (closers as any).has(inserted) && !hadSel) {
+                const rightChar = inserted
+                if (prev.slice(ps, ps + 1) === rightChar) {
+                  ta.selectionStart = ta.selectionEnd = ps + 1
+                  rememberPrev();
+                  return
+                }
+              }
+            }
+          }
+          // 默认：更新 prev 快照
+          rememberPrev()
+        } catch {}
+      }
+
+      // 初始快照：获取一次
+      try { rememberPrev() } catch {}
+        try {
+          const ta = getEditor(); if (!ta) return
+          if (ev.target !== ta) return
+          if (!isEditMode()) return
+          const it = (ev as any).inputType || ''
+          if (it !== 'insertText' && it !== 'insertCompositionText') return
+          const data = (ev as any).data as string || ''
+          if (!data) return
+          const val = String(ta.value || '')
+          const s = ta.selectionStart >>> 0
+          const epos = ta.selectionEnd >>> 0
+
+          // 组合输入：三连反引号``` 直接围栏
+          if (data === '```') {
+            ev.preventDefault()
+            const before = val.slice(0, s)
+            const mid = val.slice(s, epos)
+            const after = val.slice(epos)
+            const content = (epos > s ? ('\n' + mid + '\n') : ('\n\n'))
+            ta.value = before + '```' + content + '```' + after
+            const caret = (epos > s) ? (s + content.length + 3) : (s + 4)
+            ta.selectionStart = ta.selectionEnd = caret
+            try { dirty = true; refreshTitle(); refreshStatus() } catch {}
+            if (mode === 'preview') { try { void renderPreview() } catch {} } else if (wysiwyg) { try { scheduleWysiwygRender() } catch {} }
+            return
+          }
+
+          // 组合输入：跳过右侧闭合
+          if (data.length === 1 && (closers as any).has && (closers as any).has(data) && s === epos && val[s] === data) {
+            ev.preventDefault(); ta.selectionStart = ta.selectionEnd = s + 1; return
+          }
+
+          // 组合输入：通用成对/环绕（含全角左标记）
+          if (data.length === 1) {
+            const close = (openClose as any)[data]
+            if (close) {
+              ev.preventDefault()
+              const before = val.slice(0, s)
+              const mid = val.slice(s, epos)
+              const after = val.slice(epos)
+              if (epos > s) {
+                ta.value = before + data + mid + close + after
+                ta.selectionStart = s + 1; ta.selectionEnd = s + 1 + mid.length
+              } else {
+                ta.value = before + data + close + after
+                ta.selectionStart = ta.selectionEnd = s + 1
+              }
+              try { dirty = true; refreshTitle(); refreshStatus() } catch {}
+              if (mode === 'preview') { try { void renderPreview() } catch {} } else if (wysiwyg) { try { scheduleWysiwygRender() } catch {} }
+              return
+            }
+          }
+        } catch {}
+      }
+
     }
     return `mmd-${(hash >>> 0).toString(36)}`
   } catch {
@@ -4266,6 +4404,13 @@ function bindEvents() {
       const pairs: Array<[string, string]> = [["(", ")"],["[", "]"],["{", "}"],["\"", "\""],["'", "'"],["*","*"],["_","_"],["（","）"],["【","】"],["《","》"],["「","」"],["『","』"],["“","”"],["‘","’"]]
       try { pairs.push([String.fromCharCode(96), String.fromCharCode(96)]) } catch {}
       const openClose = Object.fromEntries(pairs as any) as Record<string,string>
+      try { pairs.push([String.fromCharCode(0x300A), String.fromCharCode(0x300B)]) } catch {}
+      try { pairs.push([String.fromCharCode(0x3010), String.fromCharCode(0x3011)]) } catch {}
+      try { pairs.push([String.fromCharCode(0xFF08), String.fromCharCode(0xFF09)]) } catch {}
+      try { pairs.push([String.fromCharCode(0x300C), String.fromCharCode(0x300D)]) } catch {}
+      try { pairs.push([String.fromCharCode(0x300E), String.fromCharCode(0x300F)]) } catch {}
+      try { pairs.push([String.fromCharCode(0x201C), String.fromCharCode(0x201D)]) } catch {}
+      try { pairs.push([String.fromCharCode(0x2018), String.fromCharCode(0x2019)]) } catch {}
       const closers = new Set(Object.values(openClose))
 
       function handleKeydown(e: KeyboardEvent) {
@@ -4358,6 +4503,8 @@ function bindEvents() {
         if (mode === 'preview') { try { void renderPreview() } catch {} } else if (wysiwyg) { try { scheduleWysiwygRender() } catch {} }
       }
 
+      document.addEventListener('beforeinput', (e) => { try { handleBeforeInput(e as any) } catch {} }, true)
+      document.addEventListener('input', (e) => { try { handleInput(e as any) } catch {} }, true)
       document.addEventListener('keydown', (e) => { try { handleKeydown(e) } catch {} }, true)
       document.addEventListener('keydown', (e) => { try { handleTabIndent(e) } catch {} }, true)
     } catch {}
@@ -6294,6 +6441,9 @@ async function loadAndActivateEnabledPlugins(): Promise<void> {
 
 // 将所见模式开关暴露到全局，便于在 WYSIWYG V2 覆盖层中通过双击切换至源码模式
 try { (window as any).flymdSetWysiwygEnabled = async (enable: boolean) => { try { await setWysiwygEnabled(enable) } catch (e) { console.error('flymdSetWysiwygEnabled 调用失败', e) } } } catch {}
+
+
+
 
 
 
