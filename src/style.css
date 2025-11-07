@@ -1003,8 +1003,9 @@ html, body { overflow: hidden; }
 /* .preview pre::-webkit-scrollbar { height: 8px; } */
 /* .preview pre::-webkit-scrollbar-thumb { background: rgba(127,127,127,0.35); border-radius: 999px; } */
 
-/* === 代码块装饰（语言角标、行号、复制）=== */
-.codebox { position: relative; margin: 16px 0; }
+/* === 代码块装饰：语言角标、行号、复制 === */
+
+.codebox { position: relative; margin: 16px 0; --code-lang-gap: 28px; }
 .codebox .code-lang {
   position: absolute;
   top: 14px;
@@ -1042,14 +1043,15 @@ html, body { overflow: hidden; }
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
-.codebox pre { margin: 0; position: relative; /* 让行号层可绝对定位 */ }
+.codebox pre { margin: 0; position: relative; /* 让行号层可绝对定位 */   padding-top: calc(20px + var(--code-lang-gap)); /* 给语言角标让位 */
+}
 /* 行号列：绝对定位在 pre 内部左侧，随内容滚动 */
 .codebox .code-lnums {
   position: absolute;
   top: 0; bottom: 0; left: 0;
   width: 3.5em;                /* 预留固定列宽 */
   padding-left: 0.6em;         /* 数字向内缩进，贴齐左侧 */
-  padding-top: 20px !important; /* 强制与pre的padding-top一致，不使用JS计算 */
+  padding-top: calc(20px + var(--code-lang-gap)) !important; /* 强制与pre的padding-top一致，不使用JS计算 */
   box-sizing: border-box;
   color: var(--code-muted);
   /* 所有影响行高的属性必须与代码完全一致 */
@@ -1068,7 +1070,8 @@ html, body { overflow: hidden; }
 }
 .codebox .code-lnums .ln { display: block; }
 /* 为行号列让出内边距，避免覆盖代码文本 */
-.codebox pre { padding-left: calc(20px + 3.5em + 0.8em + 1px); }
+.codebox pre { padding-left: calc(20px + 3.5em + 0.8em + 1px);   padding-top: calc(20px + var(--code-lang-gap)); /* 给语言角标让位 */
+}
 /* 提升角标/复制按钮层级，避免被行号列覆盖 */
 .codebox .code-lang, .codebox .code-copy { z-index: 2; }
 
@@ -1440,3 +1443,5 @@ textarea:focus {
 .container.wysiwyg-v2 .ProseMirror blockquote p {
   white-space: pre-line;
 }
+
+
