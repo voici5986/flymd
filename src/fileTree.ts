@@ -419,6 +419,7 @@ async function buildDir(root: string, dir: string, parent: HTMLElement) {
             if (!isInside(root, e.path) || !isInside(root, dst)) { alert(t('ft.move.within')); return }
             let finalDst = dst
             if (await exists(dst)) {
+              try { if (ghost) ghost.style.display = 'none' } catch {}
               const choice = await conflictModal(t('ft.exists'), [t('action.overwrite'), t('action.renameAuto'), t('action.cancel')], 1)
               if (choice === 2) return
               if (choice === 1) {
@@ -443,6 +444,7 @@ async function buildDir(root: string, dir: string, parent: HTMLElement) {
           down = false
           moved = false
           try { if (ghost && ghost.parentElement) ghost.parentElement.removeChild(ghost) } catch {}
+          try { document.querySelectorAll('.ft-ghost').forEach((el) => { try { (el as any).parentElement?.removeChild(el) } catch {} }) } catch {}
           try { document.body.style.cursor = '' } catch {}
           try { document.body.style.userSelect = '' } catch {}
           ghost = null
@@ -455,6 +457,7 @@ async function buildDir(root: string, dir: string, parent: HTMLElement) {
           if (ev.button !== 0) return
           // 允许文本选择/点击，不阻止默认；兜底触发依靠移动阈值
           down = true; sx = ev.clientX; sy = ev.clientY; moved = false; nativeDragStarted = false
+          try { ev.stopPropagation() } catch {}
           // 暂时禁用原生 DnD，避免阻断 mousemove
           try {
             prevRowDraggable = row.getAttribute('draggable')
@@ -469,12 +472,10 @@ async function buildDir(root: string, dir: string, parent: HTMLElement) {
           const onUp = async () => { document.removeEventListener('mouseup', onUp); if (!nativeDragStarted) { await finish() } cleanup() }
           document.addEventListener('mouseup', onUp, { once: true })
         }
-        host.addEventListener('mousedown', onDown)
+        host.addEventListener('mousedown', onDown, true)
       }
-      // 将兜底拖拽绑定到整行/图标/文字，确保任意起点都可触发
+      // 将兜底拖拽仅绑定到整行，避免多次绑定造成多个“幽灵”遗留
       setupFallbackDrag(row)
-      setupFallbackDrag(iconEl)
-      setupFallbackDrag(label)
       row.appendChild(iconEl); row.appendChild(label)
       try { if (ext) row.classList.add('file-ext-' + ext) } catch {}
 
