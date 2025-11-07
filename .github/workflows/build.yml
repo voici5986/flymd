@@ -120,7 +120,7 @@ jobs:
               exit 1
             fi
             rm -f "$OUT_DMG"
-            create-dmg --overwrite --dmg-title "flymd" --volname "flymd" --icon-size 128 \
+            create-dmg --dmg-title "flymd" --volname "flymd" --icon-size 128 \
               --app-drop-link 480 180 --icon "flymd.app" 160 180 \
               "$OUT_DMG" "$APP_DIR" || { echo "::error::Fallback create-dmg failed"; ls -la "$DMG_DIR"; exit 1; }
           fi
@@ -207,6 +207,7 @@ jobs:
             flymd-macOS-x64/**/*
           draft: true
           generate_release_notes: true
+
 
 
 
