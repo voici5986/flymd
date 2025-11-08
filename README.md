@@ -9,6 +9,7 @@
 跨平台 所见所得 图床上传 WebDav同步 插件扩展 响应迅速 占用极低的 Markdown 编辑 PDF 阅读工具。
 
 
+![1](https://github.com/user-attachments/assets/38f9f007-8a09-4231-9c53-2d3bc6f245be)
 
 
 
@@ -28,16 +29,13 @@
 - 插件扩展：支持插件扩展功能，可以自行开发也可以一键安装已上架的扩展/插件
 - 格式支持：支持另存为PDF Docx Wps 
 ## 📸 界面预览 0.0.4版本
+
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/917ad246-1208-4585-9e10-7d2da54f2eef" width="32%" alt="Markdown Editor Screenshot 1"/>
-  <img src="https://github.com/user-attachments/assets/97012b2d-4457-434d-a436-cdba796d25b4" width="32%" alt="Markdown Editor Screenshot 2"/>
-  <img src="https://github.com/user-attachments/assets/39343b06-3c54-4990-a198-e5f941da6578" width="32%" alt="Markdown Editor Screenshot 3"/>
+  <img src="https://github.com/user-attachments/assets/27fc876d-0b94-4a94-8733-a0cb7b05466b" width="32%" alt="Markdown Editor Screenshot 1"/>
+  <img src="https://github.com/user-attachments/assets/1182c443-f93c-4167-bc05-f4cc4b391ab5" width="32%" alt="Markdown Editor Screenshot 2"/>
+  <img src="https://github.com/user-attachments/assets/d51945f9-c227-43eb-8105-0bb07d66db52" width="32%" alt="Markdown Editor Screenshot 3"/>
 </p>
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/7f1e9179-6087-4abf-80d5-7965dbbf2600" width="32%" alt="Markdown Editor Screenshot 4"/>
-  <img src="https://github.com/user-attachments/assets/8d549446-6052-4c32-88f8-f473314476fd" width="32%" alt="Markdown Editor Screenshot 5"/>  <!-- 这里已经修正啦！ -->
-  <img src="https://github.com/user-attachments/assets/4283312d-5ff6-43a7-a537-ef503e48604e" width="32%" alt="Markdown Editor Screenshot 6"/>
-</p>
+
 
 ## 核心特性
 - 编辑体验
