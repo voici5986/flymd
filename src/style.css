@@ -968,12 +968,14 @@ body > .block-menu { display: none !important; }
 /* Markdown 风格：GitHub 风（轻微调整以更接近 GitHub 渲染） */
 .container.md-github .preview h1,
 .container.md-github .preview h2 { border-bottom-color: #e5e7eb; }
-.container.md-github .preview pre { border-radius: 6px; box-shadow: none; }
-.container.md-github .preview code { border-radius: 4px; }
+.container.md-github .preview pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: none; }
+.container.md-github .preview :not(pre) > code { background: #f6f8fa; border: 1px solid #d0d7de; color: #24292f; border-radius: 4px; }
 .container.md-github .preview table { border-collapse: collapse; }
 .container.md-github .preview table th,
-.container.md-github .preview table td { border: 1px solid #e5e7eb; }
-.container.md-github .preview table tbody tr:nth-child(even) { background: rgba(127,127,127,0.03); }
+.container.md-github .preview table td { border: 1px solid #d0d7de; padding: 10px 14px; }
+.container.md-github .preview table th { background: #f6f8fa; font-weight: 600; }
+.container.md-github .preview table tbody tr:nth-child(even) { background: #fafbfc; }
+.container.md-github .preview table tbody tr:hover td { background: #f0f3f6; }
 
 /* Markdown 风格：Notion 风（无标题下边线、极简块引用、柔和分割线） */
 .container.md-notion .preview h1,
@@ -984,12 +986,76 @@ body > .block-menu { display: none !important; }
 .container.md-notion .preview hr { height: 1px; opacity: 0.4; background: #e5e7eb; }
 .container.md-notion .preview ul, .container.md-notion .preview ol { line-height: 1.7; }
 .container.md-notion .preview table th { background: rgba(127,127,127,0.06); }
+.container.md-notion .preview pre { background: #f7f6f3; border: none; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); --code-pre-pad-y: 16px; }
+.container.md-notion .preview :not(pre) > code { background: #f3f2ef; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04); border-radius: 6px; }
+.container.md-notion .preview table { border-collapse: separate; border-spacing: 0; border: 1px solid rgba(0,0,0,0.06); border-radius: 6px; overflow: hidden; }
+.container.md-notion .preview table th,
+.container.md-notion .preview table td { border-bottom: 1px solid rgba(0,0,0,0.06); border-right: 1px solid rgba(0,0,0,0.06); padding: 10px 14px; }
+.container.md-notion .preview table tr:last-child td { border-bottom: none; }
+.container.md-notion .preview table tr td:last-child, .container.md-notion .preview table tr th:last-child { border-right: none; }
+.container.md-notion .preview table tbody tr:hover td { background: rgba(0,0,0,0.03); }
 
 /* Markdown 风格：出版风（更大段落间距、首行缩进、优雅分隔） */
 .container.md-journal .preview-body p { margin: 1.2em 0; text-indent: 2em; }
 .container.md-journal .preview pre, .container.md-journal .preview blockquote { margin: 1.4em 0; }
 .container.md-journal .preview blockquote { border-left: 4px solid var(--border-strong); background: rgba(127,127,127,0.04); }
 .container.md-journal .preview hr { height: 2px; opacity: 0.35; background: linear-gradient(to right, transparent, var(--border-strong), transparent); }
+.container.md-journal .preview pre { background: #fffdf7; border: 1px dashed #e2d6c2; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); --code-pre-pad-y: 18px; }
+.container.md-journal .preview :not(pre) > code { background: #fffaf2; border: 1px dashed #eadfcf; border-radius: 6px; }
+.container.md-journal .preview table { border-collapse: separate; border-spacing: 0; }
+.container.md-journal .preview table th,
+.container.md-journal .preview table td { border-bottom: 1px solid rgba(120,90,40,0.18); border-right: none; padding: 12px 16px; }
+.container.md-journal .preview table th { text-transform: none; font-weight: 600; background: rgba(120,90,40,0.06); }
+.container.md-journal .preview table tr:last-child td { border-bottom: none; }
+.container.md-journal .preview table tbody tr:nth-child(odd) { background: rgba(120,90,40,0.03); }
+
+/* 覆盖阅读模式默认代码样式：确保各风格在阅读模式下也明显区分 */
+.container.md-github:not(.wysiwyg):not(.wysiwyg-v2) .preview pre { background: #f6f8fa; border-color: #d0d7de; }
+.container.md-notion:not(.wysiwyg):not(.wysiwyg-v2) .preview pre { background: #f7f6f3; border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.container.md-journal:not(.wysiwyg):not(.wysiwyg-v2) .preview pre { background: #fffdf7; border: 1px dashed #e2d6c2; }
+
+/* 所见 V2 对应的代码与表格风格（尽量与预览保持一致） */
+.container.md-github.wysiwyg-v2 .ProseMirror pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: none; --code-pre-pad-y: 20px; padding: var(--code-pre-pad-y); }
+.container.md-github.wysiwyg-v2 .ProseMirror :not(pre) > code { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; }
+.container.md-notion.wysiwyg-v2 .ProseMirror pre { background: #f7f6f3; border: none; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); --code-pre-pad-y: 16px; padding-left: 18px; padding-right: 18px; padding-bottom: var(--code-pre-pad-y); }
+.container.md-notion.wysiwyg-v2 .ProseMirror :not(pre) > code { background: #f3f2ef; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04); border-radius: 6px; }
+.container.md-journal.wysiwyg-v2 .ProseMirror pre { background: #fffdf7; border: 1px dashed #e2d6c2; border-radius: 10px; --code-pre-pad-y: 18px; padding-left: 20px; padding-right: 20px; padding-bottom: var(--code-pre-pad-y); }
+.container.md-journal.wysiwyg-v2 .ProseMirror :not(pre) > code { background: #fffaf2; border: 1px dashed #eadfcf; border-radius: 6px; }
+.container.md-notion.wysiwyg-v2 .ProseMirror table { border: 1px solid rgba(0,0,0,0.06); border-radius: 6px; overflow: hidden; }
+.container.md-notion.wysiwyg-v2 .ProseMirror th,
+.container.md-notion.wysiwyg-v2 .ProseMirror td { border-bottom: 1px solid rgba(0,0,0,0.06); border-right: 1px solid rgba(0,0,0,0.06); }
+.container.md-notion.wysiwyg-v2 .ProseMirror tr td:last-child, .container.md-notion.wysiwyg-v2 .ProseMirror tr th:last-child { border-right: none; }
+.container.md-journal.wysiwyg-v2 .ProseMirror th,
+.container.md-journal.wysiwyg-v2 .ProseMirror td { border-bottom: 1px solid rgba(120,90,40,0.18); border-right: none; }
+.container.md-journal.wysiwyg-v2 .ProseMirror tr:last-child td { border-bottom: none; }
+
+@media (prefers-color-scheme: dark) {
+  .container.md-github .preview pre { background: #0d1117; border-color: #30363d; }
+  .container.md-github .preview :not(pre) > code { background: #161b22; border-color: #30363d; color: #c9d1d9; }
+  .container.md-github .preview table th,
+  .container.md-github .preview table td { border-color: #30363d; }
+  .container.md-github .preview table th { background: #161b22; }
+  .container.md-github .preview table tbody tr:nth-child(even) { background: #0f141b; }
+
+  .container.md-notion .preview pre { background: #1c1c1a; box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+  .container.md-notion .preview :not(pre) > code { background: #1a1917; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04); }
+  .container.md-notion .preview table { border-color: rgba(255,255,255,0.08); }
+  .container.md-notion .preview table th,
+  .container.md-notion .preview table td { border-color: rgba(255,255,255,0.08); }
+  .container.md-notion .preview table th { background: rgba(255,255,255,0.04); }
+
+  .container.md-journal .preview pre { background: #141210; border-color: #3a332a; }
+  .container.md-journal .preview :not(pre) > code { background: #17130f; border-color: #3a332a; }
+  .container.md-journal .preview table th,
+  .container.md-journal .preview table td { border-bottom-color: rgba(240,220,180,0.16); }
+
+  .container.md-github.wysiwyg-v2 .ProseMirror pre { background: #0d1117; border-color: #30363d; }
+  .container.md-github.wysiwyg-v2 .ProseMirror :not(pre) > code { background: #161b22; border-color: #30363d; color: #c9d1d9; }
+  .container.md-notion.wysiwyg-v2 .ProseMirror pre { background: #1c1c1a; box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+  .container.md-notion.wysiwyg-v2 .ProseMirror :not(pre) > code { background: #1a1917; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04); }
+  .container.md-journal.wysiwyg-v2 .ProseMirror pre { background: #141210; border-color: #3a332a; }
+  .container.md-journal.wysiwyg-v2 .ProseMirror :not(pre) > code { background: #17130f; border-color: #3a332a; }
+}
 
 /* WYSIWYG 对应覆盖（与预览一致的风格） */
 .container.md-notion.wysiwyg-v2 .ProseMirror h1,
@@ -1159,7 +1225,9 @@ html, body { overflow: hidden; }
   background: var(--code-bg);
   border: 1px solid var(--code-border);
   border-radius: 12px;
-  padding: 20px;
+  /* 统一以变量记录代码块上下内边距，便于各风格覆盖时参与计算 */
+  --code-pre-pad-y: 20px;
+  padding: var(--code-pre-pad-y);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   margin: 16px 0;
@@ -1241,7 +1309,7 @@ html, body { overflow: hidden; }
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
-.codebox pre { margin: 0; position: relative; /* 让行号层可绝对定位 */   padding-top: calc(20px + var(--code-lang-gap)); /* 给语言角标让位 */
+.codebox pre { margin: 0; position: relative; /* 让行号层可绝对定位 */   padding-top: calc(var(--code-pre-pad-y, 20px) + var(--code-lang-gap)); /* 给语言角标让位 */
 }
 /* 行号列：绝对定位在 pre 内部左侧，随内容滚动 */
 .codebox .code-lnums {
@@ -1249,7 +1317,7 @@ html, body { overflow: hidden; }
   top: 0; bottom: 0; left: 0;
   width: 3.5em;                /* 预留固定列宽 */
   padding-left: 0.6em;         /* 数字向内缩进，贴齐左侧 */
-  padding-top: calc(20px + var(--code-lang-gap)) !important; /* 强制与pre的padding-top一致，不使用JS计算 */
+  padding-top: calc(var(--code-pre-pad-y, 20px) + var(--code-lang-gap)) !important; /* 强制与pre的padding-top一致，不使用JS计算 */
   box-sizing: border-box;
   color: var(--code-muted);
   /* 所有影响行高的属性必须与代码完全一致 */
@@ -1268,7 +1336,7 @@ html, body { overflow: hidden; }
 }
 .codebox .code-lnums .ln { display: block; }
 /* 为行号列让出内边距，避免覆盖代码文本 */
-.codebox pre { padding-left: calc(20px + 3.5em + 0.8em + 1px);   padding-top: calc(20px + var(--code-lang-gap)); /* 给语言角标让位 */
+.codebox pre { padding-left: calc(20px + 3.5em + 0.8em + 1px);   padding-top: calc(var(--code-pre-pad-y, 20px) + var(--code-lang-gap)); /* 给语言角标让位 */
 }
 /* 提升角标/复制按钮层级，避免被行号列覆盖 */
 .codebox .code-lang, .codebox .code-copy { z-index: 2; }
