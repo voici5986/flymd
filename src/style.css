@@ -912,6 +912,9 @@ body > .block-menu { display: none !important; }
 .theme-typos { display: flex; gap: 8px; }
 .theme-typos .typo-btn { border: 1px solid var(--border); background: transparent; color: var(--fg); border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
 .theme-typos .typo-btn.active { background: rgba(127,127,127,0.12); }
+.theme-md { display: flex; gap: 8px; flex-wrap: wrap; }
+.theme-md .md-btn { border: 1px solid var(--border); background: transparent; color: var(--fg); border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+.theme-md .md-btn.active { background: rgba(127,127,127,0.12); }
 
 /* 主题排版：经典衬线 */
 .container.typo-serif .preview-body,
@@ -939,6 +942,60 @@ body > .block-menu { display: none !important; }
 .container.typo-modern .preview-body h1 { font-size: 2em; font-weight: 800; }
 .container.typo-modern .preview-body h2 { font-size: 1.6em; font-weight: 700; }
 .container.typo-modern .preview-body hr { opacity: 0.5; height: 1px; }
+
+/* 主题排版：阅读增强（更大字号/行距） */
+.container.typo-reading .preview-body,
+.container.typo-reading.wysiwyg-v2 .ProseMirror {
+  font-size: 17.5px;
+  line-height: 1.9;
+  letter-spacing: 0.005em;
+}
+.container.typo-reading .preview-body p,
+.container.typo-reading.wysiwyg-v2 .ProseMirror p { margin: 1.05em 0; }
+
+/* 主题排版：学术风（衬线 + 适度行距 + 较明显标题层级） */
+.container.typo-academic .preview-body,
+.container.typo-academic.wysiwyg-v2 .ProseMirror {
+  font-family: Cambria, Georgia, 'Times New Roman', Times, 'Source Han Serif SC', serif;
+  font-size: 16.5px;
+  line-height: 1.85;
+}
+.container.typo-academic .preview-body h1 { font-size: 2.4em; font-weight: 700; }
+.container.typo-academic .preview-body h2 { font-size: 2.0em; font-weight: 700; }
+.container.typo-academic .preview-body h3 { font-size: 1.6em; font-weight: 600; }
+.container.typo-academic .preview-body blockquote { border-left-width: 5px; }
+
+/* Markdown 风格：GitHub 风（轻微调整以更接近 GitHub 渲染） */
+.container.md-github .preview h1,
+.container.md-github .preview h2 { border-bottom-color: #e5e7eb; }
+.container.md-github .preview pre { border-radius: 6px; box-shadow: none; }
+.container.md-github .preview code { border-radius: 4px; }
+.container.md-github .preview table { border-collapse: collapse; }
+.container.md-github .preview table th,
+.container.md-github .preview table td { border: 1px solid #e5e7eb; }
+.container.md-github .preview table tbody tr:nth-child(even) { background: rgba(127,127,127,0.03); }
+
+/* Markdown 风格：Notion 风（无标题下边线、极简块引用、柔和分割线） */
+.container.md-notion .preview h1,
+.container.md-notion .preview h2 { border-bottom: none; padding-bottom: 0; }
+.container.md-notion .preview h1 { font-weight: 800; letter-spacing: -0.01em; }
+.container.md-notion .preview h2 { font-weight: 700; }
+.container.md-notion .preview blockquote { border-left: 3px solid #e5e7eb; background: transparent; padding-top: 0.6em; padding-bottom: 0.6em; }
+.container.md-notion .preview hr { height: 1px; opacity: 0.4; background: #e5e7eb; }
+.container.md-notion .preview ul, .container.md-notion .preview ol { line-height: 1.7; }
+.container.md-notion .preview table th { background: rgba(127,127,127,0.06); }
+
+/* Markdown 风格：出版风（更大段落间距、首行缩进、优雅分隔） */
+.container.md-journal .preview-body p { margin: 1.2em 0; text-indent: 2em; }
+.container.md-journal .preview pre, .container.md-journal .preview blockquote { margin: 1.4em 0; }
+.container.md-journal .preview blockquote { border-left: 4px solid var(--border-strong); background: rgba(127,127,127,0.04); }
+.container.md-journal .preview hr { height: 2px; opacity: 0.35; background: linear-gradient(to right, transparent, var(--border-strong), transparent); }
+
+/* WYSIWYG 对应覆盖（与预览一致的风格） */
+.container.md-notion.wysiwyg-v2 .ProseMirror h1,
+.container.md-notion.wysiwyg-v2 .ProseMirror h2 { border-bottom: none; padding-bottom: 0; }
+.container.md-journal.wysiwyg-v2 .ProseMirror p { margin: 1.2em 0; text-indent: 2em; }
+.container.md-journal.wysiwyg-v2 .ProseMirror blockquote { border-left: 4px solid var(--border-strong); background: rgba(127,127,127,0.04); }
 
 @keyframes slideUp {
   from {

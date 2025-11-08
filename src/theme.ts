@@ -7,13 +7,15 @@
 // - 实现策略：
 //   使用 .container 作用域内的 CSS 变量覆盖（--bg / --wysiwyg-bg / --preview-bg），避免影响标题栏等外围 UI。
 
-export type TypographyId = 'default' | 'serif' | 'modern'
+export type TypographyId = 'default' | 'serif' | 'modern' | 'reading' | 'academic'
+export type MdStyleId = 'standard' | 'github' | 'notion' | 'journal'
 
 export interface ThemePrefs {
   editBg: string
   readBg: string
   wysiwygBg: string
   typography: TypographyId
+  mdStyle: MdStyleId
   themeId?: string
 }
 
@@ -22,6 +24,7 @@ export interface ThemeDefinition {
   label: string
   colors?: Partial<Pick<ThemePrefs, 'editBg' | 'readBg' | 'wysiwygBg'>>
   typography?: TypographyId
+  mdStyle?: MdStyleId
 }
 
 const STORE_KEY = 'flymd:theme:prefs'
@@ -31,6 +34,7 @@ const DEFAULT_PREFS: ThemePrefs = {
   readBg: getCssVar('--preview-bg') || '#fbf5e6',
   wysiwygBg: getCssVar('--wysiwyg-bg') || '#e9edf5',
   typography: 'default',
+  mdStyle: 'standard',
 }
 
 const _themes = new Map<string, ThemeDefinition>()
@@ -59,9 +63,16 @@ export function applyThemePrefs(prefs: ThemePrefs): void {
     c.style.setProperty('--wysiwyg-bg', prefs.wysiwygBg)
 
     // 排版：通过类名挂到 .container 上，覆盖 .preview-body 与 .ProseMirror
-    c.classList.remove('typo-serif', 'typo-modern')
+    c.classList.remove('typo-serif', 'typo-modern', 'typo-reading', 'typo-academic')
     if (prefs.typography === 'serif') c.classList.add('typo-serif')
     else if (prefs.typography === 'modern') c.classList.add('typo-modern')
+    else if (prefs.typography === 'reading') c.classList.add('typo-reading')
+    else if (prefs.typography === 'academic') c.classList.add('typo-academic')
+
+    // Markdown 风格类名
+    c.classList.remove('md-standard', 'md-github', 'md-notion', 'md-journal')
+    const mdClass = `md-${prefs.mdStyle || 'standard'}`
+    c.classList.add(mdClass)
 
     // 触发主题变更事件（扩展可监听）
     try {
@@ -84,7 +95,8 @@ export function loadThemePrefs(): ThemePrefs {
       editBg: obj.editBg || DEFAULT_PREFS.editBg,
       readBg: obj.readBg || DEFAULT_PREFS.readBg,
       wysiwygBg: obj.wysiwygBg || DEFAULT_PREFS.wysiwygBg,
-      typography: (obj.typography === 'serif' || obj.typography === 'modern') ? obj.typography : 'default',
+      typography: (['default','serif','modern','reading','academic'] as string[]).includes(obj.typography) ? obj.typography : 'default',
+      mdStyle: (['standard','github','notion','journal'] as string[]).includes(obj.mdStyle) ? obj.mdStyle : 'standard',
       themeId: obj.themeId || undefined,
     }
   } catch { return { ...DEFAULT_PREFS } }
@@ -106,7 +118,7 @@ function registerPalette(label: string, color: string, id?: string): void {
 }
 function registerTypography(id: TypographyId, label: string, css?: string): void {
   // 仅允许 'default' | 'serif' | 'modern' 三选；如需更多可扩展此处分支
-  if (!['default', 'serif', 'modern'].includes(id)) return
+  if (!['default', 'serif', 'modern', 'reading', 'academic'].includes(id)) return
   if (css) {
     try {
       const style = document.createElement('style')
@@ -117,7 +129,19 @@ function registerTypography(id: TypographyId, label: string, css?: string): void
   }
 }
 
-export const themeAPI = { registerTheme, registerPalette, registerTypography, applyThemePrefs, loadThemePrefs, saveThemePrefs }
+function registerMdStyle(id: MdStyleId, label: string, css?: string): void {
+  if (!['standard','github','notion','journal'].includes(id)) return
+  if (css) {
+    try {
+      const style = document.createElement('style')
+      style.dataset.themeMd = id
+      style.textContent = css
+      document.head.appendChild(style)
+    } catch {}
+  }
+}
+
+export const themeAPI = { registerTheme, registerPalette, registerTypography, registerMdStyle, applyThemePrefs, loadThemePrefs, saveThemePrefs }
 ;(window as any).flymdTheme = themeAPI
 
 // ===== 主题 UI =====
@@ -162,6 +186,17 @@ function createPanel(): HTMLDivElement {
         <button class="typo-btn" data-typo="default">标准</button>
         <button class="typo-btn" data-typo="serif">经典（衬线）</button>
         <button class="typo-btn" data-typo="modern">现代（紧凑）</button>
+        <button class="typo-btn" data-typo="reading">阅读增强</button>
+        <button class="typo-btn" data-typo="academic">学术风</button>
+      </div>
+    </div>
+    <div class="theme-section">
+      <div class="theme-title">Markdown 风格</div>
+      <div class="theme-md">
+        <button class="md-btn" data-md="standard">标准</button>
+        <button class="md-btn" data-md="github">GitHub</button>
+        <button class="md-btn" data-md="notion">Notion</button>
+        <button class="md-btn" data-md="journal">出版风</button>
       </div>
     </div>
   `
@@ -186,6 +221,12 @@ function fillSwatches(panel: HTMLElement, prefs: ThemePrefs) {
     const el = b as HTMLButtonElement
     const v = el.dataset.typo as TypographyId
     if (v === prefs.typography) el.classList.add('active'); else el.classList.remove('active')
+  })
+  // MD 风格激活态
+  panel.querySelectorAll('.md-btn').forEach((b) => {
+    const el = b as HTMLButtonElement
+    const v = el.dataset.md as MdStyleId
+    if (v === prefs.mdStyle) el.classList.add('active'); else el.classList.remove('active')
   })
 }
 
@@ -221,6 +262,13 @@ export function initThemeUI(): void {
         const id = (t.dataset.typo as TypographyId) || 'default'
         const cur = loadThemePrefs()
         cur.typography = id
+        saveThemePrefs(cur)
+        applyThemePrefs(cur)
+        fillSwatches(panel!, cur)
+      } else if (t.classList.contains('md-btn')) {
+        const id = (t.dataset.md as MdStyleId) || 'standard'
+        const cur = loadThemePrefs()
+        cur.mdStyle = id
         saveThemePrefs(cur)
         applyThemePrefs(cur)
         fillSwatches(panel!, cur)
