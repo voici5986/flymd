@@ -4619,6 +4619,8 @@ function showAbout(show: boolean) {
 
 // 顶级菜单下拉（参考库右键菜单的样式实现，纯 JS 内联样式，避免全局 CSS 入侵）
 type TopMenuItemSpec = { label: string; accel?: string; action: () => void; disabled?: boolean }
+// 顶部下拉菜单：全局文档级点击处理器引用，避免重复绑定与交叉干扰
+let _topMenuDocHandler: ((ev: MouseEvent) => void) | null = null
 function showTopMenu(anchor: HTMLElement, items: TopMenuItemSpec[]) {
   try {
     let menu = document.getElementById('top-ctx') as HTMLDivElement | null
@@ -4637,8 +4639,21 @@ function showTopMenu(anchor: HTMLElement, items: TopMenuItemSpec[]) {
       menu.addEventListener('click', (e) => e.stopPropagation())
       document.body.appendChild(menu)
     }
-    const hide = () => { if (menu) menu.style.display = 'none'; document.removeEventListener('click', onDoc) }
+    // 切换菜单前移除上一次绑定的文档级点击处理器，防止“打开新菜单时被上一次处理器立刻关闭”
+    if (_topMenuDocHandler) {
+      try { document.removeEventListener('click', _topMenuDocHandler) } catch {}
+      _topMenuDocHandler = null
+    }
+
+    const hide = () => {
+      if (menu) menu.style.display = 'none'
+      if (_topMenuDocHandler) {
+        try { document.removeEventListener('click', _topMenuDocHandler) } catch {}
+        _topMenuDocHandler = null
+      }
+    }
     const onDoc = () => hide()
+    _topMenuDocHandler = onDoc
     menu.innerHTML = ''
     const mkRow = (spec: TopMenuItemSpec) => {
       const row = document.createElement('div') as HTMLDivElement
@@ -4673,7 +4688,8 @@ function showTopMenu(anchor: HTMLElement, items: TopMenuItemSpec[]) {
     menu.style.left = left + 'px'
     menu.style.top = top + 'px'
     menu.style.display = 'block'
-    setTimeout(() => document.addEventListener('click', onDoc), 0)
+    // 推迟到当前点击事件冒泡结束后再绑定，以避免本次点击导致立刻关闭
+    setTimeout(() => { if (_topMenuDocHandler) document.addEventListener('click', _topMenuDocHandler) }, 0)
   } catch {}
 }
 
