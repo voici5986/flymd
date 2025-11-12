@@ -1,4 +1,4 @@
-// AI 写作助手（OpenAI 兼容路径）
+﻿// AI 写作助手（OpenAI 兼容路径）
 // 说明：
 // - 仅实现 OpenAI 兼容接口（/v1/chat/completions）
 // - 浮动窗口、基本对话、快捷动作（续写/润色/纠错/提纲）
@@ -16,7 +16,8 @@ const DEFAULT_CFG = {
   model: 'gpt-4o-mini',
   win: { x: 60, y: 60, w: 300, h: 440 },
   dock: true, // true=左侧侧栏；false=浮动窗口
-  limits: { maxCtxChars: 6000 }
+  limits: { maxCtxChars: 6000 },
+  theme: 'auto'
 }
 
 // 会话只做最小持久化（可选），首版以内存为主
@@ -25,6 +26,7 @@ let __AI_DB__ = null // { byDoc: { [hash]: { title, activeId, items:[{id,name,cr
 let __AI_SENDING__ = false
 let __AI_LAST_REPLY__ = ''
 let __AI_TOGGLE_LOCK__ = false
+let __AI_MQ_BOUND__ = false
 
 // ========== 工具函数 ==========
 async function loadCfg(context) {
@@ -409,7 +411,7 @@ async function mountWindow(context){
     el.style.height = ((cfg && cfg.win && cfg.win.h) || 440) + 'px'
   }
   el.innerHTML = [
-    '<div id="ai-head"><div id="ai-title">AI 写作助手</div><div><button id="ai-btn-set" title="设置">设置</button> <button id="ai-btn-close" title="关闭">×</button></div></div>',
+    '<div id="ai-head"><div id="ai-title">AI 写作助手</div><div> <button id="ai-btn-theme" title="切换深/浅色">🌙</button><button id="ai-btn-set" title="设置">设置</button> <button id="ai-btn-close" title="关闭">×</button></div></div>',
     '<div id="ai-body">',
     ' <div id="ai-toolbar">',
     '  <div id="ai-selects" class="small">',
@@ -427,7 +429,7 @@ async function mountWindow(context){
     '  <button id="ai-send">发送</button><button id="ai-apply-cursor">在光标处插入</button><button id="ai-apply-repl">替换选区</button><button id="ai-copy">复制</button>',
     ' </div></div>',
     '</div><div id="ai-vresizer" title="拖动调整宽度"></div><div id="ai-resizer" title="拖动调整尺寸"></div>'
-  ].join('')
+  , '#ai-head button{padding:6px 10px;border-radius:8px;border:1px solid #e5e7eb;background:#ffffff;color:#0f172a}','#ai-head button:hover{background:#f8fafc}','#ai-assist-win.dark{background:#0b1220;color:#e5e7eb;border-color:#1f2937}','#ai-assist-win.dark.dock-left{border-right-color:#1f2937}','#ai-assist-win.dark #ai-head{background:linear-gradient(180deg,#0f172a,#111827);border-bottom:1px solid #1f2937}','#ai-assist-win.dark #ai-title{color:#e5e7eb}','#ai-assist-win.dark #ai-toolbar{background:#0f172a;border-bottom:1px solid #1f2937}','#ai-assist-win.dark #ai-chat{background:#0b1220}','#ai-assist-win.dark .msg.u{background:#111827;border:1px solid #1f2937}','#ai-assist-win.dark .msg.a{background:#0f172a;border:1px solid #1f2937}','#ai-assist-win.dark #ai-input{background:#0f172a;border-top:1px solid #1f2937}','#ai-assist-win.dark #ai-input textarea{background:#0b1220;border:1px solid #1f2937;color:#e5e7eb}','#ai-assist-win.dark #ai-input button{background:#111827;color:#e5e7eb;border:1px solid #1f2937}','#ai-assist-win.dark #ai-input button:hover{background:#0f172a}','#ai-assist-win.dark #ai-toolbar .btn{background:#111827;color:#e5e7eb;border:1px solid #1f2937}','#ai-assist-win.dark #ai-toolbar .btn:hover{background:#0f172a}','#ai-assist-win.dark #ai-head button{background:#111827;color:#e5e7eb;border:1px solid #1f2937}','#ai-assist-win.dark #ai-head button:hover{background:#0f172a}',].join('')
   DOC().body.appendChild(el)
   if ((cfg && cfg.dock) !== false) setDockPush(true)
   // 绑定拖拽/调整
@@ -435,6 +437,7 @@ async function mountWindow(context){
   try { bindFloatDragResize(context, el) } catch {}
   el.querySelector('#ai-btn-close').addEventListener('click',()=>{ el.style.display='none'; setDockPush(false) })
   el.querySelector('#ai-btn-set').addEventListener('click',()=>{ openSettings(context) })
+  el.querySelector('#ai-btn-theme').addEventListener('click',()=>{ toggleTheme(context, el) })
   // 模型输入变更即保存
   try {
     const modelInput = el.querySelector('#ai-model')
@@ -467,6 +470,7 @@ async function mountWindow(context){
     head?.addEventListener('dblclick', () => toggleWinSizePreset(context, el))
   } catch {}
   try { startFilenameObserver(context) } catch {}
+  await applyWinTheme(context, el)
   await refreshHeader(context)
   try { __AI_SESSION__ = await loadSession(context) } catch {}
   await ensureSessionForDoc(context)
@@ -781,5 +785,36 @@ async function clearConversation(context) {
     await saveSessionsDB(context)
     const chat = el('ai-chat'); if (chat) renderMsgs(chat)
     context.ui.notice('会话已清空（仅当前文档）', 'ok', 1400)
+  } catch {}
+}
+
+// 应用/切换主题：容器挂 .dark 类，配置持久化
+async function applyWinTheme(context, rootEl){
+  try{
+    const cfg = await loadCfg(context)
+    const mode = cfg.theme || 'auto'
+    let isDark = false
+    if (mode === 'dark') isDark = true
+    else if (mode === 'light') isDark = false
+    else if (mode === 'auto') isDark = !!(WIN().matchMedia && WIN().matchMedia('(prefers-color-scheme: dark)').matches)
+    if (isDark) rootEl.classList.add('dark'); else rootEl.classList.remove('dark')
+    const btn = rootEl.querySelector('#ai-btn-theme'); if (btn) btn.textContent = isDark ? '☀️' : '🌙'
+    if (mode === 'auto' && WIN().matchMedia && !__AI_MQ_BOUND__){
+      try {
+        const mq = WIN().matchMedia('(prefers-color-scheme: dark)')
+        mq.addEventListener('change', () => { try { applyWinTheme(context, rootEl) } catch {} })
+        __AI_MQ_BOUND__ = true
+      } catch {}
+    }
+  } catch {}
+}
+
+async function toggleTheme(context, rootEl){
+  try{
+    const isDark = rootEl.classList.contains('dark')
+    const cfg = await loadCfg(context)
+    cfg.theme = isDark ? 'light' : 'dark'
+    await saveCfg(context, cfg)
+    await applyWinTheme(context, rootEl)
   } catch {}
 }
