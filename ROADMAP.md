@@ -2,6 +2,11 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## 更新 v0.2.6
+- 修复: 修复阅读模式下Latex渲染丢失部分符号的问题
+- 改进：现在mermaid也可以导出到word了
+
+
 ## 更新 v0.2.5
 - 新增： Mermaid在阅读/所见模式中的缩放功能
 - 新增： Mermaid单独导出为SVG

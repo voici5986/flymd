@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-[![Version](https://img.shields.io/badge/version-v0.2.5-blue.svg)](https://github.com/flyhunterl/flymd)
+[![Version](https://img.shields.io/badge/version-v0.2.6-blue.svg)](https://github.com/flyhunterl/flymd)
 [![License](https://img.shields.io/badge/license-NonCommercial-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyhunterl/flymd)
 
@@ -16,7 +16,7 @@
 ## ✨ 项目特色
 
 
-- 即开即用：安装包仅6MB 拒绝臃肿。冷启动毫秒级响应，代码一键复制
+- 即开即用：安装包仅7MB 拒绝臃肿。冷启动毫秒级响应，代码一键复制
 - 界面干净：极简界面，默认仅菜单栏+编辑区，专注内容创作 启动速度和响应速度优秀
 - 文库功能：支持指定文件夹，树状目录显示文件夹下子文件夹及文档 并支持文档管理/支持添加多个文档库
 - 安全可靠：本地运行，无网络连接，预览 HTML 自动消毒 
