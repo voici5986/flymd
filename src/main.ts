@@ -653,7 +653,7 @@ let dirty = false; // 是否有未保存更改（此处需加分号，避免下�
 let store: Store | null = null
 // 插件管理（简单实现）
 type PluginManifest = { id: string; name?: string; version?: string; author?: string; description?: string; main?: string }
-type InstalledPlugin = { id: string; name?: string; version?: string; enabled?: boolean; dir: string; main: string; builtin?: boolean; description?: string }
+type InstalledPlugin = { id: string; name?: string; version?: string; enabled?: boolean; dir: string; main: string; builtin?: boolean; description?: string; manifestUrl?: string }
 const PLUGINS_DIR = 'flymd/plugins'
 const builtinPlugins: InstalledPlugin[] = [
   { id: 'uploader-s3', name: '图床 (S3/R2)', version: 'builtin', enabled: undefined, dir: '', main: '', builtin: true, description: '粘贴/拖拽图片自动上传，支持 S3/R2 直连，使用设置中的凭据。' },
@@ -7384,6 +7384,27 @@ function parseRepoInput(inputRaw: string): { type: 'github' | 'http'; manifestUr
   return null
 }
 
+// ��װ�汾�Ƚϣ�ֻ�������.�����ܣ��͸�����
+function compareVersions(a?: string, b?: string): number {
+  if (!a || !b) return 0
+  const as = String(a).split('.')
+  const bs = String(b).split('.')
+  const len = Math.max(as.length, bs.length)
+  for (let i = 0; i < len; i++) {
+    const av = parseInt(as[i] || '0', 10)
+    const bv = parseInt(bs[i] || '0', 10)
+    if (!Number.isFinite(av) || !Number.isFinite(bv)) {
+      const sa = as[i] || ''
+      const sb = bs[i] || ''
+      if (sa === sb) continue
+      return sa > sb ? 1 : -1
+    }
+    if (av === bv) continue
+    return av > bv ? 1 : -1
+  }
+  return 0
+}
+
 async function fetchTextSmart(url: string): Promise<string> {
   try {
     const http = await getHttpClient()
@@ -7465,7 +7486,7 @@ async function loadInstallablePlugins(force = false): Promise<InstallableItem[]>
   // 4) 兜底
   return FALLBACK_INSTALLABLES
 }
-async function installPluginFromGit(inputRaw: string): Promise<InstalledPlugin> {
+async function installPluginFromGit(inputRaw: string, opt?: { enabled?: boolean }): Promise<InstalledPlugin> {
   await ensurePluginsDir()
   const parsed = parseRepoInput(inputRaw)
   if (!parsed) throw new Error('无法识别的输入，请输入 URL 或 username/repo[@branch]')
@@ -7481,7 +7502,17 @@ async function installPluginFromGit(inputRaw: string): Promise<InstalledPlugin> 
   await mkdir(dir as any, { baseDir: BaseDirectory.AppLocalData, recursive: true } as any)
   await writeTextFile(`${dir}/manifest.json` as any, JSON.stringify(manifest, null, 2), { baseDir: BaseDirectory.AppLocalData } as any)
   await writeTextFile(`${dir}/${mainRel}` as any, mainCode, { baseDir: BaseDirectory.AppLocalData } as any)
-  const record: InstalledPlugin = { id: manifest.id, name: manifest.name, version: manifest.version, enabled: true, dir, main: mainRel, description: manifest.description }
+  const enabled = (opt && typeof opt.enabled === 'boolean') ? opt.enabled : true
+  const record: InstalledPlugin = {
+    id: manifest.id,
+    name: manifest.name,
+    version: manifest.version,
+    enabled,
+    dir,
+    main: mainRel,
+    description: manifest.description,
+    manifestUrl: parsed.manifestUrl,
+  }
   const map = await getInstalledPlugins()
   map[manifest.id] = record
   await setInstalledPlugins(map)
@@ -7556,6 +7587,70 @@ async function deactivatePlugin(id: string): Promise<void> {
   try { pluginMenuAdded.delete(id) } catch {}
 }
 
+// ��չ�����������µ�״̬
+type PluginUpdateState = {
+  manifestUrl: string
+  remoteVersion: string
+}
+
+// ����װ����չ��Ӧ�µ� manifest URL�����优����洢�У��ȴ��������г���
+function resolvePluginManifestUrl(p: InstalledPlugin, market: InstallableItem[]): string | null {
+  if (p.manifestUrl && /^https?:\/\//i.test(p.manifestUrl)) return p.manifestUrl
+  if (!market.length) return null
+  for (const it of market) {
+    if (!it || it.id !== p.id) continue
+    const ref = it.install && typeof it.install.ref === 'string' ? it.install.ref : ''
+    if (!ref) return null
+    const parsed = parseRepoInput(ref)
+    return parsed?.manifestUrl || null
+  }
+  return null
+}
+
+// ���远�� manifest �����汾��
+async function fetchRemoteManifestVersion(url: string): Promise<string | null> {
+  try {
+    const text = await fetchTextSmart(url)
+    const json = JSON.parse(text) as PluginManifest
+    const v = json && typeof json.version === 'string' ? json.version : null
+    return v || null
+  } catch {
+    return null
+  }
+}
+
+// ���ػ�װ����չ���µ�״̬��ֻ���������µİ汾
+async function getPluginUpdateStates(list: InstalledPlugin[], market: InstallableItem[]): Promise<Record<string, PluginUpdateState>> {
+  const res: Record<string, PluginUpdateState> = {}
+  if (!list.length) return res
+  const tasks: Promise<void>[] = []
+  for (const p of list) {
+    if (!p.version) continue
+    tasks.push((async () => {
+      const url = resolvePluginManifestUrl(p, market)
+      if (!url) return
+      const remote = await fetchRemoteManifestVersion(url)
+      if (!remote) return
+      if (compareVersions(remote, p.version) <= 0) return
+      res[p.id] = { manifestUrl: url, remoteVersion: remote }
+    })())
+  }
+  await Promise.all(tasks)
+  return res
+}
+
+// ���°�װָ��������չ���������״̬
+async function updateInstalledPlugin(p: InstalledPlugin, info: PluginUpdateState): Promise<InstalledPlugin> {
+  const enabled = !!p.enabled
+  try { await deactivatePlugin(p.id) } catch {}
+  try { await removeDirRecursive(p.dir) } catch {}
+  const rec = await installPluginFromGit(info.manifestUrl, { enabled })
+  try {
+    if (enabled) await activatePlugin(rec)
+  } catch {}
+  return rec
+}
+
 async function refreshExtensionsUI(): Promise<void> {
   if (!_extListHost) return
   const host = _extListHost
@@ -7608,6 +7703,13 @@ async function refreshExtensionsUI(): Promise<void> {
   st2wrap.appendChild(list2)
   const map = await getInstalledPlugins()
   const arr = Object.values(map)
+  let updateMap: Record<string, PluginUpdateState> = {}
+  if (arr.length > 0) {
+    try {
+      const market = await loadInstallablePlugins(false)
+      updateMap = await getPluginUpdateStates(arr, market)
+    } catch {}
+  }
   if (arr.length === 0) {
     const empty = document.createElement('div'); empty.className = 'ext-empty'; empty.textContent = '暂无安装的扩展'
     st2wrap.appendChild(empty)
@@ -7616,6 +7718,11 @@ async function refreshExtensionsUI(): Promise<void> {
       const row = document.createElement('div'); row.className = 'ext-item'
       const meta = document.createElement('div'); meta.className = 'ext-meta'
       const name = document.createElement('div'); name.className = 'ext-name'; name.textContent = `${p.name || p.id} ${p.version ? '(' + p.version + ')' : ''}`
+      const updateInfo = updateMap[p.id]
+      if (updateInfo) {
+        const badge = document.createElement('span'); badge.className = 'ext-update-badge'; badge.textContent = 'UP'
+        name.appendChild(badge)
+      }
       const desc = document.createElement('div'); desc.className = 'ext-desc'; desc.textContent = p.description || p.dir
       meta.appendChild(name); meta.appendChild(desc)
       const actions = document.createElement('div'); actions.className = 'ext-actions'
@@ -7639,13 +7746,29 @@ async function refreshExtensionsUI(): Promise<void> {
             if (mod && typeof mod.openSettings === 'function') { await mod.openSettings(ctx) }
             else pluginNotice(t('ext.settings.notProvided'), 'err', 1600)
           } catch (e) { showError(t('ext.settings.openFail'), e) }
-        })
-        actions.appendChild(btnSet)
+      })
+      actions.appendChild(btnSet)
       }
       const btnToggle = document.createElement('button'); btnToggle.className = 'btn'; btnToggle.textContent = p.enabled ? t('ext.toggle.disable') : t('ext.toggle.enable')
       btnToggle.addEventListener('click', async () => {
         try { p.enabled = !p.enabled; map[p.id] = p; await setInstalledPlugins(map); if (p.enabled) await activatePlugin(p); else await deactivatePlugin(p.id); await refreshExtensionsUI() } catch (e) { showError(t('ext.toggle.fail'), e) }
       })
+      if (updateInfo) {
+        const btnUpdate = document.createElement('button'); btnUpdate.className = 'btn'; btnUpdate.textContent = t('ext.update.btn')
+        btnUpdate.addEventListener('click', async () => {
+          try {
+            btnUpdate.textContent = t('ext.update.btn') + '...'; (btnUpdate as HTMLButtonElement).disabled = true
+            await updateInstalledPlugin(p, updateInfo)
+            await refreshExtensionsUI()
+            pluginNotice(t('ext.update.ok'), 'ok', 1500)
+          } catch (e) {
+            try { btnUpdate.textContent = t('ext.update.btn') } catch {}
+            try { (btnUpdate as HTMLButtonElement).disabled = false } catch {}
+            showError(t('ext.update.fail'), e)
+          }
+        })
+        actions.appendChild(btnUpdate)
+      }
       const btnRemove = document.createElement('button'); btnRemove.className = 'btn warn'; btnRemove.textContent = t('ext.remove')
       btnRemove.addEventListener('click', async () => {
         const ok = await confirmNative(t('ext.remove.confirm', { name: p.name || p.id }))

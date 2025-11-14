@@ -1389,13 +1389,26 @@ html, body { overflow: hidden; }
 .ext-list { display: grid; grid-template-columns: 1fr auto; gap: 8px 10px; }
 .ext-item { display: contents; }
 .ext-item .ext-meta { display: flex; flex-direction: column; gap: 2px; }
-.ext-item .ext-name { font-size: 13px; font-weight: 600; }
+.ext-item .ext-name { font-size: 13px; font-weight: 600; position: relative; padding-right: 30px; }
 .ext-item .ext-desc { font-size: 12px; color: var(--muted); }
 .ext-item .ext-actions { display: flex; align-items: center; gap: 6px; }
 .ext-actions .btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(127,127,127,0.08); color: var(--fg); cursor: pointer; font-size: 12px; }
 .ext-actions .btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
 .ext-actions .btn.warn { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.08); }
 .ext-empty { font-size: 12px; color: var(--muted); }
+/* ��չ���µı�ʶ */
+.ext-item .ext-update-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #f97316;
+  color: #f97316;
+  text-transform: uppercase;
+}
 /* 隐藏插件自建的头部条，避免重复顶栏按钮 */
 .tp-fly-headbar { display: none !important; }
 
