@@ -7748,7 +7748,7 @@ async function refreshExtensionsUI(): Promise<void> {
   // Builtins
   const builtinsEl = document.createElement('div')
   builtinsEl.className = 'ext-section'
-  const st1 = document.createElement('div'); st1.className = 'ext-subtitle'; st1.textContent = t('ext.installed')
+  const st1 = document.createElement('div'); st1.className = 'ext-subtitle'; st1.textContent = t('ext.builtin')
   builtinsEl.appendChild(st1)
   const list1 = document.createElement('div'); list1.className = 'ext-list'
   builtinsEl.appendChild(list1)
