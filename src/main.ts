@@ -4056,12 +4056,14 @@ function renderOutlinePanel() {
     if (!outline) return
     // PDF：优先读取书签目录
     try { if ((currentFilePath || '').toLowerCase().endsWith('.pdf')) { void renderPdfOutline(outline); return } } catch {}
-    // 优先从当前上下文（WYSIWYG/预览）提取标题
+    // 优先从当前上下文（WYSIWYG/预览）提取标题（仅在对应模式下启用）
     const ctx = getOutlineContext()
     const heads = ctx.heads
-    const items: { level: number; id: string; text: string }[] = []
+    // level: 标题级别；id: DOM 锚点或逻辑标识；text: 显示文本；offset: 源码中的大致字符偏移（仅编辑模式下用于跳转）
+    const items: { level: number; id: string; text: string; offset?: number }[] = []
     const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9\u4e00-\u9fa5\s-]/gi,'').replace(/\s+/g,'-').slice(0,64) || ('toc-' + Math.random().toString(36).slice(2))
-    if (heads.length > 0) {
+    const useDomHeads = (wysiwyg || mode === 'preview') && heads.length > 0
+    if (useDomHeads) {
       heads.forEach((h, idx) => {
         const tag = (h.tagName || 'H1').toUpperCase()
         const level = Math.min(6, Math.max(1, Number(tag.replace('H','')) || 1))
@@ -4074,9 +4076,18 @@ function renderOutlinePanel() {
       // 退化：从源码扫描 # 标题行
       const src = editor?.value || ''
       const lines = src.split(/\n/)
+      let offset = 0
       lines.forEach((ln, i) => {
         const m = ln.match(/^(#{1,6})\s+(.+?)\s*$/)
-        if (m) { const level = m[1].length; const text = m[2].trim(); const id = slug(text + '-' + i); items.push({ level, id, text }) }
+        if (m) {
+          const level = m[1].length
+          const text = m[2].trim()
+          const id = slug(text + '-' + i)
+          // 记录标题在源码中的大致字符偏移，用于编辑模式下跳转
+          items.push({ level, id, text, offset })
+        }
+        // \n 按单字符累计；Windows 下的 \r\n 中 \r 已在 ln 末尾
+        offset += ln.length + 1
       })
     }
     if (items.length === 0) { outline.innerHTML = '<div class="empty">未检测到标题</div>'; return }
@@ -4103,7 +4114,8 @@ function renderOutlinePanel() {
 
     outline.innerHTML = items.map((it, idx) => {
       const tg = (it.level <= 2 && hasChild.get(it.id)) ? `<span class=\"ol-tg\" data-idx=\"${idx}\">▾</span>` : `<span class=\"ol-tg\"></span>`
-      return `<div class=\"ol-item lvl-${it.level}\" data-id=\"${it.id}\" data-idx=\"${idx}\">${tg}${it.text}</div>`
+      const off = (typeof it.offset === 'number' && it.offset >= 0) ? ` data-offset=\"${it.offset}\"` : ''
+      return `<div class=\"ol-item lvl-${it.level}\" data-id=\"${it.id}\" data-idx=\"${idx}\"${off}>${tg}${it.text}</div>`
     }).join('')
 
     // 折叠状态记忆（基于当前文件路径）
@@ -4150,9 +4162,39 @@ function renderOutlinePanel() {
     // 点击跳转
     outline.querySelectorAll('.ol-item').forEach((el) => {
       el.addEventListener('click', () => {
-        const id = (el as HTMLDivElement).dataset.id || ''
-        if (!id) return
-        try { const target = document.getElementById(id); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch {}
+        const div = el as HTMLDivElement
+        const id = div.dataset.id || ''
+        const offsetStr = div.dataset.offset
+
+        // 所见 / 阅读模式：保持原有行为，滚动到预览/WYSIWYG 中的 DOM 标题
+        if (wysiwyg || mode === 'preview') {
+          if (!id) return
+          try {
+            const target = document.getElementById(id)
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          } catch {}
+          return
+        }
+
+        // 编辑模式：根据源码中的字符偏移跳转到 textarea
+        if (typeof offsetStr === 'string' && offsetStr !== '') {
+          const off = Number(offsetStr)
+          if (!Number.isFinite(off) || off < 0) return
+          try {
+            const ta = editor as HTMLTextAreaElement
+            const text = String(ta.value || '')
+            const len = text.length >>> 0
+            const caret = Math.max(0, Math.min(off, len))
+            ta.selectionStart = caret
+            ta.selectionEnd = caret
+            try { ta.focus() } catch {}
+            if (len > 0 && ta.scrollHeight > ta.clientHeight + 4) {
+              const ratio = caret / len
+              const targetY = ratio * ta.scrollHeight
+              ta.scrollTop = Math.max(0, targetY - ta.clientHeight * 0.3)
+            }
+          } catch {}
+        }
       })
     })
 
