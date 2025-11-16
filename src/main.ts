@@ -5619,6 +5619,7 @@ function bindEvents() {
   let _lastFind = ''
   let _findNextFn: ((fromCaret?: boolean) => void) | null = null
   let _findPrevFn: (() => void) | null = null
+  let _findUpdateLabelFn: (() => void) | null = null
   function showFindPanelFindOnly() {
     showFindPanel()
     if (!_findPanel) return
@@ -5652,7 +5653,7 @@ function bindEvents() {
     panel.innerHTML = `
       <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
         <input id="find-text" type="text" placeholder="查找... (Enter=下一个, Shift+Enter=上一个)" style="flex:1; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--fg);" />
-        <span id="find-count" style="min-width:72px; text-align:right; font-size:12px; color:var(--muted); white-space:nowrap;"></span>
+        <span id="find-count" style="min-width:88px; text-align:right; font-size:12px; color:var(--muted); white-space:nowrap; padding:2px 8px; border-radius:999px; background:rgba(127,127,127,0.06);"></span>
         <label title="区分大小写" style="display:flex; align-items:center; gap:4px; user-select:none;">
           <input id="find-case" type="checkbox" />Aa
         </label>
@@ -5704,37 +5705,52 @@ function bindEvents() {
       }
     }
 
-    // 统计当前查询词在整个文档中的出现次数（基于 editor.value，适用于所有模式）
-    function countMatchesInEditor(termRaw: string): number {
+    // 统计当前查询词在整个文档中的出现次数及当前命中序号（基于 editor.value，适用于编辑/所见模式）
+    function countMatchesInEditor(termRaw: string): { total: number; index: number } {
       const term = String(termRaw || '')
-      if (!term) return 0
+      if (!term) return { total: 0, index: 0 }
       const val = String(editor.value || '')
-      if (!val) return 0
+      if (!val) return { total: 0, index: 0 }
       const hay = norm(val)
       const needle = norm(term)
-      if (!needle) return 0
-      let cnt = 0
+      if (!needle) return { total: 0, index: 0 }
+      const sel = getSel()
+      let total = 0
+      let curIndex = 0
       let pos = 0
       const step = Math.max(1, needle.length)
       for (;;) {
         const idx = hay.indexOf(needle, pos)
         if (idx < 0) break
-        cnt++
+        total++
+        const start = idx
+        const end = idx + term.length
+        if (!curIndex && sel.s >= start && sel.s <= end) curIndex = total
         pos = idx + step
       }
-      return cnt
+      return { total, index: curIndex }
     }
     function updateFindCountLabel() {
       if (!lblCount) return
       const term = String(_findInput?.value || '')
       if (!term) { lblCount.textContent = ''; return }
       try {
-        const n = countMatchesInEditor(term)
-        lblCount.textContent = n > 0 ? `共 ${n} 处` : '未找到'
+        // 阅读模式：优先使用预览 DOM 的匹配信息
+        if (mode === 'preview' && !wysiwyg) {
+          const total = _previewFindMatches.length
+          if (!total) { lblCount.textContent = '未找到'; return }
+          const cur = _previewFindIndex >= 0 ? (_previewFindIndex + 1) : 0
+          lblCount.textContent = cur > 0 ? `${cur} / ${total} 处` : `共 ${total} 处`
+          return
+        }
+        const { total, index } = countMatchesInEditor(term)
+        if (!total) { lblCount.textContent = '未找到'; return }
+        lblCount.textContent = index > 0 ? `${index} / ${total} 处` : `共 ${total} 处`
       } catch {
         try { lblCount.textContent = '' } catch {}
       }
     }
+    _findUpdateLabelFn = () => { try { updateFindCountLabel() } catch {} }
 
     // 阅读模式查找：使用浏览器原生查找 API
     let _previewFindIndex = -1
@@ -5796,11 +5812,22 @@ function bindEvents() {
           sel.addRange(range)
         }
 
-        // 滚动到可见区域
-        const rect = range.getBoundingClientRect()
-        if (rect.top < 0 || rect.bottom > window.innerHeight) {
-          range.startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        }
+        // 滚动到可见区域（以预览容器为基准，居中显示）
+        try {
+          const pv = preview as HTMLDivElement | null
+          if (pv && pv.scrollHeight > pv.clientHeight + 4) {
+            const pvRect = pv.getBoundingClientRect()
+            const rect = range.getBoundingClientRect()
+            const currentTop = pv.scrollTop >>> 0
+            const delta = rect.top - pvRect.top
+            const targetTop = Math.max(0, currentTop + delta - pv.clientHeight * 0.35)
+            pv.scrollTo({ top: targetTop, behavior: 'smooth' })
+          } else {
+            // 兜底：若预览不可滚动，则退化为元素自身的 scrollIntoView
+            const el = (range.startContainer as any)?.parentElement as HTMLElement | null
+            el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }
+        } catch {}
 
         return true
       } catch (e) {
@@ -5811,16 +5838,16 @@ function bindEvents() {
 
     function findNext(fromCaret = true) {
       const term = String(_findInput?.value || '')
-      if (!term) return
-      updateFindCountLabel()
+      if (!term) { if (lblCount) lblCount.textContent = ''; return }
 
       // 阅读模式：在预览区查找
       if (mode === 'preview' && !wysiwyg) {
         findInPreview(term, !!_findCase?.checked, true)
+        updateFindCountLabel()
         return
       }
 
-      if (wysiwyg) { try { wysiwygV2FindNext(term, !!_findCase?.checked) } catch {} ; return }
+      if (wysiwyg) { try { wysiwygV2FindNext(term, !!_findCase?.checked) } catch {} ; updateFindCountLabel(); return }
       const val = String(editor.value || '')
       const hay = norm(val)
       const needle = norm(term)
@@ -5828,21 +5855,26 @@ function bindEvents() {
       const startPos = fromCaret ? Math.max(e, 0) : 0
       let idx = hay.indexOf(needle, startPos)
       if (idx < 0 && startPos > 0) idx = hay.indexOf(needle, 0) // 循环查找
-      if (idx >= 0) setSel(idx, idx + term.length)
+      if (idx >= 0) {
+        setSel(idx, idx + term.length)
+        updateFindCountLabel()
+      } else {
+        updateFindCountLabel()
+      }
     }
     function findPrev() {
       // 上一个：严格在光标前搜索；未命中则循环到最后一个
       const term = String(_findInput?.value || '')
       if (!term) { if (wysiwyg) { try { (document.querySelector('#md-wysiwyg-root .ProseMirror') as HTMLElement)?.focus() } catch {} } else { try { editor.focus() } catch {} } ; return }
-      updateFindCountLabel()
 
       // 阅读模式：在预览区查找
       if (mode === 'preview' && !wysiwyg) {
         findInPreview(term, !!_findCase?.checked, false)
+        updateFindCountLabel()
         return
       }
 
-      if (wysiwyg) { try { wysiwygV2FindPrev(term, !!_findCase?.checked) } catch {} ; return }
+      if (wysiwyg) { try { wysiwygV2FindPrev(term, !!_findCase?.checked) } catch {} ; updateFindCountLabel(); return }
       const val = String(editor.value || '')
       const hay = norm(val)
       const needle = norm(term)
@@ -5856,6 +5888,7 @@ function bindEvents() {
         // 未找到也要把焦点送回编辑器，避免按钮聚焦导致选区高亮消失
         try { editor.focus() } catch {}
       }
+      updateFindCountLabel()
     }
     function replaceOne() {
       const term = String(_findInput?.value || '')
@@ -5954,29 +5987,7 @@ function bindEvents() {
       else { sel = editor.value.slice(editor.selectionStart >>> 0, editor.selectionEnd >>> 0) }
       if (sel) { (_findInput as HTMLInputElement).value = sel; _lastFind = sel }
     } catch {}
-    try {
-      const lbl = _findPanel.querySelector('#find-count') as HTMLSpanElement | null
-      if (lbl) {
-        const term = String((_findInput as HTMLInputElement)?.value || '')
-        if (!term) { lbl.textContent = '' }
-        else {
-          const val = String(editor.value || '')
-          const hay = ((_findCase as HTMLInputElement | null)?.checked ? val : val.toLowerCase())
-          const needle = ((_findCase as HTMLInputElement | null)?.checked ? term : term.toLowerCase())
-          if (!needle) lbl.textContent = ''
-          else {
-            let cnt = 0, pos = 0
-            const step = Math.max(1, needle.length)
-            for (;;) {
-              const idx = hay.indexOf(needle, pos)
-              if (idx < 0) break
-              cnt++; pos = idx + step
-            }
-            lbl.textContent = cnt > 0 ? `共 ${cnt} 处` : '未找到'
-          }
-        }
-      }
-    } catch {}
+    try { if (_findUpdateLabelFn) _findUpdateLabelFn() } catch {}
     _findPanel.style.display = 'block'
     setTimeout(() => { try { (_findInput as HTMLInputElement).focus(); (_findInput as HTMLInputElement).select() } catch {} }, 0)
   }
