@@ -712,12 +712,13 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
 
     // 获取上次同步的元数据
     const lastMeta = await getSyncMetadata()
+    const skipMinutes = cfg.skipRemoteScanMinutes !== undefined ? cfg.skipRemoteScanMinutes : 5
+    const allowSmartSkip = reason !== 'manual' && skipMinutes > 0
+    const timeSinceLastSync = Date.now() - (lastMeta.lastSyncTime || 0)
+    const recentlyScanned = allowSmartSkip && timeSinceLastSync < skipMinutes * 60 * 1000
 
-    // 使用库根快照进行快速短路（仅在 skipRemoteScanMinutes 时间窗内）
+    // 使用库根快照进行快速短路（仅在 skipRemoteScanMinutes 时间窗内，且仅用于自动同步）
     try {
-      const skipMinutes = cfg.skipRemoteScanMinutes !== undefined ? cfg.skipRemoteScanMinutes : 5
-      const timeSinceLastSync = Date.now() - (lastMeta.lastSyncTime || 0)
-      const recentlyScanned = timeSinceLastSync < skipMinutes * 60 * 1000
 
       updateStatus('快速检查本地变更…')
       const lastHint = await readLocalStructureHint(localRoot)
@@ -725,7 +726,7 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
 
       if (curHint.totalFiles === 0) {
         await syncLog('[hint] 检测到本地为空，仍将进行远程扫描')
-      } else if (lastHint && recentlyScanned && skipMinutes > 0) {
+      } else if (lastHint && recentlyScanned) {
         const sameFiles = lastHint.totalFiles === curHint.totalFiles
         const sameDirs = lastHint.totalDirs === curHint.totalDirs
         const sameMaxMtime = Math.abs(lastHint.maxMtime - curHint.maxMtime) <= 1000
@@ -764,12 +765,8 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
       }
     }
 
-    // 智能跳过远程扫描
-    const timeSinceLastSync = Date.now() - (lastMeta.lastSyncTime || 0)
-    const skipMinutes = cfg.skipRemoteScanMinutes !== undefined ? cfg.skipRemoteScanMinutes : 5
-    const recentlyScanned = timeSinceLastSync < skipMinutes * 60 * 1000
-
-    if (!hasLocalChanges && recentlyScanned && skipMinutes > 0 && localIdx.size > 0) {
+    // 智能跳过远程扫描（仅在自动同步时启用）
+    if (allowSmartSkip && !hasLocalChanges && recentlyScanned && localIdx.size > 0) {
       await syncLog('[skip-remote] 本地无修改且最近刚同步过(' + Math.floor(timeSinceLastSync / 1000) + '秒前)，跳过远程扫描')
       updateStatus('本地无修改，跳过同步')
       clearStatus(2000)
