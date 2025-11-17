@@ -1320,6 +1320,7 @@ async function saveImageToLocalAndGetPath(file: File, fname: string): Promise<st
 async function setWysiwygEnabled(enable: boolean) {
   try {
     if (wysiwyg === enable) return
+    const scrollPercent = getScrollPercent()
     wysiwyg = enable
     const container = document.querySelector('.container') as HTMLDivElement | null
     // 旧所见模式已移除：不要再添加 .wysiwyg，否则容器会被隐藏
@@ -1370,6 +1371,7 @@ async function setWysiwygEnabled(enable: boolean) {
             bindOutlineScrollSync()
           }
         } catch {}
+        setTimeout(() => setScrollPercent(scrollPercent), 100)
         return
       } catch (e) {
         console.error('启用所见V2失败，将回退到旧模式', e)
@@ -1421,6 +1423,7 @@ async function setWysiwygEnabled(enable: boolean) {
         }
       } catch {}
       try { (editor as any).style.paddingBottom = '40px' } catch {}
+      setTimeout(() => setScrollPercent(scrollPercent), 0)
     }
     // 更新按钮提示
     try {
@@ -3522,16 +3525,54 @@ function checkUpdateSilentOnceAfterStartup() {
   } catch {}
 }
 
+// 获取当前模式的滚动百分比
+function getScrollPercent(): number {
+  try {
+    if (wysiwyg) {
+      const el = (document.querySelector('#md-wysiwyg-root .scrollView') || document.getElementById('md-wysiwyg-root')) as HTMLElement | null
+      if (!el) return 0
+      const max = el.scrollHeight - el.clientHeight
+      return max > 0 ? el.scrollTop / max : 0
+    }
+    if (mode === 'preview') {
+      const max = preview.scrollHeight - preview.clientHeight
+      return max > 0 ? preview.scrollTop / max : 0
+    }
+    const max = editor.scrollHeight - editor.clientHeight
+    return max > 0 ? editor.scrollTop / max : 0
+  } catch {
+    return 0
+  }
+}
+
+// 设置当前模式的滚动百分比
+function setScrollPercent(percent: number) {
+  try {
+    const p = Math.max(0, Math.min(1, percent))
+    if (wysiwyg) {
+      const el = (document.querySelector('#md-wysiwyg-root .scrollView') || document.getElementById('md-wysiwyg-root')) as HTMLElement | null
+      if (el) el.scrollTop = p * (el.scrollHeight - el.clientHeight)
+    } else if (mode === 'preview') {
+      preview.scrollTop = p * (preview.scrollHeight - preview.clientHeight)
+    } else {
+      editor.scrollTop = p * (editor.scrollHeight - editor.clientHeight)
+    }
+  } catch {}
+}
+
 // 切换模式
 async function toggleMode() {
+  const scrollPercent = getScrollPercent()
   mode = mode === 'edit' ? 'preview' : 'edit'
   if (mode === 'preview') {
     try { updateWysiwygVirtualPadding() } catch {}
     try { preview.classList.remove('hidden') } catch {}
     try { await renderPreview() } catch {}
+    setTimeout(() => setScrollPercent(scrollPercent), 50)
   } else {
     if (!wysiwyg) try { preview.classList.add('hidden') } catch {}
     try { editor.focus() } catch {}
+    setTimeout(() => setScrollPercent(scrollPercent), 0)
   }
   ;(document.getElementById('btn-toggle') as HTMLButtonElement).textContent = mode === 'edit' ? '阅读' : '编辑'
   // 模式切换后，如大纲面板可见，强制按当前模式重建一次大纲
