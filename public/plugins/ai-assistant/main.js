@@ -909,6 +909,73 @@ export async function openSettings(context){
 export async function activate(context) {
   // 菜单：AI 助手（显示/隐藏）
   __AI_MENU_ITEM__ = context.addMenuItem({ label: 'AI 助手', title: '打开 AI 写作助手', onClick: async () => { await toggleWindow(context) } })
+
+  // 右键菜单：AI 助手快捷操作
+  if (context.addContextMenuItem) {
+    try {
+      context.addContextMenuItem({
+        label: 'AI 助手',
+        icon: '🤖',
+        children: [
+          {
+            type: 'group',
+            label: '快捷操作'
+          },
+          {
+            label: '续写',
+            icon: '✍️',
+            onClick: async () => {
+              await ensureWindow(context)
+              el('ai-assist-win').style.display = 'block'
+              setDockPush(true)
+              await quick(context, '续写')
+            }
+          },
+          {
+            label: '润色',
+            icon: '✨',
+            onClick: async () => {
+              await ensureWindow(context)
+              el('ai-assist-win').style.display = 'block'
+              setDockPush(true)
+              await quick(context, '润色')
+            }
+          },
+          {
+            label: '纠错',
+            icon: '✅',
+            onClick: async () => {
+              await ensureWindow(context)
+              el('ai-assist-win').style.display = 'block'
+              setDockPush(true)
+              await quick(context, '纠错')
+            }
+          },
+          {
+            label: '提纲',
+            icon: '📋',
+            onClick: async () => {
+              await ensureWindow(context)
+              el('ai-assist-win').style.display = 'block'
+              setDockPush(true)
+              await quick(context, '提纲')
+            }
+          },
+          { type: 'divider' },
+          {
+            label: '打开 AI 助手',
+            icon: '💬',
+            onClick: async () => {
+              await toggleWindow(context)
+            }
+          }
+        ]
+      })
+    } catch (e) {
+      console.error('AI 助手右键菜单注册失败：', e)
+    }
+  }
+
   // 预加载配置与会话
   try { const cfg = await loadCfg(context); await saveCfg(context, cfg) } catch {}
   try { __AI_SESSION__ = await loadSession(context) } catch {}
