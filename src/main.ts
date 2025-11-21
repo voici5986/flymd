@@ -757,36 +757,65 @@ function removePluginDropdown() {
   } catch {}
 }
 
-// 渲染菜单项
+// 渲染单个菜单项（支持嵌套子菜单）
+function renderPluginMenuItem(item: any, callbacks: Map<string, () => void>, idCounter: { value: number }): string {
+  if (!item) return ''
+
+  // 分隔线
+  if (item.type === 'divider') {
+    return '<div class="plugin-menu-divider"></div>'
+  }
+
+  // 分组标题
+  if (item.type === 'group') {
+    return `<div class="plugin-menu-group-title">${item.label || ''}</div>`
+  }
+
+  // 子菜单
+  if (item.children && item.children.length > 0) {
+    const id = `menu-item-${idCounter.value++}`
+    const disabled = item.disabled ? ' disabled' : ''
+    const note = item.note ? `<span class="plugin-menu-note">${item.note}</span>` : ''
+
+    let childrenHtml = ''
+    for (const child of item.children) {
+      childrenHtml += renderPluginMenuItem(child, callbacks, idCounter)
+    }
+
+    // 如果子菜单为空，显示提示
+    if (!childrenHtml.trim()) {
+      childrenHtml = '<div class="plugin-menu-item disabled" style="font-style:italic;opacity:0.6;">暂无可用选项</div>'
+    }
+
+    return `
+      <div class="plugin-menu-item has-children${disabled}" data-id="${id}">
+        <span class="plugin-menu-label">${item.label || ''}</span>${note}
+        <span class="plugin-menu-arrow">▸</span>
+        <div class="plugin-menu-submenu">${childrenHtml}</div>
+      </div>
+    `
+  }
+
+  // 普通菜单项
+  const id = `menu-item-${idCounter.value++}`
+  const disabled = item.disabled ? ' disabled' : ''
+  const note = item.note ? `<span class="plugin-menu-note">${item.note}</span>` : ''
+
+  // 保存回调
+  if (item.onClick && typeof item.onClick === 'function') {
+    callbacks.set(id, item.onClick)
+  }
+
+  return `<button class="plugin-menu-item" data-id="${id}"${disabled}>${item.label || ''}${note}</button>`
+}
+
+// 渲染菜单项列表
 function renderPluginMenuItems(items: any[], callbacks: Map<string, () => void>): string {
-  let idCounter = 0
+  const idCounter = { value: 0 }
   const html: string[] = []
 
   for (const item of items) {
-    if (!item) continue
-
-    // 分隔线
-    if (item.type === 'divider') {
-      html.push('<div class="plugin-menu-divider"></div>')
-      continue
-    }
-
-    // 分组标题
-    if (item.type === 'group') {
-      html.push(`<div class="plugin-menu-group-title">${item.label || ''}</div>`)
-      continue
-    }
-
-    // 普通菜单项
-    const id = `menu-item-${idCounter++}`
-    const disabled = item.disabled ? ' disabled' : ''
-    const note = item.note ? `<span class="plugin-menu-note">${item.note}</span>` : ''
-    html.push(`<button data-id="${id}"${disabled}>${item.label || ''}${note}</button>`)
-
-    // 保存回调
-    if (item.onClick && typeof item.onClick === 'function') {
-      callbacks.set(id, item.onClick)
-    }
+    html.push(renderPluginMenuItem(item, callbacks, idCounter))
   }
 
   return html.join('')
@@ -844,28 +873,61 @@ function showPluginDropdown(anchor: HTMLElement, items: any[]) {
     document.body.appendChild(overlay)
 
     const panel = document.getElementById(PLUGIN_DROPDOWN_PANEL_ID)
-    if (panel) positionPluginDropdown(panel, anchor)
+    if (panel) {
+      positionPluginDropdown(panel, anchor)
+
+      // 为每个有子菜单的项目添加 mouseenter 事件，动态调整子菜单位置
+      panel.querySelectorAll('.plugin-menu-item.has-children').forEach((item) => {
+        item.addEventListener('mouseenter', function(this: HTMLElement) {
+          const submenu = this.querySelector('.plugin-menu-submenu') as HTMLElement
+          if (!submenu) return
+
+          // 使用 requestAnimationFrame 确保在下一帧计算，此时子菜单已经显示
+          requestAnimationFrame(() => {
+            const itemRect = this.getBoundingClientRect()
+            const submenuRect = submenu.getBoundingClientRect()
+            const viewportWidth = window.innerWidth
+
+            // 检查子菜单是否会超出右边界
+            const wouldOverflowRight = itemRect.right + submenuRect.width > viewportWidth - 10
+
+            if (wouldOverflowRight) {
+              // 向左展开
+              submenu.classList.add('expand-left')
+            } else {
+              // 向右展开（默认）
+              submenu.classList.remove('expand-left')
+            }
+          })
+        })
+      })
+    }
 
     // 点击外部区域关闭
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) removePluginDropdown()
     })
 
-    // 处理菜单项点击
-    const buttons = overlay.querySelectorAll('button[data-id]')
-    buttons.forEach((btn) => {
-      btn.addEventListener('click', (ev) => {
-        ev.preventDefault()
-        ev.stopPropagation()
-        const id = btn.getAttribute('data-id')
+    // 处理菜单项点击（使用事件委托）
+    if (panel) {
+      panel.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement
+        const menuItem = target.closest('[data-id]') as HTMLElement
+
+        if (!menuItem) return
+        if (menuItem.classList?.contains('disabled')) return
+        if (menuItem.classList?.contains('has-children')) return // 有子菜单的不执行
+
+        const id = menuItem.getAttribute('data-id')
         if (!id) return
+
         removePluginDropdown()
         const callback = callbacks.get(id)
         if (callback) {
           try { callback() } catch (e) { console.error(e) }
         }
       })
-    })
+    }
 
     // ESC 键关闭
     pluginDropdownKeyHandler = (e: KeyboardEvent) => {
