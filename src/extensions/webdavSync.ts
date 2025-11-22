@@ -608,8 +608,8 @@ async function listRemoteRecursively(
       }
     }
 
-    // 并发扫描子目录 (每次最多3个)
-    const DIR_CONCURRENCY = 3
+    // 并发扫描子目录 (每次最多5个)
+    const DIR_CONCURRENCY = 5
     for (let i = 0; i < subDirs.length; i += DIR_CONCURRENCY) {
       const batch = subDirs.slice(i, i + DIR_CONCURRENCY)
       await Promise.all(batch.map(d => walk(d.rel)))
