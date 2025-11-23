@@ -145,13 +145,17 @@ async function saveSyncMetadata(meta: SyncMetadata): Promise<void> {
 
 async function syncLog(msg: string): Promise<void> {
   try {
-    const enc = new TextEncoder().encode(new Date().toISOString() + ' ' + msg + '\n')
+    const ts = new Date()
+    const localTs = (() => {
+      try { return ts.toLocaleString(undefined, { hour12: false }) } catch { return ts.toString() }
+    })()
+    const enc = new TextEncoder().encode(localTs + ' ' + msg + '\n')
     const f = await openFileHandle('flymd-sync.log' as any, { write: true, append: true, create: true, baseDir: BaseDirectory.AppLocalData } as any)
     try { await (f as any).write(enc as any) } finally { try { await (f as any).close() } catch {} }
   } catch {}
 }
 
-async function openSyncLog(): Promise<void> {
+export async function openSyncLog(): Promise<void> {
   try {
     const localDataDir = await appLocalDataDir()
     const logPath = localDataDir + (localDataDir.includes('\\') ? '\\' : '/') + 'flymd-sync.log'

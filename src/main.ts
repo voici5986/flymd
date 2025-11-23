@@ -48,7 +48,7 @@ import goodImgUrl from '../good.png?url'
 import { decorateCodeBlocks } from './decorate'
 import pkg from '../package.json'
 // htmlToMarkdown 改为按需动态导入（仅在粘贴 HTML 时使用）
-import { initWebdavSync, openWebdavSyncDialog, getWebdavSyncConfig, syncNow as webdavSyncNow, setOnSyncComplete } from './extensions/webdavSync'
+import { initWebdavSync, openWebdavSyncDialog, getWebdavSyncConfig, syncNow as webdavSyncNow, setOnSyncComplete, openSyncLog as webdavOpenSyncLog } from './extensions/webdavSync'
 // 平台适配层（Android 支持）
 import { initPlatformIntegration, mobileSaveFile, isMobilePlatform } from './platform-integration'
 // 应用版本号（用于窗口标题/关于弹窗）
@@ -785,8 +785,50 @@ async function toggleUploaderEnabledFromMenu(): Promise<boolean> {
   }
 }
 
+async function handleManualSyncFromMenu(): Promise<void> {
+  try {
+    const result = await webdavSyncNow('manual')
+    if (!result) {
+      pluginNotice('同步失败', 'err', 2200)
+      return
+    }
+    if (result.skipped) {
+      pluginNotice('同步已跳过', 'ok', 1800)
+      return
+    }
+    pluginNotice(`同步完成：上传${result.uploaded}，下载${result.downloaded}`, 'ok', 2200)
+  } catch (err) {
+    console.error('manual sync failed', err)
+    const msg = (err && (err as any).message) ? (err as any).message : String(err || 'unknown')
+    pluginNotice('同步失败：' + msg, 'err', 2600)
+  }
+}
+
+async function handleOpenSyncLogFromMenu(): Promise<void> {
+  try {
+    await webdavOpenSyncLog()
+  } catch (err) {
+    console.error('open sync log failed', err)
+    pluginNotice('打开同步日志失败', 'err', 2200)
+  }
+}
+
 async function buildBuiltinContextMenuItems(): Promise<ContextMenuItemConfig[]> {
   const items: ContextMenuItemConfig[] = []
+  const syncCfg = await (async () => { try { return await getWebdavSyncConfig() } catch { return null as any } })()
+  const syncEnabled = !!syncCfg?.enabled
+  items.push({
+    label: t('sync.now') || '立即同步',
+    icon: '🔁',
+    note: syncEnabled ? '' : '未启用',
+    disabled: !syncEnabled,
+    onClick: async () => { await handleManualSyncFromMenu() }
+  })
+  items.push({
+    label: t('sync.openlog') || '打开同步日志',
+    icon: '📘',
+    onClick: async () => { await handleOpenSyncLogFromMenu() }
+  })
   const enabled = await readUploaderEnabledState()
   items.push({
     label: t('menu.uploader') || '图床上传',
