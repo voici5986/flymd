@@ -4060,3 +4060,86 @@ body.focus-mode .library .lib-action-btn.active {
 }
 
 /* ============ 专注模式样式结束 ============ */
+
+/* ============ 自定义标题栏（无边框窗口）============ */
+.custom-titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  z-index: 10000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* 拖动区域 */
+.custom-titlebar-drag {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+  app-region: drag;
+  cursor: move;
+}
+
+/* 控制按钮容器 */
+.custom-titlebar-controls {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  padding-right: 8px;
+}
+
+/* 控制按钮基础样式 - 极简文字样式 */
+.custom-titlebar-btn {
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: 18px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s;
+  border-radius: 4px;
+  margin: 0 2px;
+  padding: 0;
+  line-height: 1;
+  font-weight: 300;
+  opacity: 0.5;
+  font-family: monospace;
+}
+
+/* 按钮悬停效果 */
+.custom-titlebar-btn:hover {
+  opacity: 0.8;
+  background: rgba(127, 127, 127, 0.1);
+}
+
+/* 关闭按钮特殊样式 */
+.custom-titlebar-btn.custom-titlebar-close {
+  font-size: 20px;
+}
+
+.custom-titlebar-btn.custom-titlebar-close:hover {
+  background: rgba(232, 17, 35, 0.9);
+  color: white;
+  opacity: 1;
+}
+
+/* 专注模式下调整内容区域，为自定义标题栏留出空间 */
+body.focus-mode.custom-titlebar-active .container {
+  padding-top: 30px;
+}
+
+/* 专注模式下原生的触发区域要隐藏 */
+body.focus-mode.custom-titlebar-active .focus-trigger-zone {
+  display: none !important;
+}

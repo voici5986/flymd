@@ -5549,9 +5549,123 @@ async function getLibraryDocked(): Promise<boolean> {
 // ========== 专注模式（Focus Mode）==========
 // 隐藏顶栏，鼠标移到顶部边缘时自动显示
 
+// 创建自定义标题栏控件
+function createCustomTitleBar() {
+  // 如果已存在，先移除
+  removeCustomTitleBar()
+
+  // 创建容器
+  const titleBar = document.createElement('div')
+  titleBar.id = 'custom-titlebar'
+  titleBar.className = 'custom-titlebar'
+
+  // 创建拖动区域
+  const dragRegion = document.createElement('div')
+  dragRegion.className = 'custom-titlebar-drag'
+  dragRegion.setAttribute('data-tauri-drag-region', '')
+
+  // 创建控制按钮容器
+  const controls = document.createElement('div')
+  controls.className = 'custom-titlebar-controls'
+
+  // 最小化按钮
+  const minBtn = document.createElement('button')
+  minBtn.className = 'custom-titlebar-btn'
+  minBtn.innerHTML = '－'
+  minBtn.title = '最小化'
+  minBtn.addEventListener('click', async () => {
+    try {
+      await getCurrentWindow().minimize()
+    } catch (err) {
+      console.error('最小化失败:', err)
+    }
+  })
+
+  // 最大化/还原按钮
+  const maxBtn = document.createElement('button')
+  maxBtn.className = 'custom-titlebar-btn'
+  maxBtn.innerHTML = '＋'
+  maxBtn.title = '最大化'
+  maxBtn.addEventListener('click', async () => {
+    try {
+      const win = getCurrentWindow()
+      const isMaximized = await win.isMaximized()
+      if (isMaximized) {
+        await win.unmaximize()
+        maxBtn.innerHTML = '＋'
+        maxBtn.title = '最大化'
+      } else {
+        await win.maximize()
+        maxBtn.innerHTML = '□'
+        maxBtn.title = '还原'
+      }
+    } catch (err) {
+      console.error('最大化/还原失败:', err)
+    }
+  })
+
+  // 关闭按钮
+  const closeBtn = document.createElement('button')
+  closeBtn.className = 'custom-titlebar-btn custom-titlebar-close'
+  closeBtn.innerHTML = '×'
+  closeBtn.title = '关闭'
+  closeBtn.addEventListener('click', async () => {
+    try {
+      // 触发正常的关闭流程（会检查是否需要保存）
+      const win = getCurrentWindow()
+      await win.close()
+    } catch (err) {
+      console.error('关闭窗口失败:', err)
+    }
+  })
+
+  // 组装元素
+  controls.appendChild(minBtn)
+  controls.appendChild(maxBtn)
+  controls.appendChild(closeBtn)
+  titleBar.appendChild(dragRegion)
+  titleBar.appendChild(controls)
+
+  // 添加到页面顶部
+  document.body.insertBefore(titleBar, document.body.firstChild)
+
+  // 添加标记类
+  document.body.classList.add('custom-titlebar-active')
+}
+
+// 移除自定义标题栏
+function removeCustomTitleBar() {
+  const titleBar = document.getElementById('custom-titlebar')
+  if (titleBar) {
+    titleBar.remove()
+  }
+
+  // 移除标记类
+  document.body.classList.remove('custom-titlebar-active')
+}
+
 async function toggleFocusMode(enabled?: boolean) {
   focusMode = enabled !== undefined ? enabled : !focusMode
   document.body.classList.toggle('focus-mode', focusMode)
+
+  // 动态切换窗口装饰（标题栏）
+  try {
+    const win = getCurrentWindow()
+    if (focusMode) {
+      // 专注模式：隐藏原生标题栏
+      await win.setDecorations(false)
+      // 创建自定义控制按钮
+      createCustomTitleBar()
+    } else {
+      // 普通模式：显示原生标题栏
+      await win.setDecorations(true)
+      // 移除自定义控制按钮
+      removeCustomTitleBar()
+    }
+  } catch (err) {
+    console.warn('切换窗口装饰失败:', err)
+  }
+
   // 保存状态到 store
   try { if (store) { await store.set('focusMode', focusMode); await store.save() } } catch {}
   // 如果退出专注模式，确保 titlebar 可见
@@ -8143,7 +8257,14 @@ function bindEvents() {
     bindEvents()  // 🔧 关键：无论存储是否成功，都要绑定事件
     initContextMenuListener()  // 初始化右键菜单监听
     // 恢复专注模式状态
-    try { getFocusMode().then(v => { if (v) toggleFocusMode(true) }) } catch {}
+    try {
+      getFocusMode().then(v => {
+        if (v) {
+          // 延迟一下确保窗口已完全初始化
+          setTimeout(() => toggleFocusMode(true), 100)
+        }
+      })
+    } catch {}
     // 依据当前语言，应用一次 UI 文案（含英文简写，避免侧栏溢出）
     try { applyI18nUi() } catch {}
     try { logInfo('打点:事件绑定完成') } catch {}
