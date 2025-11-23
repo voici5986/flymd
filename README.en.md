@@ -1,4 +1,4 @@
-# FlySpeed Markdown (flyMD)
+# FlySpeed Markdown (FlyMD)
 
 [简体中文](README.md) | [English](README.en.md)
 
@@ -8,209 +8,170 @@
 [![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/flyhunterl/flymd)
 ![GitHub Downloads](https://img.shields.io/github/downloads/flyhunterl/flymd/total)
 
-A cross-platform WYSIWYG Markdown editor and PDF reader with image hosting, WebDAV sync, plugin extensions, fast response, and minimal resource usage.
+## 📖 Introduction
 
-![app-hero](https://github.com/user-attachments/assets/38f9f007-8a09-4231-9c53-2d3bc6f245be)
+**Say goodbye to bloat, lag, and fragmented experience!**
 
+FlyMD is a high-performance Markdown editor in just **7MB**, featuring **WYSIWYG + Source Code** dual-mode support, integrated **AI Assistant** and **Smart Todo Reminder Push System**.
 
-## ✨ Highlights
+Cross-platform support for Windows / Linux / macOS. Lightweight yet powerful, built for efficient writing.
 
-- Ready to Use: Only 7MB installer, no bloat. Millisecond-level cold start, one-click code copy
-- Clean Interface: Minimalist design with just menubar + editor, focused on content creation. Excellent startup and response speed
-- Library Feature: Support for designated folders, tree-view display of subfolders and documents, with document management; supports multiple libraries
-- Secure & Reliable: Local execution, no network connection, automatic HTML sanitization in preview
-- Image Hosting: S3/R2 binding support, direct paste image upload with automatic link syntax generation
-- Full-Featured: Complete support for Markdown, LaTeX, Mermaid, and HTML
-- Real-time Rendering: WYSIWYG mode, instant render on input! Global real-time rendering for Mermaid and LaTeX, double-click to edit code
-- Ultimate Performance: Millisecond-level response, farewell to common pain points of similar software
-- Position Memory: Automatic memory of reading and editing positions, returning to remembered positions on next open (v0.0.6 official)
-- Auto Sync: WebDAV sync functionality
-- Plugin Extensions: Support for plugin extensions, develop your own or install with one click
-- AI Assistant: Install from the Extensions market to polish, correct and summarize content
-- Export formats: Export to PDF, DOCX, WPS
-- Todo Reminder Extension: Install from the Extensions market to push unfinished TODOs at scheduled times via WeChat, SMS, or email to designated recipients
+![Interface Preview](https://github.com/user-attachments/assets/38f9f007-8a09-4231-9c53-2d3bc6f245be)
+
+## ✨ Core Features
+
+### 🎨 Editing Experience
+- **Source Code / WYSIWYG Dual Mode** - Switch freely between edit and preview modes
+- **Millisecond-Level Startup & Rendering** - Instant loading, smooth writing, no lag
+- **Reading Position Memory** - Resume where you left off, never lose your place
+- **Outline / TOC Support** - Smart outline, quick navigation for long documents
+
+### 🚀 Advanced Features
+- **One-Click Publish to Typecho/WordPress/Halo** - Write and publish seamlessly to blog platforms
+- **AI Assistant Extension** - Writing assistance, polishing, and error correction
+- **Smart Todo Reminder Push** - Auto-detect TODOs, push via WeChat, SMS, Email, DingTalk, Feishu and more
+- **Flexible iframe Embedding** - Embed music, videos, maps, online documents and more
+
+### 💻 Platform & Format
+- **Windows / Linux / macOS Cross-Platform Support** - Use anywhere without barriers
+- **Export to PDF and DOCX** - Multiple export formats for different needs
+
+### 🔐 Security & Performance
+- **Local-First** - Zero background network, secure and controllable data
+- **Image Hosting Support** - S3/R2 one-click upload, auto-insert image links
+- **WebDAV Sync** - Multi-device data sync with complete history
+- **Extension Plugin System** - Custom extensions, unlimited possibilities
 
 ## 🎯 AI + Todo Integration: Your Intelligent Life Assistant
 
 **This isn't cyberpunk—this is real life.** When AI Assistant meets Todo Plugin, your notebook transforms into an intelligent life manager.
 
-### Powerful Scenarios
+### Typical Scenarios
 
 #### 📅 Personal Habit Building
-- **Scenario**: You write in your notes: "I've been having trouble waking up lately. I must get up at 6 AM tomorrow."
-- **Smart Response**: At 6 AM the next day, AI recognizes your need and calls you via the Todo plugin ☎️
+You write in your notes: "I've been having trouble waking up lately. I must get up at 6 AM tomorrow."
+→ At 6 AM the next day, AI recognizes your need and calls you via the Todo plugin ☎️
 
 #### 🗺️ Travel Itinerary Execution
-- **Scenario**: Copy a travel guide from social media and paste it into your notes
-- **Smart Response**: AI automatically extracts time points from the itinerary and sends you WeChat messages at appropriate times: "Time to visit the next spot!" 📍
+Copy a travel guide from social media and paste it into your notes
+→ AI automatically extracts time points and sends WeChat messages at appropriate times: "Time to visit the next spot!" 📍
 
 #### 💼 Team Meeting Management
-- **Scenario**: As a manager, you record this week's meeting schedule in your notes
-- **Smart Response**: Your team members receive meeting reminders via DingTalk, email, or WeChat at the right time—never miss a meeting 📧
+As a manager, you record this week's meeting schedule in your notes
+→ Team members receive reminders via DingTalk, email, or WeChat at the right time—never miss a meeting 📧
 
 ### How It Works
+1. **AI Smart Analysis** - Automatically extract time, events, and people information
+2. **Auto-Create Todos** - Intelligently generate todo items
+3. **Multi-Channel Push** - Send reminders via WeChat, SMS, email, phone calls, etc.
+4. **Contextualized Experience** - Life assistant that understands you
 
-1. **AI Smart Analysis**: AI Assistant automatically analyzes your note content, extracting key information like time, events, and people
-2. **Auto-Create Todos**: Based on analysis results, intelligently creates todo items
-3. **Multi-Channel Push**: Sends reminders via WeChat, SMS, email, phone calls, etc., at the right time
-4. **Contextualized Experience**: Not a cold tool, but a life assistant that understands you
+> 💡 Install both "AI Assistant" and "Todo Reminder" extensions from the Extensions market to experience this powerful feature.
 
-> 💡 **Tip**: Install both "AI Assistant" and "Todo Reminder" extensions from the Extensions market to experience this powerful feature.
+## 📸 Interface Preview
 
-## 📸 Interface Preview (v0.2.2)
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/661c3263-d877-4fcf-a77f-69096b42b9d5" width="32%" alt="Markdown Editor Screenshot 1"/>
-  <img src="https://github.com/user-attachments/assets/1182c443-f93c-4167-bc05-f4cc4b391ab5" width="32%" alt="Markdown Editor Screenshot 2"/>
-  <img src="https://github.com/user-attachments/assets/d51945f9-c227-43eb-8105-0bb07d66db52" width="32%" alt="Markdown Editor Screenshot 3"/>
+  <img src="https://github.com/user-attachments/assets/661c3263-d877-4fcf-a77f-69096b42b9d5" width="32%" alt="Edit Mode"/>
+  <img src="https://github.com/user-attachments/assets/1182c443-f93c-4167-bc05-f4cc4b391ab5" width="32%" alt="WYSIWYG Mode"/>
+  <img src="https://github.com/user-attachments/assets/d51945f9-c227-43eb-8105-0bb07d66db52" width="32%" alt="Reading Mode"/>
 </p>
 
+## 🚀 Getting Started
 
-## Core Features
-- Editing Experience
-  - Instant editing/WYSIWYG (powered by Milkdown)
-  - Native low-latency: Preserves `<textarea>` pipeline, IME composition-friendly, smart bracket/quote pairing without disrupting input (Edit mode)
-  - Unified indent & multi-line operations: `Tab` behaves consistently in Edit/WYSIWYG modes
-  - Common formatting: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+K` insert link; precise line/column/cursor feedback
-  - Edit/reading width control: Hold `Shift` and scroll the mouse wheel to adjust edit/reading area width, making long-form reading more comfortable
-  - WYSIWYG mode: Use `Ctrl+Enter` to exit code blocks
-  **Edit mode uses standard syntax, double space + Enter triggers line break. Non-standard syntax will break line breaks in WYSIWYG mode. Reading mode unaffected**
-  **Auto-completion only works in Edit mode**
-  **Due to Chinese/English punctuation differences, Chinese IME may affect completion experience, recommend switching to English punctuation**
-- Reading & Outline
-  - Safe preview: `markdown-it` rendering + `highlight.js` code highlighting + `DOMPurify` HTML sanitization, external links auto-add `target="_blank"` + `rel="noopener"`
-  - Outline navigation: Extract Markdown `H1–H6` to generate clickable TOC, highlight current heading, preview and scroll sync
-  - PDF Bookmarks (Outline): Built-in PDF reading and bookmark outline, cached per file and auto-invalidated on changes
-- iframe Embedding Support
-  - Flexible embedding: Embed iframe controls in Markdown to include videos, maps, online documents, and other external web content
-  - Simple syntax: Use HTML `<iframe>` tags directly with customizable width, height, and other attributes
-  - Usage examples:
-    ```html
-    <!-- Embed YouTube video -->
-    <iframe width="560" height="315"
-      src="https://www.youtube.com/embed/VIDEO_ID"
-      frameborder="0" allowfullscreen>
-    </iframe>
+### Installation
+Download the installer for your platform from [Releases](https://github.com/flyhunterl/flymd/releases):
+- **Windows**: Requires WebView2 (pre-installed on most systems)
+- **Linux**: Supports mainstream desktop environments
+- **macOS**: Supports Intel and Apple Silicon
 
-    <!-- Embed online document -->
-    <iframe width="100%" height="500"
-      src="https://example.com/document"
-      frameborder="0">
-    </iframe>
+### Basic Operations
+| Operation | Shortcut |
+|-----------|----------|
+| New File | `Ctrl+N` |
+| Open File | `Ctrl+O` |
+| Save File | `Ctrl+S` |
+| Save As | `Ctrl+Shift+S` |
+| Toggle Edit/Preview | `Ctrl+E` |
+| Toggle WYSIWYG Mode | `Ctrl+W` |
+| Quick Reading | `Ctrl+R` |
+| Bold | `Ctrl+B` |
+| Italic | `Ctrl+I` |
+| Insert Link | `Ctrl+K` |
+| Find & Replace | `Ctrl+H` |
 
-    <!-- Embed map -->
-    <iframe width="600" height="450"
-      src="https://www.openstreetmap.org/export/embed.html"
-      frameborder="0">
-    </iframe>
-    ```
-- Images & Hosting
-  - One-step process: Paste/drag images auto-handled; prefer upload to S3/R2 and insert public URL; fallback to local save when unconfigured/failed
-  - Local images just work: No extra configuration needed for preview
-- Sync (WebDAV Extension)
-  - Visual sync: Status hints, process logs, progress feedback, and conflict prompts
-  - Remote MOVE optimization: Use `MOVE` to reduce duplicate download/upload, optimize rename/move scenarios
-- Language & Usability
-  - Bilingual (Chinese/English) + Auto: Follow system language or manual switch, remembers user choice
-  - Position memory: Each file independently remembers last "reading/editing cursor/scroll position"
-- Security & Performance
-  - Local-first, zero background network: No network access unless explicitly enabled (image hosting, sync, etc.)
-  - Performance optimization: Cold start and render pipeline with lazy loading, chunked static assets, controllable logs; target cold start <300ms, preview toggle <16ms (typical 2–3k line documents)
+### Image Handling
+- **Paste/Drag Images**: Auto-process and insert
+- **Image Hosting Upload**: Auto-upload to configured S3/R2 and insert public URL
+- **Local Save**: Auto-save locally when image hosting not configured
 
-## Getting Started
-- Installation
-  - Download platform-appropriate installer from release page and install; Windows requires WebView2 (pre-installed on most systems)
-- Create/Open
-  - New: `Ctrl+N`; Open: `Ctrl+O`; Save: `Ctrl+S`; Save As: `Ctrl+Shift+S`
-  - Library: Sidebar file tree supports new/rename/move/delete and recent files
-- Mode Switching
-  - Edit mode: `Ctrl+E`; can toggle between editing and reading
-  - Quick reading: `Ctrl+R`
-  - WYSIWYG mode: `Ctrl+W`; can toggle WYSIWYG editing
-- Common Editing
-  - Bold/Italic/Link: `Ctrl+B / Ctrl+I / Ctrl+K`; `Esc` closes dialogs
-  - Images: Paste/drag to insert (WYSIWYG mode doesn't support dragging); with S3/R2 configured, auto-upload and insert URL; unconfigured/failed fallback to local save. Optional: Always save to local
-- Sync (Optional)
-  - Enable WebDAV in "Extensions", provides logs/progress/conflict hints; (newly launched, still improving, remember to backup)
-- Language
-  - Switch between Chinese/English or select Auto to follow system; language preference is remembered
-
-- Export: Save As (Ctrl+Shift+S) supports PDF, DOCX and WPS
-## ⌨️ Shortcuts
-
-| Shortcut | Function |
-|----------|----------|
-| `Ctrl+N` | New file |
-| `Ctrl+O` | Open file |
-| `Ctrl+S` | Save file |
-| `Ctrl+H` | Find & Replace |
-| `Ctrl+Shift+S` | Save as |
-| `Ctrl+E` | Toggle edit/preview |
-| `Ctrl+R` | Enter reading (preview) |
-| `Ctrl+W` | Toggle WYSIWYG mode |
-| `Escape` | Close/return in preview or dialogs |
-| `Ctrl+B` | Bold |
-| `Ctrl+I` | Italic |
-| `Ctrl+K` | Insert link |
+### Sync Feature (Optional)
+Enable WebDAV in "Extensions", supports:
+- Multi-device data sync
+- Real-time status prompts
+- Conflict detection and handling
 
 ## 🔌 Extension Development
 
-flyMD supports plugin extensions to enhance functionality. You can:
-
-- Develop custom extension plugins
-- Install plugins from GitHub or HTTP URL
+FlyMD supports enhancing functionality through extension plugins:
+- Develop custom extensions
+- Install from GitHub or HTTP URL
 - Manage installed extensions
 
-For detailed development guide, see:
+📚 Development Documentation:
 - [扩展开发文档 (中文)](plugin.md)
 - [Extension Development Documentation (English)](plugin.en.md)
 
-**Example Plugins:**
-- [Typecho Publisher](https://github.com/TGU-HansJack/typecho-publisher-flymd) - Publish articles to Typecho blog platform
-- Todo Reminder Extension - Push unfinished TODOs at scheduled times via WeChat, SMS, or email to designated recipients
+### Example Extensions
+- **AI Writing Assistant** - Smart writing, content polishing, grammar checking
+- **Typecho Publisher** - One-click publish to Typecho blog
+- **Todo Reminder** - Push TODOs via WeChat, SMS, Email, etc.
+- **Batch Export PDF** - Batch export Markdown to PDF
+- **Word Count** - Real-time display of character count, word count, reading time
 
+## 📊 Performance Metrics
 
-## 📊 Performance Targets
+- ⚡ **Cold Start**: ≤ 300ms
+- 📦 **Installer Size**: ≤ 10MB
+- 💾 **Memory Footprint**: ≤ 50MB
+- 🔄 **Preview Toggle**: ≤ 16ms
 
-- Cold start: ≤ 300ms
-- Installer size: ≤ 10MB
-- Memory footprint: ≤ 50MB
-- Preview toggle: ≤ 16ms
-
-## Roadmap & Changelog
+## 🗺️ Roadmap
 
 See: [ROADMAP.en.md](ROADMAP.en.md)
 
-### Cross-platform Support
-- [x] Windows 10/11
-- [x] Linux (Desktop environment)
-- [x] macOS
+## ⭐ Star History
 
+[![Star History Chart](https://api.star-history.com/svg?repos=flyhunterl/flymd&type=date&legend=top-left)](https://www.star-history.com/#flyhunterl/flymd&type=date&legend=top-left)
+
+## 📄 License
+
+This project uses "FlySpeed MarkDown (flyMD) Non-Commercial Open Source License (NC 1.0)".
+
+- ✅ **Allowed**: Non-commercial use, modification, copying, and redistribution (attribution required)
+- ❌ **Prohibited**: Commercial use without authorization
+
+For commercial licensing, contact: flyhunterl <flyhunterl@gmail.com>
+
+Full License: [LICENSE](LICENSE) | Third-Party Components: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
+
+## 🙏 Acknowledgments
+
+- [Tauri](https://tauri.app/) - Cross-platform framework
+- [MilkDown](https://milkdown.dev/) - WYSIWYG editor
+- [markdown-it](https://github.com/markdown-it/markdown-it) - Markdown rendering
+- [DOMPurify](https://github.com/cure53/DOMPurify) - HTML sanitization
+- [highlight.js](https://highlightjs.org/) - Code highlighting
+- [KaTeX](https://katex.org/) - Math formula rendering
+- [Mermaid](https://mermaid.js.org/) - Diagram drawing
 
 ## 🤝 Contributing
 
 Issues and Pull Requests are welcome!
 
-## 📄 License & Compliance
+## ❓ FAQ
 
-- This project uses "FlySpeed MarkDown (flyMD) Non-Commercial Open Source License (NC 1.0)".
-- Allowed: Free use, modification, copying, and redistribution for non-commercial purposes; must retain attribution and source.
-- Commercial use: Prohibited without written authorization. For commercial licensing, contact: flyhunterl <flyhunterl@gmail.com>.
-- Full license: [LICENSE](LICENSE) (includes English translation, Chinese version is primary)
-- Third-party component licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
+- [Solution for Arch Linux blank screen](arch.md)
 
-## 🙏 Acknowledgments
-- [MilkDown](https://milkdown.dev/)
-- [Tauri](https://tauri.app/)
-- [markdown-it](https://github.com/markdown-it/markdown-it)
-- [DOMPurify](https://github.com/cure53/DOMPurify)
-- [highlight.js](https://highlightjs.org/)
-- [KaTeX](https://katex.org/)
-- [Mermaid](https://mermaid.js.org/)
-
-## FAQ (Linux)
-
-- [Solution for blank screen on Arch](arch.md)
-
+## Open Source Support
 
 <img width="300" height="300" alt="image" src="https://github.com/user-attachments/assets/4a716fd5-dc61-4a4f-b968-91626debe8d2" />
-

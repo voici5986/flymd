@@ -8,216 +8,170 @@
 [![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/flyhunterl/flymd)
 ![GitHub Downloads](https://img.shields.io/github/downloads/flyhunterl/flymd/total)
 
+## 📖 简介
 
-跨平台 所见所得 图床上传 WebDav同步 插件扩展 响应迅速 占用极低的 Markdown 编辑 PDF 阅读工具。
+**告别臃肿、告别卡顿、告别割裂体验！**
 
+FlyMD 是一款仅 **7MB** 的高性能 Markdown 编辑器，支持**所见所得 + 源码编辑**双模式，集成 **AI 助手**和**智能待办提醒推送系统**。
 
-![1](https://github.com/user-attachments/assets/38f9f007-8a09-4231-9c53-2d3bc6f245be)
+跨平台支持 Windows / Linux / macOS，轻量级却不简单，为高效写作而生。
 
+![界面预览](https://github.com/user-attachments/assets/38f9f007-8a09-4231-9c53-2d3bc6f245be)
 
+## ✨ 核心特性
 
-## ✨ 项目特色
+### 🎨 编辑体验
+- **源码/所见双模式** - 自由切换编辑与预览，满足不同写作习惯
+- **毫秒级启动与渲染** - 瞬间加载，流畅书写，告别卡顿
+- **阅读位置记忆** - 断点续读不丢失，每次打开回到上次位置
+- **目录大纲支持** - 智能大纲，快速导航长文档
 
+### 🚀 高级功能
+- **一键发布到 Typecho/WordPress/Halo** - 写完即发，无缝对接博客平台
+- **AI 助手扩展** - 辅助写作、润色与改错，智能辅助事半功倍
+- **智能待办提醒推送** - 自动识别 TODO，通过微信、短信、邮箱、钉钉、飞书等多渠道推送
+- **灵活嵌入 iframe 控件** - 支持音乐、视频、地图、在线文档等外部内容
 
-- 即开即用：安装包仅7MB 拒绝臃肿。冷启动毫秒级响应，代码一键复制
-- 界面干净：极简界面，默认仅菜单栏+编辑区，专注内容创作 启动速度和响应速度优秀
-- 文库功能：支持指定文件夹，树状目录显示文件夹下子文件夹及文档 并支持文档管理/支持添加多个文档库
-- 安全可靠：本地运行，无网络连接，预览 HTML 自动消毒 
-- 图床支持：支持S3/R2绑定，直接粘贴图片上传 上传成功后自行写好图片连接语法
-- 功能全面：MarkDown LaTeX Mermaid html全部支持
-- 即时渲染：所见模式，输入即渲染！Mermaid LaTex全局实时渲染，双击编辑代码
-- 极致性能：毫秒级响应速度，告别同类软件常见痛点
-- 位置记忆：阅读和编辑文档位置均自动记忆，下次打开改文档无论阅读还是编辑都回到记忆位置（v0.0.6正式版）
-- 自动同步：Webdav同步功能
-- 插件扩展：支持插件扩展功能，可以自行开发也可以一键安装已上架的扩展/插件
-- 格式支持：支持另存为PDF Docx Wps 
-- 人工智能：可通过扩展市场安装AI助手（通过扩展市场安装）润色、改错、总结。
-- 待办推送：通过扩展市场安装代办事项推送扩展，可将未完成的 TODO 按设定时间通过微信、短信或邮箱推送给指定人员
+### 💻 平台与格式
+- **Windows / Linux / macOS 全平台支持** - 跨平台无障碍使用
+- **支持导出格式为 PDF 和 DOCX** - 多格式导出，满足不同需求
+
+### 🔐 安全与性能
+- **本地优先** - 零后台网络，数据安全可控
+- **图床支持** - S3/R2 一键上传，自动插入图片链接
+- **WebDAV 同步** - 多设备数据同步，保留完整历史
+- **扩展插件系统** - 支持自定义扩展，功能无限可能
 
 ## 🎯 AI + 待办联动：智能生活助手
 
-**这不是赛博，这是生活。** 当 AI 助手遇见待办插件，笔记本摇身一变成为你的智能生活管家。
+**这不是赛博，这是生活。** 当 AI 助手遇见待办插件，笔记本摇身一变成为智能生活管家。
 
-### 强大场景
+### 典型场景
 
 #### 📅 个人习惯养成
-- **场景**：你在笔记里写下："这段时间起床困难，明天一定要6点钟起床。"
-- **智能响应**：第二天早上6点，AI识别出你的需求，通过待办插件给你打来电话提醒 ☎️
+你在笔记里写下："这段时间起床困难，明天一定要6点钟起床。"
+→ 第二天早上 6 点，AI 识别出你的需求，通过待办插件给你打来电话提醒 ☎️
 
 #### 🗺️ 旅游攻略执行
-- **场景**：从小红书复制了一段旅游攻略粘贴到笔记中
-- **智能响应**：AI自动提取攻略中的时间节点，到了对应时段自动给你发送微信消息："该去下一个景点啦！" 📍
+从小红书复制了一段旅游攻略粘贴到笔记中
+→ AI 自动提取攻略中的时间节点，到了对应时段自动给你发送微信消息："该去下一个景点啦！" 📍
 
 #### 💼 团队会议管理
-- **场景**：你是公司管理人员，在笔记里记录了本周的会议安排
-- **智能响应**：你的团队成员在合适的时间收到钉钉、邮件或微信的会议提醒，从未错过 📧
+你是公司管理人员，在笔记里记录了本周的会议安排
+→ 团队成员在合适的时间收到钉钉、邮件或微信的会议提醒，从未错过 📧
 
 ### 工作原理
+1. **AI 智能分析** - 自动提取时间、事件、人员等关键信息
+2. **自动创建待办** - 智能生成待办事项
+3. **多渠道推送** - 通过微信、短信、邮件、电话等方式发送提醒
+4. **场景化体验** - 懂你的生活助手
 
-1. **AI 智能分析**：AI 助手自动分析你的笔记内容，提取时间、事件、人员等关键信息
-2. **自动创建待办**：基于分析结果，智能创建待办事项
-3. **多渠道推送**：通过微信、短信、邮件、电话等方式，在合适的时间发送提醒
-4. **场景化体验**：不是冰冷的工具，而是懂你的生活助手
+> 💡 在扩展市场分别安装"AI 助手"和"待办推送"扩展，即可体验这一强大功能。
 
-> 💡 **提示**：在扩展市场分别安装"AI 助手"和"待办推送"扩展，即可体验这一强大功能。
-
-## 📸 界面预览 0.2.2版本
+## 📸 界面预览
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/661c3263-d877-4fcf-a77f-69096b42b9d5" width="32%" alt="Markdown Editor Screenshot 1"/>
-  <img src="https://github.com/user-attachments/assets/1182c443-f93c-4167-bc05-f4cc4b391ab5" width="32%" alt="Markdown Editor Screenshot 2"/>
-  <img src="https://github.com/user-attachments/assets/d51945f9-c227-43eb-8105-0bb07d66db52" width="32%" alt="Markdown Editor Screenshot 3"/>
+  <img src="https://github.com/user-attachments/assets/661c3263-d877-4fcf-a77f-69096b42b9d5" width="32%" alt="编辑模式"/>
+  <img src="https://github.com/user-attachments/assets/1182c443-f93c-4167-bc05-f4cc4b391ab5" width="32%" alt="所见模式"/>
+  <img src="https://github.com/user-attachments/assets/d51945f9-c227-43eb-8105-0bb07d66db52" width="32%" alt="阅读模式"/>
 </p>
 
+## 🚀 快速开始
 
-## 核心特性
-- 编辑体验
-  - 即时编辑/所见即所得（基于 Milkdown）
-  - 原生低延迟：保留 `<textarea>` 管线，中文输入法合成友好，智能成对补全括号/引号，不干扰输入（编辑模式）
-  - 统一缩进与多行操作：`Tab` 在编辑/WYSIWYG 两种模式下表现一致
-  - 常用格式化：`Ctrl+B` 加粗、`Ctrl+I` 斜体、`Ctrl+K` 插入链接；精确的行列/光标位置反馈
-  - 编辑/阅读宽度调节：按住 `Shift` + 鼠标滚轮 调整编辑区/阅读区宽度，长文阅读时更容易找到舒适宽度
-  - 所见模式使用`Ctrl+Enter`跳出代码区  
-  **编辑模式使用标准语法，空格X2+回车才会触发提行。未使用标准语法切换到所见模式提行会失效。阅读模式不受影响**  
-  **自动补全仅编辑模式生效**  
-  **因中英文符号的区别，中文输入法可能影响补全体验，建议切换到英文标点**
-- 阅读与大纲
-  - 安全预览：`markdown-it` 渲染 + `highlight.js` 代码高亮 + `DOMPurify` 清洗 HTML，外链自动追加 `target="_blank"` + `rel="noopener"`
-  - 大纲导航：提取 Markdown `H1–H6` 生成可点击目录，高亮当前标题，预览与滚动同步
-  - PDF 书签（Outline）：内置 PDF 阅读与书签大纲，按文件缓存并在修改时自动失效
-- iframe 嵌入支持
-  - 灵活嵌入：支持在 Markdown 中嵌入 iframe 控件，可以嵌入音乐、视频、地图、在线文档等外部网页内容
-  - 简单语法：直接使用 HTML `<iframe>` 标签，支持自定义宽度、高度等属性
-  - 示例用法：
-    ```html
-    <!-- 嵌入 YouTube 视频 -->
-    <iframe width="560" height="315"
-      src="https://www.youtube.com/embed/VIDEO_ID"
-      frameborder="0" allowfullscreen>
-    </iframe>
+### 安装
+从 [Releases](https://github.com/flyhunterl/flymd/releases) 下载对应平台安装包：
+- **Windows**：需安装 WebView2（多数系统已内置）
+- **Linux**：支持主流桌面环境
+- **macOS**：支持 Intel 和 Apple Silicon
 
-    <!-- 嵌入在线文档 -->
-    <iframe width="100%" height="500"
-      src="https://example.com/document"
-      frameborder="0">
-    </iframe>
+### 基本操作
+| 操作 | 快捷键 |
+|------|--------|
+| 新建文件 | `Ctrl+N` |
+| 打开文件 | `Ctrl+O` |
+| 保存文件 | `Ctrl+S` |
+| 另存为 | `Ctrl+Shift+S` |
+| 切换编辑/预览 | `Ctrl+E` |
+| 切换所见模式 | `Ctrl+W` |
+| 快速阅读 | `Ctrl+R` |
+| 加粗 | `Ctrl+B` |
+| 斜体 | `Ctrl+I` |
+| 插入链接 | `Ctrl+K` |
+| 查找替换 | `Ctrl+H` |
 
-    <!-- 嵌入地图 -->
-    <iframe width="600" height="450"
-      src="https://www.openstreetmap.org/export/embed.html"
-      frameborder="0">
-    </iframe>
+### 图片处理
+- **粘贴/拖拽图片**：自动处理并插入
+- **图床上传**：配置 S3/R2 后自动上传并插入公网 URL
+- **本地保存**：未配置图床时自动保存到本地
 
-    <!-- 嵌入网易云音乐 -->
-    <iframe frameborder="no" border="0" marginwidth="0" marginheight="0" width=330 height=86 src="https://music.163.com/outchain/player?type=2&id=1424916458&auto=1&height=66"></iframe>
-    ```
-- 图片与图床
-  - 一步到位：粘贴/拖拽图片自动处理；优先上传至 S3/R2 并插入公网 URL；未配置/失败时回退本地保存
-  - 本地图片就地可见：无需额外配置即可预览
-- 同步（WebDAV 扩展）
-  - 同步可视化：状态提示、过程日志、进度反馈与冲突提示
-  - 远端移动优化：利用 `MOVE` 降低重复下载/上传，优化重命名/移动场景
-- 语言与可用性
-  - 中英双语 + 自动：跟随系统语言或手动切换，记忆用户选择
-  - 位置记忆：每个文件独立记忆上次“阅读/编辑光标/滚动位置”
-- 安全与性能
-  - 本地优先，零后台网络：除非你明确启用（图床、同步等），否则不进行网络访问
-  - 性能优化：冷启动与渲染链路按需加载、静态资源分块、日志可控；目标冷启动 <300ms、预览切换 <16ms（典型 2–3k 行文档）
-## 快速开始
-- 安装
-  - 从发布页下载对应平台安装包并安装；Windows 需安装 WebView2（多数系统已内置）
-- 创建/打开
-  - 新建：`Ctrl+N`；打开：`Ctrl+O`；保存：`Ctrl+S`；另存为：`Ctrl+Shift+S`
-  - 资料库：侧边栏文件树支持新建/重命名/移动/删除与最近文件
-- 模式切换
-  - 编辑模式：`Ctrl+E`；可以用于编辑阅读切换
-  - 快速阅读：`Ctrl+R`
-  - 所见模式：`Ctrl+W`；可以用于所见编辑切换
-- 常用编辑
-  - 加粗/斜体/链接：`Ctrl+B / Ctrl+I / Ctrl+K`；`Esc` 关闭对话框
-  - 图片：粘贴/拖入即可（所见模式不支持拖动）；配置 S3/R2 后自动上传插入 URL；未配置/失败回退本地保存。可选：总是保存到本地
-- 同步（可选）
-  - 在“扩展”里启用 WebDAV，提供 日志/进度/冲突提示；（上线不久仍然完善，记得备份）
-- 语言
-  - 设置中切换 中文/English 或选择 Auto 跟随系统；语言偏好会被记住
-## ⌨️ 快捷键
-
-| 快捷键 | 功能 |
-|--------|------|
-| `Ctrl+N` | 新建文件 |
-| `Ctrl+O` | 打开文件 |
-| `Ctrl+S` | 保存文件 |
-| `Ctrl+H` | 查找替换 |
-| `Ctrl+Shift+S` | 另存为 |
-| `Ctrl+E` | 切换编辑/预览 |
-| `Ctrl+R` | 进入阅读（预览） |
-| `Ctrl+W` | 开/关所见模式 |
-| `Escape` | 预览或弹窗下关闭/返回 |
-| `Ctrl+B` | 加粗 |
-| `Ctrl+I` | 斜体 |
-| `Ctrl+K` | 插入链接 |
+### 同步功能（可选）
+在"扩展"中启用 WebDAV，支持：
+- 多设备数据同步
+- 实时状态提示
+- 冲突检测与处理
 
 ## 🔌 扩展开发
 
-flyMD 支持通过扩展插件来增强功能。你可以：
-
-- 开发自定义扩展插件
-- 从 GitHub 或 HTTP URL 安装插件
+FlyMD 支持通过扩展插件增强功能：
+- 开发自定义扩展
+- 从 GitHub 或 HTTP URL 安装
 - 管理已安装的扩展
 
-详细开发指南请参阅：
+📚 开发文档：
 - [扩展开发文档 (中文)](plugin.md)
 - [Extension Development Documentation (English)](plugin.en.md)
 
-**示例插件：**
-- [Typecho Publisher](https://github.com/TGU-HansJack/typecho-publisher-flymd) - 将文章发布到 Typecho 博客平台
-- 代办事项推送扩展 - 将未完成的 TODO 按设定时间通过微信、短信或邮箱推送给指定人员
+### 示例扩展
+- **AI 写作助手** - 智能写作、内容润色、语法检查
+- **Typecho Publisher** - 一键发布到 Typecho 博客
+- **待办事项推送** - 将 TODO 推送到微信、短信、邮箱等
+- **批量导出 PDF** - 批量将 Markdown 导出为 PDF
+- **字数统计** - 实时显示字符数、单词数、阅读时间
 
+## 📊 性能指标
 
-## 📊 性能指标（目标）
+- ⚡ **冷启动**：≤ 300ms
+- 📦 **安装包体积**：≤ 10MB
+- 💾 **常驻内存**：≤ 50MB
+- 🔄 **预览切换**：≤ 16ms
 
-- 冷启动：≤ 300ms
-- 安装包体积：≤ 10MB
-- 常驻内存：≤ 50MB
-- 预览切换：≤ 16ms
+## 🗺️ 路线图
 
-## 路线图[更新记录]
+详见：[ROADMAP.md](ROADMAP.md)
 
-详见: [ROADMAP.md](ROADMAP.md)
+## ⭐ Star History
 
-### 跨平台支持
-- [x] Windows 10/11
-- [x] Linux（桌面环境）
-- [x] MacOS 
+[![Star History Chart](https://api.star-history.com/svg?repos=flyhunterl/flymd&type=date&legend=top-left)](https://www.star-history.com/#flyhunterl/flymd&type=date&legend=top-left)
 
+## 📄 许可协议
+
+本项目采用"飞速MarkDown（flyMD）非商业开源许可协议（NC 1.0）"。
+
+- ✅ **允许**：非商业使用、修改、复制与再分发（需保留署名）
+- ❌ **禁止**：未经授权的商业使用
+
+商业授权请联系：flyhunterl <flyhunterl@gmail.com>
+
+完整许可证：[LICENSE](LICENSE) | 第三方组件：[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
+
+## 🙏 致谢
+
+- [Tauri](https://tauri.app/) - 跨平台框架
+- [MilkDown](https://milkdown.dev/) - 所见所得编辑器
+- [markdown-it](https://github.com/markdown-it/markdown-it) - Markdown 渲染
+- [DOMPurify](https://github.com/cure53/DOMPurify) - HTML 安全清洗
+- [highlight.js](https://highlightjs.org/) - 代码高亮
+- [KaTeX](https://katex.org/) - 数学公式渲染
+- [Mermaid](https://mermaid.js.org/) - 图表绘制
 
 ## 🤝 贡献指南
 
 欢迎提交 Issue 和 Pull Request！
 
-## 📄 许可与合规
+## ❓ 常见问题
 
-- 本项目采用“飞速MarkDown（flyMD）非商业开源许可协议（NC 1.0）”。
-- 允许：在非商业前提下自由使用、修改、复制与再分发；必须保留署名与来源。
-- 商业使用：未经书面授权禁止。商业授权请联系：flyhunterl <flyhunterl@gmail.com>。
-- 许可全文见：[LICENSE](LICENSE)（附英文翻译，中文为主版本）
-- 第三方组件许可见：[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
-
-## 🙏 致谢
-- [MilkDown](https://milkdown.dev/)
-- [Tauri](https://tauri.app/)
-- [markdown-it](https://github.com/markdown-it/markdown-it)
-- [DOMPurify](https://github.com/cure53/DOMPurify)
-- [highlight.js](https://highlightjs.org/)
-- [KaTeX](https://katex.org/)
-- [Mermaid](https://mermaid.js.org/)
-
-## 常见问题 (Linux)
-
-- [Arch 遇到程序打开空白的解决方法](arch.md)
-
+- [Arch Linux 空白页面解决方法](arch.md)
 
 ## 开源不易
 
 <img width="300" height="300" alt="image" src="https://github.com/user-attachments/assets/4a716fd5-dc61-4a4f-b968-91626debe8d2" />
-
