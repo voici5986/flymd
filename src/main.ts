@@ -5750,25 +5750,49 @@ function initFocusModeEvents() {
   })
 }
 
-// 更新专注模式下侧栏背景色：跟随编辑区背景色
+// 更新专注模式下侧栏背景色：跟随编辑区背景色和网格设置
 function updateFocusSidebarBg() {
   const library = document.querySelector('.library') as HTMLElement | null
   if (!library) return
 
-  // 如果不是专注模式，移除自定义背景色，使用默认
+  // 如果不是专注模式，移除自定义背景色和网格，使用默认
   if (!focusMode) {
     library.style.removeProperty('background')
+    library.style.removeProperty('background-image')
+    library.style.removeProperty('background-size')
+    library.style.removeProperty('background-position')
     const header = library.querySelector('.lib-header') as HTMLElement | null
-    if (header) header.style.removeProperty('background')
+    if (header) {
+      header.style.removeProperty('background')
+      header.style.removeProperty('background-image')
+      header.style.removeProperty('background-size')
+      header.style.removeProperty('background-position')
+    }
     return
   }
 
   // 专注模式下，获取编辑区的实际背景色
   let bgColor = '#ffffff' // 默认白色
+  let hasGrid = false
 
-  // 尝试从编辑器容器获取背景色
+  // 检查容器是否有网格背景
+  const container = document.querySelector('.container') as HTMLElement | null
+  if (container) {
+    hasGrid = container.classList.contains('edit-grid-bg')
+
+    // 根据当前模式获取对应的背景色
+    const computedStyle = window.getComputedStyle(container)
+
+    // 优先获取容器的背景色
+    const containerBg = computedStyle.backgroundColor
+    if (containerBg && containerBg !== 'transparent' && containerBg !== 'rgba(0, 0, 0, 0)') {
+      bgColor = containerBg
+    }
+  }
+
+  // 如果容器背景色无效，尝试从编辑器获取
   const editor = document.querySelector('.editor') as HTMLElement | null
-  if (editor) {
+  if (editor && bgColor === '#ffffff') {
     const computedStyle = window.getComputedStyle(editor)
     const editorBg = computedStyle.backgroundColor
     // 如果获取到有效的背景色（不是透明），使用它
@@ -5777,22 +5801,36 @@ function updateFocusSidebarBg() {
     }
   }
 
-  // 如果编辑器背景色无效，尝试从容器获取
-  if (bgColor === '#ffffff') {
-    const container = document.querySelector('.container') as HTMLElement | null
-    if (container) {
-      const computedStyle = window.getComputedStyle(container)
-      const containerBg = computedStyle.backgroundColor
-      if (containerBg && containerBg !== 'transparent' && containerBg !== 'rgba(0, 0, 0, 0)') {
-        bgColor = containerBg
-      }
-    }
-  }
+  const header = library.querySelector('.lib-header') as HTMLElement | null
 
   // 应用背景色到库侧栏
-  library.style.background = bgColor
-  const header = library.querySelector('.lib-header') as HTMLElement | null
-  if (header) header.style.background = bgColor
+  if (hasGrid && mode === 'edit' && !wysiwyg) {
+    // 只在编辑模式（非所见）下应用网格背景
+    library.style.background = bgColor
+    library.style.backgroundImage = 'linear-gradient(rgba(127,127,127,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(127,127,127,0.08) 1px, transparent 1px)'
+    library.style.backgroundSize = '20px 20px'
+    library.style.backgroundPosition = '-1px -1px'
+
+    if (header) {
+      header.style.background = 'transparent'
+      header.style.backgroundImage = 'none'
+      header.style.backgroundSize = 'unset'
+      header.style.backgroundPosition = 'unset'
+    }
+  } else {
+    // 没有网格或不是编辑模式，只应用纯色背景
+    library.style.background = bgColor
+    library.style.removeProperty('background-image')
+    library.style.removeProperty('background-size')
+    library.style.removeProperty('background-position')
+
+    if (header) {
+      header.style.background = bgColor
+      header.style.removeProperty('background-image')
+      header.style.removeProperty('background-size')
+      header.style.removeProperty('background-position')
+    }
+  }
 }
 
 // 监听模式切换事件，更新专注模式侧栏背景

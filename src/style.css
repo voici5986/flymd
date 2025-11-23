@@ -609,8 +609,9 @@ html, body {
   width: auto;
 }
 .container.wysiwyg-v2 #md-wysiwyg-root {
-  left: 0;
-  right: 0;
+  left: var(--workspace-left-gap, 0px);
+  right: var(--workspace-right-gap, 0px);
+  width: auto;
 }
 .container.wysiwyg-v2 #md-wysiwyg-root { display: block; }
 .container.wysiwyg-v2-loading #md-wysiwyg-root { display: none; }
