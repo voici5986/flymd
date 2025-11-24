@@ -235,7 +235,7 @@ html, body {
   position: absolute;
   left: 0;
   top: 0;
-  min-width: 220px;
+  min-width: 120px;
   background: var(--bg);
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -253,8 +253,9 @@ html, body {
   }
 }
 
-#plugin-dropdown-panel button {
-  width: 100%;
+#plugin-dropdown-panel button,
+#plugin-dropdown-panel .plugin-menu-item {
+  width: auto;
   text-align: left;
   border: none;
   background: transparent;
@@ -262,9 +263,7 @@ html, body {
   color: var(--fg);
   padding: 8px 16px;
   cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: block;
 }
 
 #plugin-dropdown-panel button:hover:not(:disabled) {
@@ -312,7 +311,6 @@ html, body {
 
 /* 插件菜单 - 通用菜单项样式 */
 .plugin-menu-item {
-  width: 100%;
   text-align: left;
   border: none;
   background: transparent;
@@ -320,9 +318,7 @@ html, body {
   color: var(--fg);
   padding: 8px 16px;
   cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: block;
   position: relative;
 }
 
@@ -360,7 +356,7 @@ html, body {
 .plugin-menu-submenu {
   display: none;
   position: absolute;
-  left: calc(100% - 4px);
+  left: 100%;
   top: -4px;
   background: var(--bg);
   border: 1px solid #e2e8f0;
@@ -384,7 +380,7 @@ html, body {
 /* 向左展开的子菜单 */
 .plugin-menu-submenu.expand-left {
   left: auto;
-  right: calc(100% - 4px);
+  right: 100%;
 }
 
 /* 父菜单项悬停时显示子菜单 */
