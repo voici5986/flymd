@@ -29,6 +29,7 @@ let __AI_TOGGLE_LOCK__ = false
 let __AI_MQ_BOUND__ = false
 let __AI_MENU_ITEM__ = null // 保存菜单项引用，用于卸载时清理
 let __AI_CTX_MENU_DISPOSER__ = null // 保存右键菜单清理函数
+let __AI_IS_FREE_MODE__ = false // 缓存免费模式状态，供右键菜单 condition 同步读取
 
 // ========== 工具函数 ==========
 async function loadCfg(context) {
@@ -37,10 +38,12 @@ async function loadCfg(context) {
     const cfg = { ...DEFAULT_CFG, ...(s || {}) }
     // 兼容旧配置：将 dock: true 转换为 'left'
     if (cfg.dock === true) cfg.dock = 'left'
+    // 更新免费模式缓存
+    __AI_IS_FREE_MODE__ = cfg.provider === 'free'
     return cfg
   } catch { return { ...DEFAULT_CFG } }
 }
-async function saveCfg(context, cfg) { try { await context.storage.set(CFG_KEY, cfg) } catch {} }
+async function saveCfg(context, cfg) { try { await context.storage.set(CFG_KEY, cfg); __AI_IS_FREE_MODE__ = cfg.provider === 'free' } catch {} }
 async function loadSession(context) { try { const s = await context.storage.get(SES_KEY); return s && typeof s === 'object' ? s : { messages: [] } } catch { return { messages: [] } } }
 async function saveSession(context, ses) { try { await context.storage.set(SES_KEY, ses) } catch {} }
 
@@ -1382,12 +1385,18 @@ export async function openSettings(context){
         }
       }
     } catch {}
+    // 刷新界面显示（免费模式切换等）
+    await refreshHeader(context)
     close()
   })
 }
 
 // ========== 插件主入口 ==========
 export async function activate(context) {
+  // 预加载配置（在注册菜单前，以便 condition 能正确读取免费模式状态）
+  try { const cfg = await loadCfg(context); await saveCfg(context, cfg) } catch {}
+  try { __AI_SESSION__ = await loadSession(context) } catch {}
+
   // 菜单：AI 助手（显示/隐藏）
   __AI_MENU_ITEM__ = context.addMenuItem({ label: 'AI 助手', title: '打开 AI 写作助手', onClick: async () => { await toggleWindow(context) } })
 
@@ -1474,6 +1483,14 @@ export async function activate(context) {
             onClick: async () => {
               await toggleWindow(context)
             }
+          },
+          {
+            label: 'Powered by SiliconFlow',
+            icon: '⚡',
+            condition: () => __AI_IS_FREE_MODE__,
+            onClick: () => {
+              window.open('https://cloud.siliconflow.cn/i/X96CT74a', '_blank')
+            }
           }
         ]
       })
@@ -1481,10 +1498,6 @@ export async function activate(context) {
       console.error('AI 助手右键菜单注册失败：', e)
     }
   }
-
-  // 预加载配置与会话
-  try { const cfg = await loadCfg(context); await saveCfg(context, cfg) } catch {}
-  try { __AI_SESSION__ = await loadSession(context) } catch {}
 }
 
 export function deactivate(){
