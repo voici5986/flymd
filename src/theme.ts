@@ -223,17 +223,24 @@ function createPanel(): HTMLDivElement {
   panel.innerHTML = `
     <div class="theme-section theme-focus-section">
       <div class="theme-focus-row">
-        <label class="theme-toggle-label theme-toggle-half theme-toggle-boxed" for="focus-mode-toggle">
-          <span class="theme-toggle-text">专注模式 <span class="theme-toggle-shortcut">Ctrl+Shift+F</span></span>
+        <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="focus-mode-toggle">
+          <span class="theme-toggle-text">专注模式</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="focus-mode-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
           </div>
         </label>
-        <label class="theme-toggle-label theme-toggle-half theme-toggle-boxed" for="wysiwyg-default-toggle">
-          <span class="theme-toggle-text">默认使用所见模式</span>
+        <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="wysiwyg-default-toggle">
+          <span class="theme-toggle-text">所见模式</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="wysiwyg-default-toggle" class="theme-toggle-input" />
+            <span class="theme-toggle-slider"></span>
+          </div>
+        </label>
+        <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="dark-mode-toggle">
+          <span class="theme-toggle-text">夜间模式</span>
+          <div class="theme-toggle-switch">
+            <input type="checkbox" id="dark-mode-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
           </div>
         </label>
@@ -688,6 +695,35 @@ export function initThemeUI(): void {
       // 监听开关变化
       wysiwygDefaultToggle.addEventListener('change', () => {
         setWysiwygDefault(wysiwygDefaultToggle.checked)
+      })
+    }
+
+    // 夜间模式开关
+    const darkModeToggle = panel.querySelector('#dark-mode-toggle') as HTMLInputElement | null
+    if (darkModeToggle) {
+      const DARK_MODE_KEY = 'flymd:darkmode'
+      const getDarkMode = (): boolean => {
+        try {
+          const v = localStorage.getItem(DARK_MODE_KEY)
+          return v === 'true'
+        } catch { return false }
+      }
+      const setDarkMode = (enabled: boolean) => {
+        try {
+          localStorage.setItem(DARK_MODE_KEY, enabled ? 'true' : 'false')
+          document.body.classList.toggle('dark-mode', enabled)
+          // 触发事件，通知其他组件
+          const ev = new CustomEvent('flymd:darkmode:changed', { detail: { enabled } })
+          window.dispatchEvent(ev)
+        } catch {}
+      }
+      // 初始化开关状态
+      const isDark = getDarkMode()
+      darkModeToggle.checked = isDark
+      document.body.classList.toggle('dark-mode', isDark)
+      // 监听开关变化
+      darkModeToggle.addEventListener('change', () => {
+        setDarkMode(darkModeToggle.checked)
       })
     }
 

@@ -1663,8 +1663,17 @@ body.focus-mode .lib-float-toggle.show { display: flex; }
   gap: 8px;
 }
 
+.theme-toggle-label.theme-toggle-third {
+  width: calc(33.33% - 5px);
+  gap: 4px;
+}
+
 .theme-toggle-label.theme-toggle-half .theme-toggle-text {
   font-size: 13px;
+}
+
+.theme-toggle-label.theme-toggle-third .theme-toggle-text {
+  font-size: 12px;
 }
 
 .theme-toggle-label.theme-toggle-boxed {
@@ -3787,6 +3796,461 @@ textarea:focus {
 
 #find-replace-panel[data-mode="find-only"] #btn-close-find {
   margin-left: 8px !important;
+}
+
+/* ========== 夜间模式 ========== */
+body.dark-mode {
+  --bg: #0b0c0e;
+  --fg: #e5e7eb;
+  --preview-bg: #12100d;
+  --wysiwyg-bg: #0b1016;
+  --border: #2d3748;
+  --border-strong: #4a5568;
+  --muted: #9ca3af;
+  --code-bg: #0f1114;
+  --code-border: #1f2937;
+  --code-fg: #e5e7eb;
+}
+
+/* 夜间模式 - 标题栏和菜单 */
+body.dark-mode .menubar {
+  background: #0f1114 !important;
+  border-bottom-color: #2d3748 !important;
+}
+
+body.dark-mode .menubar .menu-item,
+body.dark-mode .menubar .menu-btn {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .menubar .menu-item:hover,
+body.dark-mode .menubar .menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* 夜间模式 - 侧边栏/库管理 */
+body.dark-mode .sidebar,
+body.dark-mode .library-sidebar,
+body.dark-mode .file-tree,
+body.dark-mode [class*="sidebar"],
+body.dark-mode [class*="library"],
+body.dark-mode [class*="lib-"],
+body.dark-mode .left-panel,
+body.dark-mode .panel-left,
+body.dark-mode [class*="left-panel"],
+body.dark-mode [class*="panel-left"],
+body.dark-mode .container > div:first-child {
+  background: #0f1114 !important;
+  border-color: #2d3748 !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .sidebar-item,
+body.dark-mode .tree-item,
+body.dark-mode .file-item,
+body.dark-mode .folder-item,
+body.dark-mode [class*="tree-"] span,
+body.dark-mode [class*="file-"] span,
+body.dark-mode [class*="library"] span,
+body.dark-mode [class*="sidebar"] span {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .sidebar-item:hover,
+body.dark-mode .tree-item:hover,
+body.dark-mode .file-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+body.dark-mode .sidebar-item.active,
+body.dark-mode .tree-item.active,
+body.dark-mode .file-item.active {
+  background: rgba(37, 99, 235, 0.2) !important;
+  color: #93c5fd !important;
+}
+
+/* 夜间模式 - 库管理按钮和顶部操作栏 */
+body.dark-mode .library-actions button,
+body.dark-mode [class*="library"] button,
+body.dark-mode .sidebar-header button,
+body.dark-mode .sidebar-actions button,
+body.dark-mode .tree-actions button,
+body.dark-mode [class*="sidebar"] button {
+  background: transparent !important;
+  color: #e5e7eb !important;
+  border-color: #374151 !important;
+}
+
+body.dark-mode .library-actions button:hover,
+body.dark-mode [class*="library"] button:hover,
+body.dark-mode .sidebar-header button:hover,
+body.dark-mode [class*="sidebar"] button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-mode .library-actions button.active,
+body.dark-mode [class*="library"] button.active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+body.dark-mode .library-actions span,
+body.dark-mode .sidebar-header span,
+body.dark-mode [class*="library"] > span,
+body.dark-mode [class*="sidebar-header"] span,
+body.dark-mode [class*="library"] span,
+body.dark-mode [class*="library"] div,
+body.dark-mode [class*="library"] input,
+body.dark-mode .library-name,
+body.dark-mode .folder-name,
+body.dark-mode .current-library,
+body.dark-mode [class*="current"] {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode [class*="library"] input {
+  background: transparent !important;
+  border-color: #374151 !important;
+}
+
+/* 夜间模式 - 库管理顶部标签/输入框 */
+body.dark-mode .library-tabs,
+body.dark-mode .library-header,
+body.dark-mode [class*="library-header"],
+body.dark-mode [class*="library-tabs"] {
+  background: #0f1114 !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .library-tabs button,
+body.dark-mode .library-header button {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .library-tabs button:hover,
+body.dark-mode .library-header button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-mode .library-tabs button.active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+/* 夜间模式 - 所见模式(WYSIWYG/ProseMirror) */
+body.dark-mode .ProseMirror,
+body.dark-mode .wysiwyg,
+body.dark-mode [class*="wysiwyg"] {
+  background: #0b1016 !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .ProseMirror p,
+body.dark-mode .ProseMirror h1,
+body.dark-mode .ProseMirror h2,
+body.dark-mode .ProseMirror h3,
+body.dark-mode .ProseMirror h4,
+body.dark-mode .ProseMirror h5,
+body.dark-mode .ProseMirror h6,
+body.dark-mode .ProseMirror li,
+body.dark-mode .ProseMirror span {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .ProseMirror code {
+  background: #1f2937 !important;
+  color: #f3f4f6 !important;
+}
+
+body.dark-mode .ProseMirror pre {
+  background: #0f1114 !important;
+  border-color: #2d3748 !important;
+}
+
+body.dark-mode .ProseMirror blockquote {
+  border-left-color: #4b5563 !important;
+  color: #9ca3af !important;
+}
+
+body.dark-mode .ProseMirror a {
+  color: #60a5fa !important;
+}
+
+body.dark-mode .ProseMirror table th,
+body.dark-mode .ProseMirror table td {
+  border-color: #374151 !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .ProseMirror table th {
+  background: #1f2937 !important;
+}
+
+body.dark-mode .ProseMirror hr {
+  border-color: #374151 !important;
+}
+
+body.dark-mode .ProseMirror img {
+  border-color: #374151 !important;
+}
+
+/* 夜间模式 - 主题面板 */
+body.dark-mode .theme-panel {
+  background: #1a1b1e !important;
+  border-color: #2d3748 !important;
+}
+
+body.dark-mode .theme-title,
+body.dark-mode .theme-toggle-text {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .theme-toggle-label.theme-toggle-boxed {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-mode .theme-toggle-label.theme-toggle-boxed:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+body.dark-mode .theme-swatch {
+  border-color: #4a5568 !important;
+}
+
+body.dark-mode .typo-btn,
+body.dark-mode .md-btn {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+  border-color: #374151 !important;
+}
+
+body.dark-mode .typo-btn:hover,
+body.dark-mode .md-btn:hover {
+  background: #374151 !important;
+}
+
+body.dark-mode .typo-btn.active,
+body.dark-mode .md-btn.active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+body.dark-mode .theme-fonts select {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+  border-color: #374151 !important;
+}
+
+body.dark-mode .theme-fonts label {
+  color: #e5e7eb !important;
+}
+
+/* 夜间模式 - 各种弹窗 */
+body.dark-mode .modal,
+body.dark-mode .dialog,
+body.dark-mode [class*="modal"],
+body.dark-mode [class*="dialog"],
+body.dark-mode [class*="popup"] {
+  background: #1a1b1e !important;
+  color: #e5e7eb !important;
+  border-color: #2d3748 !important;
+}
+
+body.dark-mode .modal-header,
+body.dark-mode .dialog-header {
+  color: #f3f4f6 !important;
+  border-bottom-color: #2d3748 !important;
+}
+
+body.dark-mode .modal-body,
+body.dark-mode .dialog-body {
+  color: #e5e7eb !important;
+}
+
+/* 夜间模式 - 表单元素 */
+body.dark-mode input[type="text"],
+body.dark-mode input[type="password"],
+body.dark-mode input[type="email"],
+body.dark-mode input[type="url"],
+body.dark-mode input[type="number"],
+body.dark-mode textarea,
+body.dark-mode select {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+  border-color: #374151 !important;
+}
+
+body.dark-mode input::placeholder,
+body.dark-mode textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+body.dark-mode input:focus,
+body.dark-mode textarea:focus,
+body.dark-mode select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* 夜间模式 - 按钮 */
+body.dark-mode button:not(.typo-btn):not(.md-btn) {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+  border-color: #374151 !important;
+}
+
+body.dark-mode button:not(.typo-btn):not(.md-btn):hover {
+  background: #374151 !important;
+}
+
+/* 夜间模式 - 图床设置弹窗 */
+body.dark-mode .s3-modal,
+body.dark-mode [class*="s3-"],
+body.dark-mode [class*="image-host"] {
+  background: #1a1b1e !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .s3-modal h2,
+body.dark-mode .s3-modal h3,
+body.dark-mode .s3-modal label {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .s3-modal .tip,
+body.dark-mode .s3-modal .hint,
+body.dark-mode .s3-modal small {
+  color: #9ca3af !important;
+}
+
+/* 夜间模式 - 查找替换面板 */
+body.dark-mode #find-replace-panel {
+  background: #1a1b1e !important;
+  border-color: #2d3748 !important;
+}
+
+body.dark-mode #find-replace-panel input {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+  border-color: #374151 !important;
+}
+
+body.dark-mode #find-replace-panel label {
+  color: #e5e7eb !important;
+}
+
+/* 夜间模式 - 链接颜色 */
+body.dark-mode a {
+  color: #60a5fa !important;
+}
+
+body.dark-mode a:hover {
+  color: #93c5fd !important;
+}
+
+/* 夜间模式 - 滚动条 */
+body.dark-mode ::-webkit-scrollbar-track {
+  background: #1f2937 !important;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb {
+  background: #4b5563 !important;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background: #6b7280 !important;
+}
+
+/* 夜间模式 - AI助手窗口 */
+body.dark-mode .ai-assistant,
+body.dark-mode [class*="ai-"] {
+  background: #1a1b1e !important;
+  color: #e5e7eb !important;
+  border-color: #2d3748 !important;
+}
+
+body.dark-mode .ai-assistant input,
+body.dark-mode .ai-assistant textarea {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+}
+
+/* 夜间模式 - 容器覆盖 */
+body.dark-mode .container {
+  --bg: #0b0c0e;
+  --fg: #e5e7eb;
+  --preview-bg: #12100d;
+  --wysiwyg-bg: #0b1016;
+  background: #0b0c0e !important;
+}
+
+/* 夜间模式 - 编辑区域整体背景（包括左右空白） */
+body.dark-mode .editor-wrapper,
+body.dark-mode .editor-container,
+body.dark-mode .edit-pane,
+body.dark-mode [class*="editor"],
+body.dark-mode [class*="edit-"] {
+  background: #0b0c0e !important;
+}
+
+/* 夜间模式 - 编辑器 */
+body.dark-mode .CodeMirror {
+  background: #0b0c0e !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .CodeMirror-scroll {
+  background: #0b0c0e !important;
+}
+
+body.dark-mode .CodeMirror-gutters {
+  background: #0f1114 !important;
+  border-color: #2d3748 !important;
+}
+
+body.dark-mode .CodeMirror-linenumber {
+  color: #6b7280 !important;
+}
+
+body.dark-mode .CodeMirror-cursor {
+  border-left-color: #e5e7eb !important;
+}
+
+/* 夜间模式 - 预览区域 */
+body.dark-mode .preview,
+body.dark-mode .preview-body {
+  background: #12100d !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .preview code {
+  background: #1f2937 !important;
+  color: #f3f4f6 !important;
+}
+
+body.dark-mode .preview pre {
+  background: #0f1114 !important;
+  border-color: #2d3748 !important;
+}
+
+body.dark-mode .preview blockquote {
+  border-left-color: #4b5563 !important;
+  color: #9ca3af !important;
+}
+
+body.dark-mode .preview table th,
+body.dark-mode .preview table td {
+  border-color: #374151 !important;
+}
+
+body.dark-mode .preview table th {
+  background: #1f2937 !important;
+}
+
+body.dark-mode .preview hr {
+  border-color: #374151 !important;
 }
 
 /* 深色模式优化 */
