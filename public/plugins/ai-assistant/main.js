@@ -662,11 +662,11 @@ async function refreshHeader(context){
     const freeModelSelect = el('ai-free-model')
     if (modelLabel) modelLabel.style.display = isFree ? 'none' : ''
     if (modelInput) modelInput.style.display = isFree ? 'none' : ''
+    if (freeModelLabel) freeModelLabel.style.display = isFree ? 'inline-block' : 'none'
     if (freeModelSelect) {
-      freeModelSelect.style.display = isFree ? '' : 'none'
+      freeModelSelect.style.display = isFree ? 'inline-block' : 'none'
       if (isFree) freeModelSelect.value = normalizeFreeModelKey(cfg.freeModel)
     }
-    if (freeModelLabel) freeModelLabel.style.display = isFree ? '' : 'none'
     if (modelPowered && modelPoweredImg) {
       modelPowered.style.display = isFree ? 'inline-block' : 'none'
       if (isFree) {
@@ -810,7 +810,8 @@ async function mountWindow(context){
     '    <label class="toggle-switch"><input type="checkbox" id="ai-provider-toggle"/><span class="toggle-slider"></span></label>',
     '    <span class="mode-label" id="mode-label-free-toolbar">免费</span>',
     '   </div>',
-    '   <select id="ai-free-model" title="选择免费模型" style="display:none;width:90px;margin-left:8px;background:#fff;border:1px solid #e5e7eb;color:#0f172a;border-radius:8px;padding:6px 8px;"><option value="qwen">Qwen</option><option value="glm">GLM</option></select>',
+    '   <label id="ai-free-model-label" style="display:none;font-size:13px;color:#6b7280;white-space:nowrap;margin-left:8px;">模型</label>',
+    '   <select id="ai-free-model" title="选择免费模型" style="display:none;width:90px;background:#fff;border:1px solid #e5e7eb;color:#0f172a;border-radius:8px;padding:6px 8px;"><option value="qwen">Qwen</option><option value="glm">GLM</option></select>',
     '   <div id="ai-selects">',
     '    <label id="ai-model-label">模型</label>',
     '    <input id="ai-model" placeholder="如 gpt-4o-mini" style="width:140px"/>',
