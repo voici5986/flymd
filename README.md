@@ -2,7 +2,8 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-[![Version](https://img.shields.io/badge/version-v0.4.0-blue.svg)](https://github.com/flyhunterl/flymd)
+[![GitHub Release](https://img.shields.io/github/v/release/flyhunterl/flymd)](https://github.com/flyhunterl/flymd/releases/latest)
+[![Build](https://github.com/flyhunterl/flymd/actions/workflows/build.yml/badge.svg)](https://github.com/flyhunterl/flymd/actions/workflows/build.yml)
 [![License](https://img.shields.io/badge/license-NonCommercial-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyhunterl/flymd)
 [![winget](https://img.shields.io/badge/winget-flyhunterl.FlyMD-blue)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/f/flyhunterl/FlyMD)
