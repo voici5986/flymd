@@ -2,7 +2,12 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
-## Update v0.4.2 
+## Update v0.4.3
+- Improved: macOS build upgraded to Universal Binary—single installer supports both Intel and Apple Silicon with native performance for each architecture
+- Improved: Resolved build failure caused by GitHub Actions deprecating macos-13 runner
+- Improved: Simplified macOS release process—users no longer need to distinguish between Intel and ARM versions
+
+## Update v0.4.2
 - Added: Multi-tab editing with `Ctrl+T` new tab, `Ctrl+Tab / Ctrl+Shift+Tab` tab cycling, plus `Ctrl + Left Click` to open docs in background tabs for parallel editing
 - Added: Library sidebar now has dedicated rename/delete shortcuts so hopping between files in the new tab system no longer requires constant mouse travel
 - Added: WYSIWYG code blocks gain a one-tap copy button, making it easier to share snippets or paste commands elsewhere
