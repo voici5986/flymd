@@ -17,10 +17,20 @@ let initialized = false
 let pauseWatcher = false
 let pauseWatcherTimeout: ReturnType<typeof setTimeout> | null = null
 
+// 暂停 dirty 同步（切换标签时避免误触发）
+let pauseDirtySync = false
+let pauseDirtySyncTimeout: ReturnType<typeof setTimeout> | null = null
+
 function pausePathWatcher(duration = 1000): void {
   pauseWatcher = true
   if (pauseWatcherTimeout) clearTimeout(pauseWatcherTimeout)
   pauseWatcherTimeout = setTimeout(() => { pauseWatcher = false }, duration)
+}
+
+function pauseDirtySyncFor(duration = 500): void {
+  pauseDirtySync = true
+  if (pauseDirtySyncTimeout) clearTimeout(pauseDirtySyncTimeout)
+  pauseDirtySyncTimeout = setTimeout(() => { pauseDirtySync = false }, duration)
 }
 
 // 获取 window 上暴露的 flymd 函数
@@ -258,6 +268,9 @@ function createHooks(): TabManagerHooks {
     },
 
     setEditorContent: (content: string) => {
+      // 暂停 dirty 同步，避免设置内容时触发 input 事件导致误判为已修改
+      pauseDirtySyncFor(500)
+
       const editor = document.getElementById('editor') as HTMLTextAreaElement
       if (editor) {
         editor.value = content
@@ -550,22 +563,33 @@ function hookKeyboardShortcuts(): void {
  */
 function setupDirtySync(): void {
   const flymd = getFlymd()
+  let lastMainDirty = false  // 跟踪上次的 dirty 状态
 
   // 监听编辑模式的输入
   const editor = document.getElementById('editor') as HTMLTextAreaElement
   if (editor) {
     editor.addEventListener('input', () => {
+      // 切换标签时暂停 dirty 同步，避免 restoreTabState 触发误判
+      if (pauseDirtySync) return
       tabManager.markCurrentTabDirty()
     })
   }
 
   // 定期同步 main.ts 的 dirty 状态到当前标签（处理所见模式等情况）
+  // 只在 dirty 状态从 false 变为 true 时才同步（检测变化而非状态）
   setInterval(() => {
+    // 切换标签时暂停 dirty 同步
+    if (pauseDirtySync) return
+
     const mainDirty = flymd.flymdIsDirty?.() ?? false
     const currentTab = tabManager.getActiveTab()
-    if (currentTab && mainDirty && !currentTab.dirty) {
+
+    // 只有当 main.ts 的 dirty 从 false 变为 true 时，才标记标签为 dirty
+    if (currentTab && mainDirty && !lastMainDirty && !currentTab.dirty) {
       tabManager.markCurrentTabDirty()
     }
+
+    lastMainDirty = mainDirty
   }, 200)
 }
 
