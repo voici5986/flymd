@@ -289,7 +289,7 @@ function ensureCss() {
   css.id = 'ai-assist-style'
   css.textContent = [
     // 容器（浅色友好 UI）；默认走 dock-left 模式（伪装侧栏）
-    '#ai-assist-win{position:fixed;z-index:99999;background:#ffffff;color:#0f172a;',
+    '#ai-assist-win{position:fixed;z-index:5000;background:#ffffff;color:#0f172a;',
     'border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.15);overflow:hidden}',
     '#ai-assist-win.dock-left{left:0; top:0; height:100vh; width:400px; border-radius:0; border-left:none; border-top:none; border-bottom:none; box-shadow:none; border-right:1px solid #e5e7eb}',
     '#ai-assist-win.dock-right{right:0; top:0; height:100vh; width:400px; border-radius:0; border-right:none; border-top:none; border-bottom:none; box-shadow:none; border-left:1px solid #e5e7eb}',
@@ -338,7 +338,7 @@ function ensureCss() {
     '#ai-assist-win.dock-right #ai-resizer{display:none}',
     '#ai-assist-win:not(.dock-left):not(.dock-right) #ai-vresizer{display:none}',
     // 设置面板（内置模态）
-    '#ai-set-overlay{position:absolute;inset:0;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;z-index:2147483000}',
+    '#ai-set-overlay{position:absolute;inset:0;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;z-index:5100}',
     '#ai-set-dialog{width:520px;max-width:92vw;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.18);overflow:hidden}',
     '#ai-set-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb}',
     '#ai-set-title{font-weight:600}',
