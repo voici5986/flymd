@@ -224,6 +224,7 @@ Full License: [LICENSE](LICENSE) | Third-Party Components: [THIRD-PARTY-NOTICES.
     </picture>
   </a>
 </div>
+
 ## 🤝 Contributing
 
 Issues and Pull Requests are welcome!
