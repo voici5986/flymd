@@ -732,10 +732,6 @@ export function initThemeUI(): void {
     if (btn) {
       btn.addEventListener('click', () => {
         try {
-          // 将面板对齐到右上角，靠近按钮区域
-          panel!.style.left = 'auto'
-          panel!.style.right = '10px'
-          panel!.style.top = '38px'
           const wasHidden = panel!.classList.contains('hidden')
           panel!.classList.toggle('hidden')
           // 面板关闭时，确保预览被还原为已保存值
@@ -767,6 +763,25 @@ export function initThemeUI(): void {
           }
         } catch {}
         panel.classList.add('hidden')
+      } catch {}
+    })
+
+    // ESC 键关闭
+    document.addEventListener('keydown', (ev) => {
+      try {
+        if (ev.key === 'Escape' && panel && !panel.classList.contains('hidden')) {
+          // 关闭前先还原所有预览变量
+          try {
+            const c = getContainer(); if (c) {
+              c.style.setProperty('--bg', lastSaved.editBg)
+              c.style.setProperty('--preview-bg', lastSaved.readBg)
+              c.style.setProperty('--wysiwyg-bg', lastSaved.wysiwygBg)
+            }
+          } catch {}
+          panel.classList.add('hidden')
+          ev.preventDefault()
+          ev.stopPropagation()
+        }
       } catch {}
     })
   } catch {}
