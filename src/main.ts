@@ -6488,7 +6488,17 @@ try {
     ;(window as any).flymdSetCurrentFilePath = (path: string | null) => { currentFilePath = path }
     ;(window as any).flymdSetDirty = (d: boolean) => { dirty = d; refreshTitle() }
     ;(window as any).flymdGetMode = () => mode
-    ;(window as any).flymdSetMode = (m: Mode) => { mode = m }
+    ;(window as any).flymdSetMode = (m: Mode) => {
+      mode = m
+      if (mode === 'preview') {
+        try { preview.classList.remove('hidden') } catch {}
+      } else {
+        if (!wysiwyg) try { preview.classList.add('hidden') } catch {}
+      }
+      try {
+        (document.getElementById('btn-toggle') as HTMLButtonElement).textContent = mode === 'edit' ? '阅读' : '编辑'
+      } catch {}
+    }
     ;(window as any).flymdGetWysiwygEnabled = () => wysiwyg
     ;(window as any).flymdGetEditorContent = () => editor?.value ?? ''
     // UI 刷新

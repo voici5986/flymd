@@ -228,6 +228,7 @@ export class TabManager {
       this.hooks.setEditorContent('')
       this.hooks.setCurrentFilePath(null)
       this.hooks.setDirty(false)
+      this.hooks.setMode('edit')
       this.hooks.refreshTitle()
       this.hooks.refreshPreview()
     }
@@ -347,6 +348,7 @@ export class TabManager {
         this.activeTabId = null
         const newTab = this.createNewTab()
         this.activeTabId = newTab.id
+        await this.restoreTabState(newTab)
       }
     } else {
       // 不是当前标签，直接移除
