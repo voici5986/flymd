@@ -4480,6 +4480,38 @@ body.dark-mode .preview hr {
   }
 }
 
+/* 拖拽排序样式 */
+.flymd-context-menu .context-menu-item.draggable-item {
+  cursor: grab;
+  transition: background 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+}
+
+.flymd-context-menu .context-menu-item.draggable-item:active {
+  cursor: grabbing;
+}
+
+/* 拖拽中的菜单项 */
+.flymd-context-menu .context-menu-item.dragging {
+  opacity: 0.5;
+  background: var(--accent-light, rgba(59, 130, 246, 0.15)) !important;
+  transform: scale(0.98);
+}
+
+/* 拖拽指示器：上方插入 */
+.flymd-context-menu .context-menu-item.drag-over-top {
+  box-shadow: inset 0 2px 0 0 var(--accent, #3b82f6);
+}
+
+/* 拖拽指示器：下方插入 */
+.flymd-context-menu .context-menu-item.drag-over-bottom {
+  box-shadow: inset 0 -2px 0 0 var(--accent, #3b82f6);
+}
+
+/* 拖拽时禁用子菜单展开动画，避免干扰 */
+.flymd-context-menu:has(.dragging) .context-menu-submenu {
+  transition: none !important;
+}
+
 /* ============ 右键菜单样式结束 ============ */
 
 /* ============ 专注模式（Focus Mode）============ */

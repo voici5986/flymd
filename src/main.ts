@@ -796,6 +796,50 @@ let _contextMenuEl: HTMLDivElement | null = null // 当前显示的右键菜单�
 let _contextMenuKeyHandler: ((e: KeyboardEvent) => void) | null = null
 let _libCtxKeyHandler: ((e: KeyboardEvent) => void) | null = null // 文件树右键菜单的键盘事件处理器
 
+// 右键菜单排序配置
+type ContextMenuOrderConfig = { [key: string]: number } // key = `${pluginId}::${label}`, value = order
+const CONTEXT_MENU_ORDER_KEY = 'flymd_contextMenuOrder'
+
+// 生成菜单项的唯一键
+function getContextMenuItemKey(pluginId: string, label: string): string {
+  return `${pluginId}::${label}`
+}
+
+// 读取排序配置
+function loadContextMenuOrder(): ContextMenuOrderConfig {
+  try {
+    const raw = localStorage.getItem(CONTEXT_MENU_ORDER_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed
+    }
+  } catch {}
+  return {}
+}
+
+// 保存排序配置
+function saveContextMenuOrder(config: ContextMenuOrderConfig): void {
+  try {
+    localStorage.setItem(CONTEXT_MENU_ORDER_KEY, JSON.stringify(config))
+  } catch (err) {
+    console.error('保存右键菜单排序失败:', err)
+  }
+}
+
+// 根据配置对菜单项排序
+function sortContextMenuItems(items: PluginContextMenuItem[]): PluginContextMenuItem[] {
+  const orderConfig = loadContextMenuOrder()
+  return [...items].sort((a, b) => {
+    const keyA = getContextMenuItemKey(a.pluginId, a.config.label || '')
+    const keyB = getContextMenuItemKey(b.pluginId, b.config.label || '')
+    const orderA = orderConfig[keyA] ?? Infinity
+    const orderB = orderConfig[keyB] ?? Infinity
+    // 有配置的排在前面，相同 order 保持原顺序
+    if (orderA === Infinity && orderB === Infinity) return 0
+    return orderA - orderB
+  })
+}
+
 async function readUploaderEnabledState(): Promise<boolean> {
   try {
     if (!store) return uploaderEnabledSnapshot
@@ -1221,7 +1265,15 @@ function buildContextMenuContext(): ContextMenuContext {
 }
 
 // 渲染右键菜单项
-function renderContextMenuItem(item: ContextMenuItemConfig, ctx: ContextMenuContext, callbacks: Map<string, () => void>, idCounter: { value: number }): string {
+// dragKey: 拖拽标识（仅插件菜单项有）; isBuiltin: 是否为内置项（内置项不可拖拽）
+function renderContextMenuItem(
+  item: ContextMenuItemConfig,
+  ctx: ContextMenuContext,
+  callbacks: Map<string, () => void>,
+  idCounter: { value: number },
+  dragKey: string = '',
+  isBuiltin: boolean = false
+): string {
   if (!item) return ''
 
   // 分隔线
@@ -1243,6 +1295,11 @@ function renderContextMenuItem(item: ContextMenuItemConfig, ctx: ContextMenuCont
     }
   }
 
+  // 是否可拖拽：非内置且有 dragKey（使用鼠标事件实现拖拽，不需要 draggable 属性）
+  const canDrag = !isBuiltin && !!dragKey
+  const dragKeyAttr = canDrag ? `data-drag-key="${dragKey}"` : ''
+  const dragClass = canDrag ? ' draggable-item' : ''
+
   // 子菜单
   if (item.children && item.children.length > 0) {
     const id = `ctx-menu-${idCounter.value++}`
@@ -1252,7 +1309,8 @@ function renderContextMenuItem(item: ContextMenuItemConfig, ctx: ContextMenuCont
 
     let childrenHtml = ''
     for (const child of item.children) {
-      childrenHtml += renderContextMenuItem(child, ctx, callbacks, idCounter)
+      // 子菜单项不支持拖拽
+      childrenHtml += renderContextMenuItem(child, ctx, callbacks, idCounter, '', true)
     }
 
     // 如果子菜单为空（所有项都被条件过滤），显示提示
@@ -1261,7 +1319,7 @@ function renderContextMenuItem(item: ContextMenuItemConfig, ctx: ContextMenuCont
     }
 
     return `
-      <div class="context-menu-item has-children${disabled}" data-id="${id}">
+      <div class="context-menu-item has-children${disabled}${dragClass}" data-id="${id}" ${dragKeyAttr}>
         ${icon}<span class="context-menu-label">${item.label || ''}</span>${note}
         <span class="context-menu-arrow">▸</span>
         <div class="context-menu-submenu">${childrenHtml}</div>
@@ -1280,7 +1338,7 @@ function renderContextMenuItem(item: ContextMenuItemConfig, ctx: ContextMenuCont
   }
 
   return `
-    <div class="context-menu-item${disabled}" data-id="${id}">
+    <div class="context-menu-item${disabled}${dragClass}" data-id="${id}" ${dragKeyAttr}>
       ${icon}<span class="context-menu-label">${item.label || ''}</span>${note}
     </div>
   `
@@ -1291,22 +1349,27 @@ async function showContextMenu(x: number, y: number, ctx: ContextMenuContext) {
   try {
     removeContextMenu()
 
-    // 过滤有效的菜单项
-    const validItems: ContextMenuItemConfig[] = []
-    for (const item of pluginContextMenuItems) {
-      if (!item || !item.config) continue
-      validItems.push(item.config)
-    }
+    // 排序并收集插件菜单项（保留 pluginId 信息用于拖拽）
+    const sortedPluginItems = sortContextMenuItems(pluginContextMenuItems.filter(item => item && item.config))
+
+    // 构建带 pluginId 的扩展配置（用于拖拽标识）
+    type ExtendedMenuItem = { config: ContextMenuItemConfig; pluginId?: string; isBuiltin?: boolean }
+    const allItems: ExtendedMenuItem[] = sortedPluginItems.map(item => ({
+      config: item.config,
+      pluginId: item.pluginId
+    }))
 
     const builtinItems = await buildBuiltinContextMenuItems()
     if (builtinItems.length > 0) {
-      if (validItems.length > 0) {
-        validItems.push({ label: '', divider: true })
+      if (allItems.length > 0) {
+        allItems.push({ config: { label: '', divider: true }, isBuiltin: true })
       }
-      validItems.push(...builtinItems)
+      for (const bi of builtinItems) {
+        allItems.push({ config: bi, isBuiltin: true })
+      }
     }
 
-    if (validItems.length === 0) return
+    if (allItems.length === 0) return
 
     // 创建菜单元素
     const menu = document.createElement('div')
@@ -1318,8 +1381,10 @@ async function showContextMenu(x: number, y: number, ctx: ContextMenuContext) {
     const idCounter = { value: 0 }
     let menuHtml = ''
 
-    for (const item of validItems) {
-      menuHtml += renderContextMenuItem(item, ctx, callbacks, idCounter)
+    // 渲染菜单项（带拖拽标识）
+    for (const item of allItems) {
+      const dragKey = item.pluginId ? getContextMenuItemKey(item.pluginId, item.config.label || '') : ''
+      menuHtml += renderContextMenuItem(item.config, ctx, callbacks, idCounter, dragKey, !!item.isBuiltin)
     }
 
     const tipHtml = '<div class="context-menu-tip">按住 Shift 再次右键可打开原生菜单</div>'
@@ -1369,6 +1434,167 @@ async function showContextMenu(x: number, y: number, ctx: ContextMenuContext) {
         })
       })
     })
+
+    // ========== 拖拽排序功能（使用鼠标事件实现） ==========
+    let dragState: {
+      item: HTMLElement
+      key: string
+      startY: number
+      isDragging: boolean
+    } | null = null
+
+    // 获取所有可拖拽的菜单项（顶层，非子菜单内）
+    const getDraggableItems = (): HTMLElement[] => {
+      return Array.from(menu.querySelectorAll(':scope > .context-menu-item.draggable-item')) as HTMLElement[]
+    }
+
+    // 清除所有拖拽指示器
+    const clearDragIndicators = () => {
+      menu.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+        el.classList.remove('drag-over-top', 'drag-over-bottom')
+      })
+    }
+
+    // 处理拖拽结束和保存
+    const finishDrag = (targetItem: HTMLElement | null, clientY: number) => {
+      if (!dragState || !dragState.isDragging) return
+
+      const { item: draggedItem, key: draggedKey } = dragState
+
+      if (targetItem && targetItem !== draggedItem) {
+        const targetKey = targetItem.getAttribute('data-drag-key')
+        if (targetKey) {
+          // 计算放置位置
+          const rect = targetItem.getBoundingClientRect()
+          const midY = rect.top + rect.height / 2
+          const insertBefore = clientY < midY
+
+          // 获取所有可拖拽项的顺序
+          const items = getDraggableItems()
+          const keys = items.map(el => el.getAttribute('data-drag-key') || '').filter(k => k)
+
+          // 从数组中移除被拖拽项
+          const draggedIndex = keys.indexOf(draggedKey)
+          if (draggedIndex >= 0) {
+            keys.splice(draggedIndex, 1)
+          }
+
+          // 找到目标位置并插入
+          let targetIndex = keys.indexOf(targetKey)
+          if (!insertBefore) {
+            targetIndex += 1
+          }
+          keys.splice(targetIndex, 0, draggedKey)
+
+          // 保存新的排序配置
+          const newOrder: ContextMenuOrderConfig = {}
+          keys.forEach((key, index) => {
+            newOrder[key] = index
+          })
+          saveContextMenuOrder(newOrder)
+
+          // 重新排列 DOM
+          if (insertBefore) {
+            targetItem.parentNode?.insertBefore(draggedItem, targetItem)
+          } else {
+            targetItem.parentNode?.insertBefore(draggedItem, targetItem.nextSibling)
+          }
+
+          console.log('[右键菜单] 排序已保存:', newOrder)
+        }
+      }
+
+      // 清理状态
+      draggedItem.classList.remove('dragging')
+      clearDragIndicators()
+      dragState = null
+    }
+
+    // mousedown: 开始拖拽准备
+    menu.addEventListener('mousedown', (e) => {
+      const target = (e.target as HTMLElement).closest('.context-menu-item.draggable-item') as HTMLElement
+      if (!target || e.button !== 0) return // 只处理左键
+
+      const key = target.getAttribute('data-drag-key')
+      if (!key) return
+
+      dragState = {
+        item: target,
+        key: key,
+        startY: e.clientY,
+        isDragging: false
+      }
+    })
+
+    // mousemove: 拖拽中
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragState) return
+
+      // 检测是否开始拖拽（移动超过 5px）
+      if (!dragState.isDragging) {
+        if (Math.abs(e.clientY - dragState.startY) > 5) {
+          dragState.isDragging = true
+          dragState.item.classList.add('dragging')
+        } else {
+          return
+        }
+      }
+
+      // 找到鼠标下方的目标项
+      const targetItem = (e.target as HTMLElement).closest('.context-menu-item.draggable-item') as HTMLElement
+
+      clearDragIndicators()
+
+      if (targetItem && targetItem !== dragState.item) {
+        const rect = targetItem.getBoundingClientRect()
+        const midY = rect.top + rect.height / 2
+        if (e.clientY < midY) {
+          targetItem.classList.add('drag-over-top')
+        } else {
+          targetItem.classList.add('drag-over-bottom')
+        }
+      }
+    }
+
+    // mouseup: 拖拽结束
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!dragState) return
+
+      if (dragState.isDragging) {
+        const targetItem = (e.target as HTMLElement).closest('.context-menu-item.draggable-item') as HTMLElement
+        finishDrag(targetItem, e.clientY)
+      } else {
+        // 没有真正拖拽，清理状态
+        dragState = null
+      }
+    }
+
+    // 在 document 上监听以便捕获菜单外的 mouseup
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    // 在菜单关闭时清理事件监听器（通过修改 removeContextMenu 或使用 MutationObserver）
+    const cleanupDragListeners = () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    // 监听菜单元素被移除
+    const menuObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.removedNodes) {
+          if (node === menu) {
+            cleanupDragListeners()
+            menuObserver.disconnect()
+            return
+          }
+        }
+      }
+    })
+    if (menu.parentNode) {
+      menuObserver.observe(menu.parentNode, { childList: true })
+    }
+    // ========== 拖拽排序功能结束 ==========
 
     // 绑定点击事件（使用事件委托）
     menu.addEventListener('click', (e) => {
