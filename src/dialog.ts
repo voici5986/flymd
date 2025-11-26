@@ -5,6 +5,10 @@
 // 对话框返回值类型
 export type DialogResult = 'save' | 'discard' | 'cancel'
 
+// WebDAV 同步冲突对话框返回值
+export type ConflictResult = 'local' | 'remote' | 'cancel'
+export type TwoChoiceResult = 'confirm' | 'cancel'
+
 // 对话框样式
 const dialogStyles = `
 .custom-dialog-overlay {
@@ -230,6 +234,222 @@ export function showThreeButtonDialog(
     }
 
     // ESC 键取消
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeDialog('cancel')
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+  })
+}
+
+/**
+ * WebDAV 文件冲突对话框（本地和远程都已修改）
+ * @param filename 文件名
+ * @returns Promise<ConflictResult> - 'local': 保留本地, 'remote': 保留远程, 'cancel': 取消
+ */
+export function showConflictDialog(filename: string): Promise<ConflictResult> {
+  return new Promise((resolve) => {
+    injectStyles()
+
+    const overlay = document.createElement('div')
+    overlay.className = 'custom-dialog-overlay'
+
+    const box = document.createElement('div')
+    box.className = 'custom-dialog-box'
+
+    const titleEl = document.createElement('div')
+    titleEl.className = 'custom-dialog-title'
+    titleEl.innerHTML = `<span class="custom-dialog-icon">⚠️</span>文件冲突`
+
+    const messageEl = document.createElement('div')
+    messageEl.className = 'custom-dialog-message'
+    messageEl.textContent = `文件：${filename}\n\n本地和远程都已修改此文件。请选择要保留的版本：`
+
+    const buttonsContainer = document.createElement('div')
+    buttonsContainer.className = 'custom-dialog-buttons'
+
+    const cancelBtn = document.createElement('button')
+    cancelBtn.className = 'custom-dialog-button'
+    cancelBtn.textContent = '取消'
+    cancelBtn.onclick = () => closeDialog('cancel')
+
+    const remoteBtn = document.createElement('button')
+    remoteBtn.className = 'custom-dialog-button'
+    remoteBtn.textContent = '保留远程版本'
+    remoteBtn.onclick = () => closeDialog('remote')
+
+    const localBtn = document.createElement('button')
+    localBtn.className = 'custom-dialog-button primary'
+    localBtn.textContent = '保留本地版本'
+    localBtn.onclick = () => closeDialog('local')
+
+    buttonsContainer.appendChild(cancelBtn)
+    buttonsContainer.appendChild(remoteBtn)
+    buttonsContainer.appendChild(localBtn)
+
+    box.appendChild(titleEl)
+    box.appendChild(messageEl)
+    box.appendChild(buttonsContainer)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => localBtn.focus(), 50)
+
+    function closeDialog(result: ConflictResult) {
+      overlay.style.animation = 'dialogFadeIn 0.1s ease reverse'
+      setTimeout(() => {
+        overlay.remove()
+        resolve(result)
+      }, 100)
+    }
+
+    overlay.onclick = (e) => {
+      if (e.target === overlay) closeDialog('cancel')
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeDialog('cancel')
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+  })
+}
+
+/**
+ * WebDAV 本地文件删除确认对话框
+ * @param filename 文件名
+ * @returns Promise<TwoChoiceResult> - 'confirm': 同步删除远程, 'cancel': 从远程恢复
+ */
+export function showLocalDeleteDialog(filename: string): Promise<TwoChoiceResult> {
+  return new Promise((resolve) => {
+    injectStyles()
+
+    const overlay = document.createElement('div')
+    overlay.className = 'custom-dialog-overlay'
+
+    const box = document.createElement('div')
+    box.className = 'custom-dialog-box'
+
+    const titleEl = document.createElement('div')
+    titleEl.className = 'custom-dialog-title'
+    titleEl.innerHTML = `<span class="custom-dialog-icon">🗑️</span>文件已删除`
+
+    const messageEl = document.createElement('div')
+    messageEl.className = 'custom-dialog-message'
+    messageEl.textContent = `文件：${filename}\n\n此文件在上次同步后被本地删除。请选择操作：`
+
+    const buttonsContainer = document.createElement('div')
+    buttonsContainer.className = 'custom-dialog-buttons'
+
+    const restoreBtn = document.createElement('button')
+    restoreBtn.className = 'custom-dialog-button'
+    restoreBtn.textContent = '从远程恢复'
+    restoreBtn.onclick = () => closeDialog('cancel')
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'custom-dialog-button danger'
+    deleteBtn.textContent = '同步删除远程'
+    deleteBtn.onclick = () => closeDialog('confirm')
+
+    buttonsContainer.appendChild(restoreBtn)
+    buttonsContainer.appendChild(deleteBtn)
+
+    box.appendChild(titleEl)
+    box.appendChild(messageEl)
+    box.appendChild(buttonsContainer)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => deleteBtn.focus(), 50)
+
+    function closeDialog(result: TwoChoiceResult) {
+      overlay.style.animation = 'dialogFadeIn 0.1s ease reverse'
+      setTimeout(() => {
+        overlay.remove()
+        resolve(result)
+      }, 100)
+    }
+
+    overlay.onclick = (e) => {
+      if (e.target === overlay) closeDialog('cancel')
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeDialog('cancel')
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+  })
+}
+
+/**
+ * WebDAV 远程文件删除确认对话框
+ * @param filename 文件名
+ * @returns Promise<TwoChoiceResult> - 'confirm': 同步删除本地, 'cancel': 保留本地
+ */
+export function showRemoteDeleteDialog(filename: string): Promise<TwoChoiceResult> {
+  return new Promise((resolve) => {
+    injectStyles()
+
+    const overlay = document.createElement('div')
+    overlay.className = 'custom-dialog-overlay'
+
+    const box = document.createElement('div')
+    box.className = 'custom-dialog-box'
+
+    const titleEl = document.createElement('div')
+    titleEl.className = 'custom-dialog-title'
+    titleEl.innerHTML = `<span class="custom-dialog-icon">⚠️</span>远程文件已删除`
+
+    const messageEl = document.createElement('div')
+    messageEl.className = 'custom-dialog-message'
+    messageEl.textContent = `文件：${filename}\n\n此文件在远程服务器上已不存在。请选择操作：`
+
+    const buttonsContainer = document.createElement('div')
+    buttonsContainer.className = 'custom-dialog-buttons'
+
+    const keepBtn = document.createElement('button')
+    keepBtn.className = 'custom-dialog-button'
+    keepBtn.textContent = '保留本地文件'
+    keepBtn.onclick = () => closeDialog('cancel')
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'custom-dialog-button danger'
+    deleteBtn.textContent = '同步删除本地'
+    deleteBtn.onclick = () => closeDialog('confirm')
+
+    buttonsContainer.appendChild(keepBtn)
+    buttonsContainer.appendChild(deleteBtn)
+
+    box.appendChild(titleEl)
+    box.appendChild(messageEl)
+    box.appendChild(buttonsContainer)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => keepBtn.focus(), 50)
+
+    function closeDialog(result: TwoChoiceResult) {
+      overlay.style.animation = 'dialogFadeIn 0.1s ease reverse'
+      setTimeout(() => {
+        overlay.remove()
+        resolve(result)
+      }, 100)
+    }
+
+    overlay.onclick = (e) => {
+      if (e.target === overlay) closeDialog('cancel')
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()

@@ -9,6 +9,7 @@ import { appLocalDataDir } from '@tauri-apps/api/path'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { ask } from '@tauri-apps/plugin-dialog'
 import { t } from '../i18n'
+import { showConflictDialog, showLocalDeleteDialog, showRemoteDeleteDialog } from '../dialog'
 
 // 更新同步状态显示
 function updateStatus(msg: string) {
@@ -1128,12 +1129,13 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
 
           if (cfg.conflictStrategy === 'ask') {
             // 询问用户
-            try {
-              const msg = `文件冲突：${act.rel}\n\n本地和远程都已修改。\n\n请选择：\n- 确定：保留本地版本（上传）\n- 取消：保留远程版本（下载）`
-              chooseLocal = confirm(msg)
-            } catch {
-              chooseLocal = false
+            const result = await showConflictDialog(act.rel)
+            if (result === 'cancel') {
+              // 用户取消，跳过此文件
+              await syncLog('[conflict-cancel] ' + act.rel + ' 用户取消操作')
+              return { success: true, type: act.type }
             }
+            chooseLocal = result === 'local'
           } else if (cfg.conflictStrategy === 'newest') {
             // 按时间戳选择较新者
             const local = localIdx.get(act.rel)
@@ -1253,14 +1255,8 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
             if (cfg.confirmDeleteRemote !== false) {
               // 需要确认：询问用户
               await syncLog('[local-deleted] ' + act.rel + ' 询问用户如何处理')
-              const msg = `检测到文件被删除：${act.rel}\n\n此文件在上次同步后被本地删除。\n\n请选择：\n- 确定：同步删除远程文件\n- 取消：从远程恢复到本地`
-              try {
-                // 使用 Tauri dialog API（更可靠）
-                userChoice = await ask(msg, { title: '文件已删除', kind: 'warning' })
-              } catch {
-                // 降级到浏览器 confirm
-                userChoice = confirm(msg)
-              }
+              const result = await showLocalDeleteDialog(act.rel)
+              userChoice = result === 'confirm'
             } else {
               // 不需要确认：直接删除远程文件
               await syncLog('[local-deleted] ' + act.rel + ' 自动删除远程文件（已禁用确认）')
@@ -1328,13 +1324,8 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
           // 远程文件被删除，询问用户如何处理本地文件
           await syncLog('[remote-deleted-ask] ' + act.rel + ' 远程已删除，询问用户如何处理')
           try {
-            const msg = `远程文件已被删除：${act.rel}\n\n此文件在远程服务器上已不存在。\n\n请选择：\n- 确定：同步删除本地文件\n- 取消：保留本地文件`
-            let userChoice = false
-            try {
-              userChoice = await ask(msg, { title: '远程文件已删除', kind: 'warning' })
-            } catch {
-              userChoice = confirm(msg)
-            }
+            const result = await showRemoteDeleteDialog(act.rel)
+            const userChoice = result === 'confirm'
 
             if (userChoice) {
               // 用户选择删除本地文件
