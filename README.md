@@ -186,6 +186,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/flymd.app
 ### 多标签页
 - `Ctrl+T` 随时开启空白标签页，保持当前文档不被覆盖
 - 使用 `Ctrl+Tab / Ctrl+Shift+Tab` 循环切换，长文/多稿件间跳转不丢上下文
+- 在左侧文档库中按住 `Ctrl` 再点击文档，可在新标签中打开并直接进入编辑模式，方便对照阅读与修改
 
 
 ### 图片处理

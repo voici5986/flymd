@@ -185,6 +185,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/flymd.app
 ### Multi-Tab Workflow
 - Press `Ctrl+T` anytime to launch a blank tab so the current draft stays intact
 - Cycle through open docs with `Ctrl+Tab / Ctrl+Shift+Tab` to review multiple manuscripts without losing context
+- In the library sidebar, hold `Ctrl` and click a document to open it in a new tab and immediately switch to edit mode for side-by-side reviewing and editing
 
 ### Image Handling
 - **Paste/Drag Images**: Auto-process and insert
