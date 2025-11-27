@@ -10865,6 +10865,18 @@ async function activatePlugin(p: InstalledPlugin): Promise<void> {
     openFileByPath: async (path: string) => {
       try { await openFile2(path) } catch (e) { console.error('plugin openFileByPath 失败', e); throw e }
     },
+    createStickyNote: async (filePath: string) => {
+      try {
+        const fn = (window as any).flymdCreateStickyNote
+        if (typeof fn !== 'function') {
+          throw new Error('当前环境不支持便签功能')
+        }
+        await fn(filePath)
+      } catch (e) {
+        console.error('plugin createStickyNote 失败', e)
+        throw e
+      }
+    },
     exportCurrentToPdf: async (target: string) => {
       try { await exportCurrentDocToPdf(target) } catch (e) { console.error('plugin exportCurrentToPdf 失败', e); throw e }
     },
