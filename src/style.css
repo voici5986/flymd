@@ -5010,7 +5010,8 @@ body.focus-mode .library .lib-action-btn.active {
 body.sticky-note-mode .custom-titlebar-btn.custom-titlebar-exit-focus,
 body.sticky-note-mode .custom-titlebar-separator,
 body.sticky-note-mode .custom-titlebar-btn.custom-titlebar-minimize,
-body.sticky-note-mode .custom-titlebar-btn.custom-titlebar-maximize {
+body.sticky-note-mode .custom-titlebar-btn.custom-titlebar-maximize,
+body.sticky-note-mode #status {
   display: none !important;
 }
 
