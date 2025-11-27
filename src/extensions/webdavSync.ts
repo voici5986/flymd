@@ -394,6 +394,10 @@ export type WebdavSyncConfig = {
   localDeleteStrategy?: 'ask' | 'auto' | 'keep'  // 本地文件删除策略：询问用户/自动删除/保留本地（默认auto）
   allowHttpInsecure?: boolean  // 是否允许 HTTP 明文 WebDAV
   allowedHttpHosts?: string[]  // 允许的 HTTP 主机白名单
+  // WebDAV 内容加密配置（仅影响上传到 WebDAV 的内容）
+  encryptEnabled?: boolean
+  encryptKey?: string
+  encryptSalt?: string
 }
 
 let _store: Store | null = null
@@ -401,6 +405,48 @@ async function getStore(): Promise<Store> {
   if (_store) return _store
   _store = await Store.load('flymd-settings.json')
   return _store
+}
+
+// Base64 编解码工具（用于存储盐值）
+function bytesToBase64(bytes: Uint8Array): string {
+  try {
+    let bin = ''
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+    return btoa(bin)
+  } catch {
+    // 回退为十六进制字符串（不推荐，仅作为兜底）
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  try {
+    const bin = atob(b64)
+    const out = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+    return out
+  } catch {
+    const clean = b64.replace(/[^0-9a-f]/gi, '')
+    const len = Math.floor(clean.length / 2)
+    const out = new Uint8Array(len)
+    for (let i = 0; i < len; i++) {
+      const byte = parseInt(clean.substr(i * 2, 2), 16)
+      out[i] = Number.isFinite(byte) ? byte : 0
+    }
+    return out
+  }
+}
+
+function randomBytes(length: number): Uint8Array {
+  const buf = new Uint8Array(length)
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      crypto.getRandomValues(buf)
+      return buf
+    }
+  } catch {}
+  for (let i = 0; i < length; i++) buf[i] = Math.floor(Math.random() * 256)
+  return buf
 }
 
 function sanitizeHttpHosts(list: any): string[] {
@@ -434,6 +480,9 @@ export async function getWebdavSyncConfig(): Promise<WebdavSyncConfig> {
     localDeleteStrategy: raw?.localDeleteStrategy || 'auto',  // 默认auto（自动删除）
     allowHttpInsecure: raw?.allowHttpInsecure === true,
     allowedHttpHosts: sanitizeHttpHosts(raw?.allowedHttpHosts),
+    encryptEnabled: raw?.encryptEnabled === true,
+    encryptKey: typeof raw?.encryptKey === 'string' ? raw.encryptKey : '',
+    encryptSalt: typeof raw?.encryptSalt === 'string' ? raw.encryptSalt : '',
   }
   return cfg
 }
@@ -441,7 +490,19 @@ export async function getWebdavSyncConfig(): Promise<WebdavSyncConfig> {
 export async function setWebdavSyncConfig(next: Partial<WebdavSyncConfig>): Promise<void> {
   const store = await getStore()
   const cur = (await store.get('sync')) as any || {}
-  const merged = { ...cur, ...next }
+  const merged: any = { ...cur, ...next }
+
+  // 若开启加密且已有密钥但尚无盐值，则生成一个固定盐值（每个配置唯一）
+  try {
+    const enabled = merged.encryptEnabled === true
+    const key = typeof merged.encryptKey === 'string' ? merged.encryptKey.trim() : ''
+    const hasSalt = typeof merged.encryptSalt === 'string' && !!merged.encryptSalt
+    if (enabled && key && !hasSalt) {
+      const salt = randomBytes(16)
+      merged.encryptSalt = bytesToBase64(salt)
+    }
+  } catch {}
+
   if (Array.isArray(merged.allowedHttpHosts)) {
     merged.allowedHttpHosts = merged.allowedHttpHosts.map((v: any) => typeof v === 'string' ? v.trim() : '').filter((v: string) => !!v)
   }
@@ -842,6 +903,111 @@ async function deleteRemoteFile(baseUrl: string, auth: { username: string; passw
   const resp = await http.fetch(url, { method: 'DELETE', headers })
   const ok = resp?.ok === true || (typeof resp.status === 'number' && resp.status >= 200 && resp.status < 300)
   if (!ok) throw new Error('HTTP ' + (resp?.status || ''))
+}
+
+// WebDAV 内容加密：使用 AES-GCM + PBKDF2 派生密钥
+const ENC_MAGIC = 'FMDENC1'
+const ENC_MAGIC_BYTES = new TextEncoder().encode(ENC_MAGIC)
+const ENC_VERSION = 1
+
+type EncryptionRuntimeConfig = {
+  key: string
+  salt: string
+}
+
+let _encKeyCache: { cacheKey: string; cryptoKey: CryptoKey } | null = null
+
+function getEncryptionRuntimeConfig(cfg: WebdavSyncConfig): EncryptionRuntimeConfig | null {
+  if (!cfg.encryptEnabled) return null
+  const key = (cfg.encryptKey || '').trim()
+  const salt = (cfg.encryptSalt || '').trim()
+  if (!key || key.length < 8) return null
+  if (!salt) return null
+  return { key, salt }
+}
+
+async function getCryptoKeyForEncryption(encCfg: EncryptionRuntimeConfig): Promise<CryptoKey | null> {
+  try {
+    const cacheKey = encCfg.key + '|' + encCfg.salt
+    if (_encKeyCache && _encKeyCache.cacheKey === cacheKey) return _encKeyCache.cryptoKey
+    if (!(crypto as any)?.subtle) {
+      console.warn('[WebDAV Sync] 当前环境不支持 WebCrypto，加密功能不可用')
+      return null
+    }
+    const te = new TextEncoder()
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      te.encode(encCfg.key),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    )
+    const saltBytes = base64ToBytes(encCfg.salt)
+    const cryptoKey = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    )
+    _encKeyCache = { cacheKey, cryptoKey }
+    return cryptoKey
+  } catch (e) {
+    console.warn('[WebDAV Sync] 加密密钥派生失败', e)
+    return null
+  }
+}
+
+function looksLikeEncrypted(data: Uint8Array): boolean {
+  if (!data || data.length <= ENC_MAGIC_BYTES.length + 1 + 12) return false
+  for (let i = 0; i < ENC_MAGIC_BYTES.length; i++) {
+    if (data[i] !== ENC_MAGIC_BYTES[i]) return false
+  }
+  return true
+}
+
+async function encryptBytesIfEnabled(data: Uint8Array, cfg: WebdavSyncConfig): Promise<Uint8Array> {
+  const encCfg = getEncryptionRuntimeConfig(cfg)
+  if (!encCfg) return data
+  const key = await getCryptoKeyForEncryption(encCfg)
+  if (!key) {
+    throw new Error('WebDAV 加密已启用，但密钥派生失败')
+  }
+  try {
+    const iv = randomBytes(12)
+    const ctBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data)
+    const ct = new Uint8Array(ctBuf)
+    const out = new Uint8Array(ENC_MAGIC_BYTES.length + 1 + iv.length + ct.length)
+    out.set(ENC_MAGIC_BYTES, 0)
+    out[ENC_MAGIC_BYTES.length] = ENC_VERSION
+    out.set(iv, ENC_MAGIC_BYTES.length + 1)
+    out.set(ct, ENC_MAGIC_BYTES.length + 1 + iv.length)
+    return out
+  } catch (e) {
+    console.warn('[WebDAV Sync] 加密失败', e)
+    throw new Error('WebDAV 同步加密失败：' + ((e as any)?.message || e))
+  }
+}
+
+async function decryptBytesIfNeeded(data: Uint8Array, cfg: WebdavSyncConfig): Promise<Uint8Array> {
+  const encCfg = getEncryptionRuntimeConfig(cfg)
+  if (!encCfg) return data
+  if (!looksLikeEncrypted(data)) return data
+  const key = await getCryptoKeyForEncryption(encCfg)
+  if (!key) {
+    throw new Error('WebDAV 加密已启用，但密钥派生失败，无法解密')
+  }
+  try {
+    const ivStart = ENC_MAGIC_BYTES.length + 1
+    const ivEnd = ivStart + 12
+    const iv = data.slice(ivStart, ivEnd)
+    const ct = data.slice(ivEnd)
+    const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+    return new Uint8Array(plainBuf)
+  } catch (e) {
+    console.warn('[WebDAV Sync] 解密失败', e)
+    throw new Error('WebDAV 同步解密失败：' + ((e as any)?.message || e))
+  }
 }
 
 // WebDAV MOVE 操作：用于重命名远端文件
@@ -1283,11 +1449,12 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
             await syncLog('[conflict-resolve] ' + act.rel + ' 保留本地版本')
             const full = localRoot + (localRoot.includes('\\') ? '\\' : '/') + act.rel.replace(/\//g, localRoot.includes('\\') ? '\\' : '/')
             const buf = await readFile(full as any)
+            const encBuf = await encryptBytesIfEnabled(buf as any, cfg)
             const relPath = encodePath(act.rel)
             const relDir = relPath.split('/').slice(0, -1).join('/')
             const remoteDir = (cfg.rootPath || '').replace(/\/+$/, '') + (relDir ? '/' + relDir : '')
             await ensureRemoteDir(baseUrl, auth, remoteDir)
-            await uploadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel), buf as any)
+            await uploadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel), encBuf as any)
               // 记录到元数据 - 使用扫描时的哈希
             const meta = await stat(full)
             const local = localIdx.get(act.rel)
@@ -1304,8 +1471,9 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
           } else {
             // 保留远程 → 下载
             await syncLog('[conflict-resolve] ' + act.rel + ' 保留远程版本')
-            const data = await downloadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel))
-            const hash = await calculateFileHash(data)
+            const raw = await downloadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel))
+            const data = await decryptBytesIfNeeded(raw, cfg)
+            const hash = await calculateFileHash(data as any)
             const full = localRoot + (localRoot.includes('\\') ? '\\' : '/') + act.rel.replace(/\//g, localRoot.includes('\\') ? '\\' : '/')
             const dir = full.split(/\\|\//).slice(0, -1).join(localRoot.includes('\\') ? '\\' : '/')
             if (!(await exists(dir as any))) { try { await mkdir(dir as any, { recursive: true } as any) } catch {} }
@@ -1331,8 +1499,9 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
           } else {
             // 正常下载
             await syncLog('[download] ' + act.rel + ' (' + act.reason + ')')
-            const data = await downloadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel))
-            const hash = await calculateFileHash(data)
+            const raw = await downloadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel))
+            const data = await decryptBytesIfNeeded(raw, cfg)
+            const hash = await calculateFileHash(data as any)
             const full = localRoot + (localRoot.includes('\\') ? '\\' : '/') + act.rel.replace(/\//g, localRoot.includes('\\') ? '\\' : '/')
             const dir = full.split(/\\|\//).slice(0, -1).join(localRoot.includes('\\') ? '\\' : '/')
             if (!(await exists(dir as any))) { try { await mkdir(dir as any, { recursive: true } as any) } catch {} }
@@ -1355,11 +1524,12 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
           await syncLog('[upload] ' + act.rel + ' (' + act.reason + ')')
           const full = localRoot + (localRoot.includes('\\') ? '\\' : '/') + act.rel.replace(/\//g, localRoot.includes('\\') ? '\\' : '/')
           const buf = await readFile(full as any)
+          const encBuf = await encryptBytesIfEnabled(buf as any, cfg)
           const relPath = encodePath(act.rel)
           const relDir = relPath.split('/').slice(0, -1).join('/')
           const remoteDir = (cfg.rootPath || '').replace(/\/+$/, '') + (relDir ? '/' + relDir : '')
           await ensureRemoteDir(baseUrl, auth, remoteDir)
-          await uploadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel), buf as any)
+          await uploadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel), encBuf as any)
           await syncLog('[ok] upload ' + act.rel)
           // 记录到元数据 - 使用扫描时的哈希
           const meta = await stat(full)
@@ -1402,8 +1572,9 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
             } else {
               // 用户选择从远程恢复
               await syncLog('[local-deleted-action] ' + act.rel + ' 用户选择从远程恢复')
-              const data = await downloadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel))
-              const hash = await calculateFileHash(data)
+              const raw = await downloadFile(baseUrl, auth, cfg.rootPath.replace(/\/+$/,'') + '/' + encodePath(act.rel))
+              const data = await decryptBytesIfNeeded(raw, cfg)
+              const hash = await calculateFileHash(data as any)
               const full = localRoot + (localRoot.includes('\\') ? '\\' : '/') + act.rel.replace(/\//g, localRoot.includes('\\') ? '\\' : '/')
               const dir = full.split(/\\|\//).slice(0, -1).join(localRoot.includes('\\') ? '\\' : '/')
               if (!(await exists(dir as any))) { try { await mkdir(dir as any, { recursive: true } as any) } catch {} }
@@ -1715,12 +1886,28 @@ export async function openWebdavSyncDialog(): Promise<void> {
                   <span class="trk"></span><span class="kn"></span>
                 </label>
               </div>
+              <div class="item">
+                <span class="lbl">${t('sync.encrypt.enable')}</span>
+                <label class="switch" for="sync-encrypt-enabled">
+                  <input id="sync-encrypt-enabled" type="checkbox"/>
+                  <span class="trk"></span><span class="kn"></span>
+                </label>
+              </div>
             </div>
             <div class="upl-hint warn pad-1ch sync-shutdown-warn hidden" style="margin-top: 8px;">
               ${t('sync.warn.onshutdown')}
             </div>
             <div class="upl-hint warn pad-1ch sync-http-warn hidden" style="margin-top: 6px;">
               ${t('sync.allowHttp.warn')}
+            </div>
+
+            <label for="sync-encrypt-key" class="sync-encrypt-only hidden">${t('sync.encrypt.key')}</label>
+            <div class="upl-field sync-encrypt-only hidden">
+              <input id="sync-encrypt-key" type="password" placeholder="${t('sync.encrypt.key.placeholder')}"/>
+              <div class="upl-hint">${t('sync.encrypt.key.hint')}</div>
+            </div>
+            <div class="upl-hint warn pad-1ch sync-encrypt-warn sync-encrypt-only hidden" style="margin-top: 6px;">
+              ${t('sync.encrypt.warn')}
             </div>
             <label class="sync-http-hosts hidden">${t('sync.allowHttp.hosts')}</label>
             <div class="upl-field sync-http-hosts hidden">
@@ -1828,6 +2015,10 @@ export async function openWebdavSyncDialog(): Promise<void> {
   const elPass = overlay.querySelector('#sync-pass') as HTMLInputElement
   const elAllowHttp = overlay.querySelector('#sync-allow-http') as HTMLInputElement
   const elAllowHttpWarn = overlay.querySelector('.sync-http-warn') as HTMLDivElement | null
+  const elEncryptEnabled = overlay.querySelector('#sync-encrypt-enabled') as HTMLInputElement
+  const elEncryptKey = overlay.querySelector('#sync-encrypt-key') as HTMLInputElement
+  const elEncryptWarn = overlay.querySelector('.sync-encrypt-warn') as HTMLDivElement | null
+  const elEncryptSections = overlay.querySelectorAll('.sync-encrypt-only') as NodeListOf<HTMLElement>
   const elShutdownWarn = overlay.querySelector('.sync-shutdown-warn') as HTMLDivElement | null
   const elHttpHostsSections = overlay.querySelectorAll('.sync-http-hosts') as NodeListOf<HTMLElement>
   const elHttpHostsList = overlay.querySelector('#sync-http-hosts-list') as HTMLDivElement | null
@@ -1846,6 +2037,8 @@ export async function openWebdavSyncDialog(): Promise<void> {
   elUser.value = cfg.username || ''
   elPass.value = cfg.password || ''
   elAllowHttp.checked = cfg.allowHttpInsecure === true
+  elEncryptEnabled.checked = !!cfg.encryptEnabled && !!cfg.encryptKey
+  elEncryptKey.value = cfg.encryptKey || ''
 
   const httpHostPlaceholder = t('sync.allowHttp.hostPlaceholder')
 
@@ -1932,6 +2125,20 @@ export async function openWebdavSyncDialog(): Promise<void> {
     else elAllowHttpWarn.classList.add('hidden')
   }
   refreshAllowHttpWarn()
+
+  const refreshEncryptVisibility = () => {
+    const enabled = elEncryptEnabled.checked
+    if (elEncryptWarn) {
+      if (enabled) elEncryptWarn.classList.remove('hidden')
+      else elEncryptWarn.classList.add('hidden')
+    }
+    elEncryptSections.forEach(el => {
+      if (enabled) el.classList.remove('hidden')
+      else el.classList.add('hidden')
+    })
+  }
+  refreshEncryptVisibility()
+
   const refreshHttpHostsVisibility = () => {
     if (!elHttpHostsSections.length) return
     if (elAllowHttp.checked) {
@@ -1946,6 +2153,7 @@ export async function openWebdavSyncDialog(): Promise<void> {
     refreshAllowHttpWarn()
     refreshHttpHostsVisibility()
   })
+  elEncryptEnabled.addEventListener('change', refreshEncryptVisibility)
 
   const refreshShutdownWarn = () => {
     if (!elShutdownWarn) return
@@ -1958,6 +2166,13 @@ export async function openWebdavSyncDialog(): Promise<void> {
   const onSubmit = async (e: Event) => {
     e.preventDefault()
     try {
+      if (elEncryptEnabled.checked) {
+        const key = elEncryptKey.value.trim()
+        if (!key || key.length < 8) {
+          alert(t('sync.encrypt.keyRequired'))
+          return
+        }
+      }
       await setWebdavSyncConfig({
         enabled: elEnabled.checked,
         onStartup: elOnStartup.checked,
@@ -1973,6 +2188,8 @@ export async function openWebdavSyncDialog(): Promise<void> {
         password: elPass.value,
         allowHttpInsecure: elAllowHttp.checked,
         allowedHttpHosts: getHttpHostValues(),
+        encryptEnabled: elEncryptEnabled.checked,
+        encryptKey: elEncryptKey.value.trim(),
       })
       // 反馈
       try { const el = document.getElementById('status'); if (el) { el.textContent = t('sync.saved'); setTimeout(() => { try { el.textContent = '' } catch {} }, 1200) } } catch {}
