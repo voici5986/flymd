@@ -10079,12 +10079,14 @@ function bindEvents() {
     } catch {}
 
     // 便签模式检测：检查启动参数中是否有 --sticky-note
+    let isStickyNoteStartup = false
     try {
       const cliArgs = await invoke<string[]>('get_cli_args')
       const stickyIndex = (cliArgs || []).findIndex(a => a === '--sticky-note')
       if (stickyIndex >= 0) {
         const stickyFilePath = cliArgs[stickyIndex + 1]
         if (stickyFilePath && typeof stickyFilePath === 'string') {
+          isStickyNoteStartup = true
           // 延迟执行，确保 UI 初始化完成
           setTimeout(async () => {
             try { await enterStickyNoteMode(stickyFilePath) } catch (e) {
@@ -10095,6 +10097,25 @@ function bindEvents() {
       }
     } catch (e) {
       console.warn('[便签模式] 检测启动参数失败:', e)
+    }
+
+    // 非便签模式启动时，重置窗口到默认大小和位置（避免上次便签窗口状态被恢复）
+    if (!isStickyNoteStartup) {
+      try {
+        const win = getCurrentWindow()
+        const { LogicalSize, LogicalPosition } = await import('@tauri-apps/api/dpi')
+        // 默认窗口大小：与 tauri.conf.json 一致（960x640）
+        const defaultWidth = 960
+        const defaultHeight = 640
+        await win.setSize(new LogicalSize(defaultWidth, defaultHeight))
+        // 重置位置到屏幕中央
+        const { availWidth, availHeight } = window.screen
+        const posX = Math.round((availWidth - defaultWidth) / 2)
+        const posY = Math.round((availHeight - defaultHeight) / 2)
+        await win.setPosition(new LogicalPosition(posX, posY))
+      } catch (e) {
+        console.warn('[启动] 重置窗口大小/位置失败:', e)
+      }
     }
 
     // 兜底：主动询问后端是否有"默认程序/打开方式"传入的待打开路径
