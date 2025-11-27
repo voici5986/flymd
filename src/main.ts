@@ -7258,6 +7258,42 @@ function getStickyTopIcon(isOnTop: boolean): string {
   </svg>`
 }
 
+// 编辑图标（笔）
+function getStickyEditIcon(isEditing: boolean): string {
+  if (isEditing) {
+    // 编辑状态：实心笔
+    return `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+    </svg>`
+  }
+  // 阅读状态：空心笔
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+  </svg>`
+}
+
+// 切换便签编辑/阅读模式
+async function toggleStickyEditMode(btn: HTMLButtonElement) {
+  const isCurrentlyEditing = mode === 'edit'
+  if (isCurrentlyEditing) {
+    // 切换到阅读模式
+    mode = 'preview'
+    try { await renderPreview() } catch {}
+    try { preview.classList.remove('hidden') } catch {}
+  } else {
+    // 切换到编辑模式
+    mode = 'edit'
+    try { preview.classList.add('hidden') } catch {}
+    try { editor.focus() } catch {}
+  }
+  try { syncToggleButton() } catch {}
+  // 更新按钮状态
+  const newIsEditing = mode === 'edit'
+  btn.innerHTML = getStickyEditIcon(newIsEditing)
+  btn.classList.toggle('active', newIsEditing)
+  btn.title = newIsEditing ? '切换到阅读模式' : '切换到编辑模式'
+}
+
 // 切换窗口拖动锁定
 function toggleStickyWindowLock(btn: HTMLButtonElement) {
   stickyNoteLocked = !stickyNoteLocked
@@ -7304,7 +7340,7 @@ async function toggleStickyWindowOnTop(btn: HTMLButtonElement) {
   }
 }
 
-// 创建便签控制按钮（锁定 + 置顶）
+// 创建便签控制按钮（编辑 + 锁定 + 置顶）
 function createStickyNoteControls() {
   const existing = document.getElementById('sticky-note-controls')
   if (existing) existing.remove()
@@ -7312,6 +7348,13 @@ function createStickyNoteControls() {
   const container = document.createElement('div')
   container.id = 'sticky-note-controls'
   container.className = 'sticky-note-controls'
+
+  // 编辑按钮（笔图标，切换编辑/阅读模式）
+  const editBtn = document.createElement('button')
+  editBtn.className = 'sticky-note-btn sticky-note-edit-btn'
+  editBtn.title = '切换到编辑模式'
+  editBtn.innerHTML = getStickyEditIcon(false)
+  editBtn.addEventListener('click', async () => await toggleStickyEditMode(editBtn))
 
   // 图钉按钮（锁定位置）
   const lockBtn = document.createElement('button')
@@ -7327,6 +7370,7 @@ function createStickyNoteControls() {
   topBtn.innerHTML = getStickyTopIcon(false)
   topBtn.addEventListener('click', async () => await toggleStickyWindowOnTop(topBtn))
 
+  container.appendChild(editBtn)
   container.appendChild(lockBtn)
   container.appendChild(topBtn)
   document.body.appendChild(container)
