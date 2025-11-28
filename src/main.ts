@@ -7368,6 +7368,15 @@ function createStickyNoteControls() {
 async function enterStickyNoteMode(filePath: string) {
   stickyNoteMode = true
 
+  // 预先加载便签配置（透明度 / 颜色 / 提醒状态），确保首次渲染时状态就绪
+  try {
+    const prefs = await loadStickyNotePrefs()
+    stickyNoteOpacity = prefs.opacity
+    stickyNoteColor = prefs.color
+  } catch (e) {
+    console.error('[便签模式] 预加载配置失败:', e)
+  }
+
   // 1. 打开文件
   try {
     await openFile2(filePath)
@@ -7447,11 +7456,8 @@ async function enterStickyNoteMode(filePath: string) {
     console.error('[便签模式] 调整窗口大小和位置失败:', e)
   }
 
-  // 8. 应用透明度和颜色设置（从本地配置文件加载，兼容旧版 Store）
+  // 8. 应用透明度和颜色设置（使用已加载配置）
   try {
-    const prefs = await loadStickyNotePrefs()
-    stickyNoteOpacity = prefs.opacity
-    stickyNoteColor = prefs.color
     document.documentElement.style.setProperty('--sticky-opacity', String(stickyNoteOpacity))
     applyStickyNoteColorToDom(stickyNoteColor)
   } catch (e) {
