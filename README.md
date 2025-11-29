@@ -23,9 +23,12 @@
   <a href="https://t.me/+3SOMbwSbCvIxMGQ9"><img src="https://img.shields.io/badge/Telegram-Join-blue?logo=telegram&logoColor=white" alt="Telegram 社区" /></a>
 </p>
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/77b207ab-ee59-4362-ae11-27c95d0732b8" alt="FlyMD Preview" />
-</p>
+
+## 界面预览
+<img width="1251" height="852" alt="91a418d22f073814d0d915e2cdc97f81" src="https://github.com/user-attachments/assets/f007f4cd-4c3f-46f7-8080-72e2128990e1" />
+<img width="1269" height="852" alt="cf36b7504cd5a1c3f384a77d1e66bc05" src="https://github.com/user-attachments/assets/391ef7ec-9741-4c3e-b5ef-b8573ebf021c" />
+<img width="1325" height="958" alt="9fe6a88ac611b3d72599cebe20d20c74" src="https://github.com/user-attachments/assets/2d84d6fe-623b-48cf-8d6f-3e925a9d6b12" />
+
 
 ---
 
@@ -43,12 +46,6 @@
 - [常见问题](#-常见问题)
 
 ---
-
-## 📖 简介
-
-**告别臃肿、告别卡顿、告别割裂体验！**
-
-FlyMD 是一款仅 **7MB** 的高性能 Markdown 编辑器，支持**所见所得 + 源码编辑**双模式，集成 **AI 助手**和**智能待办提醒推送系统**。跨平台支持 Windows / Linux / macOS，轻量级却不简单，为高效写作而生。
 
 ### 🧑‍🤝‍🧑 社区
 
