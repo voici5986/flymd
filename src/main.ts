@@ -7401,6 +7401,10 @@ async function enterStickyNoteMode(filePath: string) {
       })
       await store.save()
     }
+    // 便签模式下强制关闭所见模式，避免样式冲突和动态对比度失效
+    if (wysiwyg) {
+      try { await setWysiwygEnabled(false) } catch {}
+    }
     mode = 'preview'
     try { preview.classList.remove('hidden') } catch {}
     try { await renderPreview() } catch {}
@@ -10411,11 +10415,11 @@ function bindEvents() {
     console.log('应用初始化完成')
     void logInfo('flyMD (飞速MarkDown) 应用初始化完成')
 
-    // 检查是否默认启用所见模式
+    // 检查是否默认启用所见模式（便签模式下不启用，避免覆盖便签的阅读模式样式）
     try {
       const WYSIWYG_DEFAULT_KEY = 'flymd:wysiwyg:default'
       const wysiwygDefault = localStorage.getItem(WYSIWYG_DEFAULT_KEY) === 'true'
-      if (wysiwygDefault && !wysiwyg) {
+      if (wysiwygDefault && !wysiwyg && !stickyNoteMode) {
         // 延迟一小段时间，确保编辑器已完全初始化
         setTimeout(async () => {
           try {
