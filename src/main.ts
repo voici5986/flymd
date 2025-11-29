@@ -589,6 +589,8 @@ let _extListHost: HTMLDivElement | null = null
 let _extInstallInput: HTMLInputElement | null = null
 let _extMarketSearchText = ''
 let _extLastMarketItems: InstallableItem[] = []
+let _extOverlayRenderedOnce = false  // 扩展面板是否已完成过首次渲染（用于避免每次打开都全量刷新）
+let _extApplyMarketFilter: ((itemsOverride?: InstallableItem[] | null) => Promise<void>) | null = null  // 背景静默更新市场列表时复用的过滤函数
 
 // 插件菜单管理（统一的"插件"下拉菜单）
 type PluginMenuItem = { pluginId: string; label: string; onClick?: () => void; children?: any[] }
@@ -12160,13 +12162,15 @@ async function refreshExtensionsUI(): Promise<void> {
   let installedMap: Record<string, InstalledPlugin> = {}
   let marketItems: InstallableItem[] = []
 
-  async function applyMarketFilter(): Promise<void> {
+  // 市场列表过滤与渲染（可选接受一份覆盖的索引，用于后台静默刷新）
+  async function applyMarketFilter(itemsOverride?: InstallableItem[] | null): Promise<void> {
     try {
       // 先移除所有市场扩展
       const marketRows = unifiedList.querySelectorAll('[data-type="market"]')
       marketRows.forEach(r => r.remove())
 
-      const source = Array.isArray(marketItems) ? marketItems : []
+      const base = Array.isArray(itemsOverride) ? itemsOverride : marketItems
+      const source = Array.isArray(base) ? base : []
       if (!source || source.length === 0) {
         const loadingRow = document.createElement('div')
         loadingRow.className = 'ext-item'
@@ -12320,6 +12324,8 @@ async function refreshExtensionsUI(): Promise<void> {
   }
 
   _extLastMarketItems = marketItems
+  // 记录供后台静默刷新重用的过滤函数（复用当前 unifiedList / 控件状态）
+  _extApplyMarketFilter = applyMarketFilter
 
   const arr = Object.values(installedMap)
   let updateMap: Record<string, PluginUpdateState> = {}
@@ -12440,9 +12446,29 @@ async function showExtensionsOverlay(show: boolean): Promise<void> {
   ensureExtensionsOverlayMounted()
   if (!_extOverlayEl) return
   if (show) {
-    _extMarketSearchText = ''
     _extOverlayEl.classList.add('show')
-    await refreshExtensionsUI()
+    // 第一次打开：完整刷新（可能触发网络请求和市场索引加载）
+    if (!_extOverlayRenderedOnce) {
+      _extOverlayRenderedOnce = true
+      await refreshExtensionsUI()
+    } else {
+      // 之后再次打开：仅做轻量刷新，避免每次都重建 DOM / 触发远程请求
+      try { await refreshInstalledExtensionsUI() } catch {}
+      // 后台静默刷新市场列表：尊重缓存 TTL，不显示 loading，不阻塞 UI
+      const fn = _extApplyMarketFilter
+      if (fn) {
+        void (async () => {
+          try {
+            const items = await loadInstallablePlugins(false)
+            if (!Array.isArray(items) || items.length === 0) return
+            _extLastMarketItems = items
+            await fn(items)
+          } catch {
+            // 静默失败，不打扰用户
+          }
+        })()
+      }
+    }
   } else {
     _extOverlayEl.classList.remove('show')
   }
