@@ -5910,11 +5910,11 @@ try {
     }
     // 确认对话框
     ;(window as any).flymdConfirmNative = confirmNative
-    // 所见模式内容替换
+    // 所见模式内容替换：仅在 V2 已启用且当前处于所见模式时才生效
     ;(window as any).flymdWysiwygV2ReplaceAll = async (md: string) => {
       try {
-        const { wysiwygV2ReplaceAll } = await import('./wysiwyg/v2')
-        await wysiwygV2ReplaceAll(md)
+        if (!wysiwyg || !wysiwygV2Active) return
+        await wysiwygV2ReplaceAll(String(md || ''))
       } catch {}
     }
   }

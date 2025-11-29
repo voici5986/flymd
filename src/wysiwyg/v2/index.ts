@@ -361,7 +361,12 @@ export function isWysiwygV2Enabled(): boolean { return !!_editor }
 // 供外部调用：将整个文档替换为指定 Markdown（简易接口）
 export async function wysiwygV2ReplaceAll(markdown: string) {
   if (!_editor) return
-  try { await _editor.action(replaceAll(markdown)) } catch {}
+  try {
+    const ctx: any = (_editor as any).ctx
+    // 若 editorView 尚未就绪或已被销毁，直接跳过，避免 MilkdownError 冒泡
+    try { ctx.get(editorViewCtx) } catch { return }
+    await _editor.action(replaceAll(markdown))
+  } catch {}
 }
 
 // =============== 所见模式：查找 / 替换（Ctrl+H 面板接入） ===============

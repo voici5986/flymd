@@ -310,10 +310,7 @@ function createHooks(): TabManagerHooks {
         }
       })
 
-      // 如果在所见模式，同步内容
-      if (flymd.flymdWysiwygV2ReplaceAll) {
-        try { flymd.flymdWysiwygV2ReplaceAll(content) } catch {}
-      }
+      // 所见模式下，依赖全局 input 监听中的 scheduleWysiwygRender 进行同步，避免直接跨层调用导致 Milkdown 状态错乱
     },
 
     getCurrentFilePath: () => {
