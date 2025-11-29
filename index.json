@@ -55,6 +55,8 @@
       "description": "在光标处快速插入 Markdown 表格",
       "author": "flyMD",
       "id": "markdown-table",
+      "featured": true,
+      "rank": 3,
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/markdown-table/manifest.json",
         "type": "manifest"
@@ -77,6 +79,8 @@
       "description": "扫描当前文档中的未完成待办并推送到 xxtui（beta）",
       "author": "飞速MarkDown & XXTUI",
       "id": "xxtui-todo-push",
+      "featured": true,
+      "rank": 2,
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/xxtui-todo-push/manifest.json",
         "type": "manifest"
