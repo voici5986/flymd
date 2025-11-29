@@ -11819,11 +11819,26 @@ function renderInstalledExtensions(
   updateMap: Record<string, PluginUpdateState>
 ): void {
   try {
-    const installedRows = unifiedList.querySelectorAll('[data-type="installed"]')
+    const installedRows = unifiedList.querySelectorAll('[data-type=\"installed\"]')
     installedRows.forEach((row) => row.remove())
   } catch {}
 
-  const arr = Object.values(installedMap)
+  // 根据当前搜索关键字过滤已安装扩展（名称 / id / 描述）
+  const keywordRaw = (_extMarketSearchText || '').trim().toLowerCase()
+  const arr = Object.values(installedMap).filter((p) => {
+    if (!keywordRaw) return true
+    try {
+      const parts: string[] = []
+      if (p.name) parts.push(String(p.name))
+      if (p.id) parts.push(String(p.id))
+      if (p.description) parts.push(String(p.description))
+      const hay = parts.join(' ').toLowerCase()
+      return hay.includes(keywordRaw)
+    } catch {
+      // 出现异常时，不要因为搜索直接把条目干掉
+      return true
+    }
+  })
 
   for (const p of arr) {
     const row = document.createElement('div')
@@ -12067,7 +12082,11 @@ async function refreshExtensionsUI(): Promise<void> {
   if (_extMarketSearchText) searchInput.value = _extMarketSearchText
   searchInput.addEventListener('input', () => {
     _extMarketSearchText = searchInput.value || ''
-    void applyMarketFilter()
+    // 搜索变化时，同时刷新“已安装扩展”与“市场扩展”两个区块
+    void (async () => {
+      try { await refreshInstalledExtensionsUI() } catch {}
+      try { await applyMarketFilter() } catch {}
+    })()
   })
   searchWrap.appendChild(searchInput)
   hd.appendChild(searchWrap)
@@ -12198,11 +12217,15 @@ async function refreshExtensionsUI(): Promise<void> {
       }
 
       if (!items.length) {
-        const empty = document.createElement('div')
-        empty.className = 'ext-empty'
-        empty.textContent = t('ext.market.empty.search')
-        empty.setAttribute('data-type', 'market')
-        unifiedList.appendChild(empty)
+        // 如果已安装/内置扩展中仍有条目（可能匹配当前搜索），就不要再显示“没有匹配”的提示
+        const hasOtherRows = unifiedList.querySelector('[data-type=\"installed\"], [data-type=\"builtin\"]')
+        if (!hasOtherRows) {
+          const empty = document.createElement('div')
+          empty.className = 'ext-empty'
+          empty.textContent = t('ext.market.empty.search')
+          empty.setAttribute('data-type', 'market')
+          unifiedList.appendChild(empty)
+        }
         return
       }
 
