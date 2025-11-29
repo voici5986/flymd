@@ -44,60 +44,6 @@ let _codeCopyScrollHandler: (() => void) | null = null
 let _codeCopyResizeObserver: ResizeObserver | null = null
 let _codeCopyWindowResizeHandler: (() => void) | null = null
 let _inlineCodeMouseTimer: number | null = null
-// 代码高亮相关
-let _hljsModule: any = null
-let _highlightTimer: number | null = null
-
-// 懒加载 highlight.js 并高亮所有代码块
-async function highlightCodeBlocks() {
-  try {
-    const host = getHost()
-    if (!host) return
-    // 懒加载 hljs
-    if (!_hljsModule) {
-      const mod = await import('highlight.js')
-      _hljsModule = mod.default || mod
-    }
-    const hljs = _hljsModule
-    // 查找所有代码块
-    const codeEls = host.querySelectorAll('pre code') as NodeListOf<HTMLElement>
-    codeEls.forEach((codeEl) => {
-      try {
-        // 跳过已高亮的
-        if (codeEl.dataset.highlighted === 'yes') return
-        // 跳过 mermaid 代码块
-        const pre = codeEl.parentElement
-        if (pre?.getAttribute('data-language')?.toLowerCase() === 'mermaid') return
-        // 获取语言
-        const langMatch = codeEl.className.match(/language-(\w+)/)
-        const lang = langMatch?.[1] || ''
-        // 高亮
-        if (lang && hljs.getLanguage(lang)) {
-          const result = hljs.highlight(codeEl.textContent || '', { language: lang, ignoreIllegals: true })
-          codeEl.innerHTML = result.value
-          codeEl.classList.add('hljs')
-        } else {
-          // 自动检测语言
-          const result = hljs.highlightAuto(codeEl.textContent || '')
-          codeEl.innerHTML = result.value
-          codeEl.classList.add('hljs')
-        }
-        codeEl.dataset.highlighted = 'yes'
-      } catch {}
-    })
-  } catch {}
-}
-
-// 节流调度代码高亮
-function scheduleHighlightCodeBlocks() {
-  try {
-    if (_highlightTimer != null) { clearTimeout(_highlightTimer); _highlightTimer = null }
-  } catch {}
-  _highlightTimer = window.setTimeout(() => {
-    _highlightTimer = null
-    try { highlightCodeBlocks() } catch {}
-  }, 100)
-}
 
 function toLocalAbsFromSrc(src: string): string | null {
   try {
@@ -344,7 +290,6 @@ export async function enableWysiwygV2(root: HTMLElement, initialMd: string, onCh
         if (_suppressInitialUpdate) return
         // scheduleMermaidRender() // 已由 Milkdown 插件处理
         try { scheduleMathBlockReparse() } catch {}
-        try { scheduleHighlightCodeBlocks() } catch {}
       })
     } catch {}
     lm.markdownUpdated((_ctx, markdown) => {
@@ -378,8 +323,6 @@ export async function enableWysiwygV2(root: HTMLElement, initialMd: string, onCh
   } catch {}
   _suppressInitialUpdate = false
   _editor = editor
-  // 初始化后执行一次代码高亮
-  try { scheduleHighlightCodeBlocks() } catch {}
 }
 
 export async function disableWysiwygV2() {

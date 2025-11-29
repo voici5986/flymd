@@ -25,10 +25,11 @@
 
 
 ## 界面预览
-<img width="1251" height="852" alt="91a418d22f073814d0d915e2cdc97f81" src="https://github.com/user-attachments/assets/f007f4cd-4c3f-46f7-8080-72e2128990e1" />
-<img width="1269" height="852" alt="cf36b7504cd5a1c3f384a77d1e66bc05" src="https://github.com/user-attachments/assets/391ef7ec-9741-4c3e-b5ef-b8573ebf021c" />
-<img width="1325" height="958" alt="9fe6a88ac611b3d72599cebe20d20c74" src="https://github.com/user-attachments/assets/2d84d6fe-623b-48cf-8d6f-3e925a9d6b12" />
-
+<p align="center">
+  <img alt="91a418d22f073814d0d915e2cdc97f81" src="https://github.com/user-attachments/assets/f007f4cd-4c3f-46f7-8080-72e2128990e1" width="32%" />
+  <img alt="cf36b7504cd5a1c3f384a77d1e66bc05" src="https://github.com/user-attachments/assets/391ef7ec-9741-4c3e-b5ef-b8573ebf021c" width="32%" />
+  <img alt="9fe6a88ac611b3d72599cebe20d20c74" src="https://github.com/user-attachments/assets/2d84d6fe-623b-48cf-8d6f-3e925a9d6b12" width="32%" />
+</p>
 
 ---
 

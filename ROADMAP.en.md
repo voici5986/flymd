@@ -2,6 +2,15 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v0.5.2
+- Added: Switched collaboration mode to a JS-driven custom cursor with clearer color differentiation, aligned cursor colors in the collaboration plugin, and bundled an official collaboration server option to make multi-user sessions easier to recognize and join.
+- Improved: Refined WYSIWYG editing styles for KaTeX and other inline math, together with a cleaner baseline layout for the plain Edit mode so long-form editing and reading feel more consistent.
+- Fixed: A series of WYSIWYG issues where Mermaid/Math NodeViews were constantly rebuilt (causing scrolling glitches), duplicate scrollbars appeared, and the code-block copy button stopped working, greatly improving stability.
+- Fixed: Missing syntax highlighting for code blocks in WYSIWYG, blank Mermaid diagrams, and failures when opening PDFs from that mode, covering several rendering/export edge cases.
+- Improved: Sticky Note mode styling and layout, including automatic height adjustment based on content, and fixed layout glitches that could appear when launching sticky notes from WYSIWYG mode.
+- Added: New "Generate tag" and "Open in new instance" entries to the sidebar tree context menu to speed up multi-library and multi-window workflows.
+- Fixed: Reading mode sometimes falling back to a pure white background under certain themes, and introduced a compatibility tweak for Arch Linux AppImage builds affected by WebKitGTK / GPU driver interactions that could cause white-screen issues.
+
 ## Update v0.5.1
 - Added: Open collaborative editing support with an open-source FlyMD collaboration server sample (the `OSserver` directory) and the companion "Collaboration (Open Server)" extension, enabling room + password based multi-user editing on your own server (Beta).
 - Added: Plugin host APIs for registering/consuming custom namespaces and listening to source-editor selection changes, providing the foundation for collaboration and other advanced extensions.

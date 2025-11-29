@@ -3417,56 +3417,13 @@ html, body { overflow: hidden; }
 .preview code.hljs .hljs-number, .preview code.hljs .hljs-literal, .preview code.hljs .hljs-bullet { color: var(--c-num); }
 .preview code.hljs .hljs-comment, .preview code.hljs .hljs-quote { color: var(--c-com); font-style: italic; }
 
-/* ========================================
-   所见模式代码高亮（独立配色，不跟随主题）
-   使用经典的 VS Code Dark+ 风格配色
-   ======================================== */
+/* 所见模式代码块样式：深色背景，不跟随主题 */
 .container.wysiwyg-v2 .ProseMirror pre code {
   color: #d4d4d4;
   background: transparent;
 }
-/* 关键字：紫色 */
-.container.wysiwyg-v2 .ProseMirror .hljs-keyword,
-.container.wysiwyg-v2 .ProseMirror .hljs-selector-tag,
-.container.wysiwyg-v2 .ProseMirror .hljs-meta { color: #c586c0; }
-/* 字符串：橙色 */
-.container.wysiwyg-v2 .ProseMirror .hljs-string,
-.container.wysiwyg-v2 .ProseMirror .hljs-attr,
-.container.wysiwyg-v2 .ProseMirror .hljs-template-variable,
-.container.wysiwyg-v2 .ProseMirror .hljs-regexp { color: #ce9178; }
-/* 数字/布尔/常量：浅绿 */
-.container.wysiwyg-v2 .ProseMirror .hljs-number,
-.container.wysiwyg-v2 .ProseMirror .hljs-literal,
-.container.wysiwyg-v2 .ProseMirror .hljs-bullet { color: #b5cea8; }
-/* 函数名/标题：淡黄 */
-.container.wysiwyg-v2 .ProseMirror .hljs-title,
-.container.wysiwyg-v2 .ProseMirror .hljs-function,
-.container.wysiwyg-v2 .ProseMirror .hljs-section { color: #dcdcaa; }
-/* 类名/类型：青色 */
-.container.wysiwyg-v2 .ProseMirror .hljs-type,
-.container.wysiwyg-v2 .ProseMirror .hljs-built_in { color: #4ec9b0; }
-/* 注释：灰绿色 */
-.container.wysiwyg-v2 .ProseMirror .hljs-comment,
-.container.wysiwyg-v2 .ProseMirror .hljs-quote { color: #6a9955; font-style: italic; }
-/* 标签/属性名：蓝色 */
-.container.wysiwyg-v2 .ProseMirror .hljs-tag,
-.container.wysiwyg-v2 .ProseMirror .hljs-name,
-.container.wysiwyg-v2 .ProseMirror .hljs-attribute { color: #569cd6; }
-/* 变量：浅蓝 */
-.container.wysiwyg-v2 .ProseMirror .hljs-variable,
-.container.wysiwyg-v2 .ProseMirror .hljs-property,
-.container.wysiwyg-v2 .ProseMirror .hljs-params { color: #9cdcfe; }
-/* 操作符/标点：灰白 */
-.container.wysiwyg-v2 .ProseMirror .hljs-operator,
-.container.wysiwyg-v2 .ProseMirror .hljs-punctuation { color: #d4d4d4; }
-/* 删除/插入（diff）*/
-.container.wysiwyg-v2 .ProseMirror .hljs-deletion { color: #f44747; }
-.container.wysiwyg-v2 .ProseMirror .hljs-addition { color: #b5cea8; }
-/* 符号/链接 */
-.container.wysiwyg-v2 .ProseMirror .hljs-symbol { color: #b5cea8; }
-.container.wysiwyg-v2 .ProseMirror .hljs-link { color: #ce9178; text-decoration: underline; }
 
-/* 所见模式代码块背景：深色固定背景，确保高亮可读 */
+/* 所见模式代码块背景：深色固定背景 */
 .container.wysiwyg-v2 .ProseMirror pre {
   background: #1e1e1e !important;
   border: 1px solid #3c3c3c;
