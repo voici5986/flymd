@@ -2863,8 +2863,8 @@ export async function activate(context) {
                     }
 
                     const base = String(existingText || '').trim()
-                    // 如果文件已存在,在开头插入提示,保留原内容;否则直接写入新待办
-                    const finalContent = base ? ('[已生成TODO清单]\n\n' + base + '\n') : (todoText + '\n')
+                    // 如果文件已存在,保留原内容并在末尾追加新的待办;否则直接写入新待办
+                    const finalContent = (base ? (base + '\n\n') : '') + todoText + '\n'
 
                     try {
                       if (typeof context.invoke === 'function') {

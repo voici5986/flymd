@@ -36,7 +36,7 @@ import { Store } from '@tauri-apps/plugin-store'
 import { open as openFileHandle, BaseDirectory } from '@tauri-apps/plugin-fs'
 // Tauri v2 插件 opener 的导出为 openUrl / openPath，不再是 open
 import { openUrl, openPath } from '@tauri-apps/plugin-opener'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { appLocalDataDir } from '@tauri-apps/api/path'
@@ -7310,10 +7310,9 @@ async function handleStickyTodoReminder(todoText: string, index: number, btn?: H
   }
 }
 
-// 便签模式：自动调整窗口高度以适应内容
+// 便签模式：自动调整窗口高度以适应内容（只调高度，不修改宽度）
 const STICKY_MIN_HEIGHT = 150
 const STICKY_MAX_HEIGHT = 600
-const STICKY_WIDTH = 400
 let _stickyAutoHeightTimer: number | null = null
 
 async function adjustStickyWindowHeight() {
@@ -7338,7 +7337,8 @@ async function adjustStickyWindowHeight() {
     // 仅当高度变化超过 10px 时才调整，避免频繁抖动
     if (Math.abs(currentSize.height - targetHeight) > 10) {
       const { LogicalSize } = await import('@tauri-apps/api/dpi')
-      await win.setSize(new LogicalSize(STICKY_WIDTH, targetHeight))
+      // 只调整高度，保持当前宽度不变，避免把窗口往右撑出去
+      await win.setSize(new LogicalSize(currentSize.width, targetHeight))
     }
   } catch (e) {
     console.error('[便签模式] 调整窗口高度失败:', e)
@@ -7501,11 +7501,49 @@ async function enterStickyNoteMode(filePath: string) {
     // 便签尺寸：宽 340，高 300
     const stickyWidth = 340
     const stickyHeight = 300
-    // 获取主显示器尺寸
-    const { availWidth, availHeight } = window.screen
-    // 计算右上角位置（留 20px 边距）
-    const posX = availWidth - stickyWidth - 20
-    const posY = 20
+
+    // 默认位置：右上角，右侧和顶部各留 20 像素边距（坐标强制约束在屏幕范围之内）
+    let posX = 20
+    let posY = 20
+
+    // 优先使用 Tauri 提供的当前显示器工作区信息，避免 DPI 缩放导致的位置计算偏差
+    try {
+      const monitor = await currentMonitor()
+      if (monitor && monitor.workArea) {
+        const scale = monitor.scaleFactor || 1
+        const workX = monitor.workArea.position.x / scale
+        const workY = monitor.workArea.position.y / scale
+        const workW = monitor.workArea.size.width / scale
+        const workH = monitor.workArea.size.height / scale
+        // 右上角，右侧和顶部各留 20 像素边距
+        posX = Math.round(workX + workW - stickyWidth - 20)
+        posY = Math.round(workY + 20)
+        // 再次强制约束到工作区范围，确保不会跑出屏幕
+        const minX = workX + 0
+        const maxX = workX + workW - stickyWidth
+        const minY = workY + 0
+        const maxY = workY + workH - stickyHeight
+        posX = Math.min(Math.max(posX, minX), maxX)
+        posY = Math.min(Math.max(posY, minY), maxY)
+      }
+    } catch {
+      // 回退到浏览器 screen 信息：仍然以右上角为目标，并做边界约束
+      try {
+        const screenW = window?.screen?.availWidth || window?.screen?.width || 0
+        const screenH = window?.screen?.availHeight || window?.screen?.height || 0
+        if (screenW && screenH) {
+          posX = Math.round(screenW - stickyWidth - 20)
+          posY = 20
+          const minX = 0
+          const maxX = screenW - stickyWidth
+          const minY = 0
+          const maxY = screenH - stickyHeight
+          posX = Math.min(Math.max(posX, minX), maxX)
+          posY = Math.min(Math.max(posY, minY), maxY)
+        }
+      } catch {}
+    }
+
     // 设置窗口大小和位置
     await win.setSize(new LogicalSize(stickyWidth, stickyHeight))
     await win.setPosition(new LogicalPosition(posX, posY))
