@@ -1407,44 +1407,111 @@ async function refreshHeader(context){
 // 收集文档中的图片并构造视觉模型可用的 content 片段
 async function buildVisionContentBlocks(context, docCtx){
   const blocks = [{ type: 'text', text: '文档上下文：\n\n' + docCtx }]
-  if (!context || typeof context.getPreviewElement !== 'function') return blocks
   let root = null
+  // 优先尝试从预览 DOM 中收集图片（阅读模式）
+  if (context && typeof context.getPreviewElement === 'function') {
+    try {
+      root = context.getPreviewElement()
+    } catch {}
+  }
+  let used = 0
   try {
-    root = context.getPreviewElement()
-  } catch {}
-  if (!root) return blocks
-  try {
-    const imgs = root.querySelectorAll('img')
-    if (!imgs || !imgs.length) return blocks
-    const maxImages = 4
-    let used = 0
-    for (const elImg of imgs) {
-      if (used >= maxImages) break
-      try {
-        const img = elImg
-        const srcAttr = img.getAttribute('src') || ''
-        const rawSrc = img.getAttribute('data-raw-src') || srcAttr
-        const absPath = img.getAttribute('data-abs-path') || ''
-        let url = ''
-        if (/^data:image\//i.test(srcAttr) || /^data:image\//i.test(rawSrc)) {
-          url = srcAttr || rawSrc
-        } else if (/^https?:\/\//i.test(srcAttr) || /^https?:\/\//i.test(rawSrc)) {
-          url = srcAttr || rawSrc
-        } else if (absPath && typeof context.readImageAsDataUrl === 'function') {
-          try {
-            url = await context.readImageAsDataUrl(absPath)
-          } catch {}
-        }
-        if (!url) continue
-        const alt = img.getAttribute('alt') || ''
-        const label = alt ? `图片 ${used + 1}：${alt}` : `图片 ${used + 1}`
-        blocks.push({ type: 'text', text: '\n\n' + label })
-        blocks.push({ type: 'image_url', image_url: { url } })
-        used++
-      } catch {}
+    if (root) {
+      const imgs = root.querySelectorAll('img')
+      const maxImages = 4
+      for (const elImg of imgs) {
+        if (used >= maxImages) break
+        try {
+          const img = elImg
+          const srcAttr = img.getAttribute('src') || ''
+          const rawSrc = img.getAttribute('data-raw-src') || srcAttr
+          const absPath = img.getAttribute('data-abs-path') || ''
+          let url = ''
+          if (/^data:image\//i.test(srcAttr) || /^data:image\//i.test(rawSrc)) {
+            url = srcAttr || rawSrc
+          } else if (/^https?:\/\//i.test(srcAttr) || /^https?:\/\//i.test(rawSrc)) {
+            url = srcAttr || rawSrc
+          } else if (absPath && typeof context.readImageAsDataUrl === 'function') {
+            try {
+              url = await context.readImageAsDataUrl(absPath)
+            } catch {}
+          }
+          if (!url) continue
+          const alt = img.getAttribute('alt') || ''
+          const label = alt ? `图片 ${used + 1}：${alt}` : `图片 ${used + 1}`
+          blocks.push({ type: 'text', text: '\n\n' + label })
+          blocks.push({ type: 'image_url', image_url: { url } })
+          used++
+        } catch {}
+      }
     }
   } catch {
-    // 忽略预览图片收集错误，继续返回已有文本块和附件图片
+    // 忽略预览图片收集错误
+  }
+  // 若预览中没有可用图片，再从 Markdown 源码中解析（源码模式兜底）
+  if (used === 0) {
+    try {
+      const md = String(docCtx || '')
+      const imgRe = /!\[([^\]]*)]\(([^)]+)\)/g
+      let m
+      // 计算当前文档所在目录，用于还原相对路径
+      let baseDir = ''
+      try {
+        if (typeof window !== 'undefined' && typeof window.flymdGetCurrentFilePath === 'function') {
+          const curPath = window.flymdGetCurrentFilePath() || ''
+          if (curPath) {
+            const parts = curPath.split(/[\\/]+/)
+            parts.pop()
+            const sep = curPath.includes('\\') ? '\\' : '/'
+            baseDir = parts.join(sep)
+          }
+        }
+      } catch {}
+      const maxImages = 4
+      while ((m = imgRe.exec(md)) && used < maxImages) {
+        try {
+          const alt = m[1] || ''
+          let target = (m[2] || '').trim()
+          if (!target) continue
+          // 去掉尖括号包裹
+          if (target.startsWith('<') && target.endsWith('>')) {
+            target = target.slice(1, -1).trim()
+          }
+          // 去掉标题部分（按空格分割，只取第一个片段）
+          const spaceIdx = target.search(/\s/)
+          if (spaceIdx > 0) target = target.slice(0, spaceIdx)
+          // 去掉成对引号包裹
+          if ((target.startsWith('"') && target.endsWith('"')) || (target.startsWith("'") && target.endsWith("'"))) {
+            target = target.slice(1, -1)
+          }
+          if (!target) continue
+          let url = ''
+          if (/^data:image\//i.test(target) || /^https?:\/\//i.test(target)) {
+            url = target
+          } else {
+            // 处理本地路径：相对路径 + 绝对路径
+            let abs = target
+            const isWinAbs = /^[a-zA-Z]:[\\/]/.test(target)
+            const isUnixAbs = target.startsWith('/')
+            const isUNC = target.startsWith('\\\\')
+            if (!isWinAbs && !isUnixAbs && !isUNC && baseDir) {
+              const sep = baseDir.includes('\\') ? '\\' : '/'
+              abs = baseDir + sep + target.replace(/[\\/]+/g, sep)
+            }
+            if (typeof context.readImageAsDataUrl === 'function') {
+              try {
+                url = await context.readImageAsDataUrl(abs)
+              } catch {}
+            }
+          }
+          if (!url) continue
+          const label = alt ? `图片 ${used + 1}：${alt}` : `图片 ${used + 1}`
+          blocks.push({ type: 'text', text: '\n\n' + label })
+          blocks.push({ type: 'image_url', image_url: { url } })
+          used++
+        } catch {}
+      }
+    } catch {}
   }
   // 追加附件图片（来自对话框粘贴）
   try {
