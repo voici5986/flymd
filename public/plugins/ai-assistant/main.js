@@ -46,6 +46,7 @@ let __AI_PENDING_ACTION__ = null // 标记待办/提醒快捷模式
 let __AI_PENDING_IMAGES__ = [] // 待发送的图片（来自对话框粘贴）
 let __AI_MD__ = null // Markdown 渲染器实例
 let __AI_HLJS__ = null // highlight.js 实例
+let __AI_MD_WARNED__ = false // Markdown 渲染失败仅提示一次
 
 // ========== 工具函数 ==========
 async function loadCfg(context) {
@@ -169,7 +170,10 @@ async function ensureMarkdownRenderer() {
     })
     return __AI_MD__
   } catch (e) {
-    console.error('[AI助手] Markdown 渲染器加载失败：', e)
+    if (!__AI_MD_WARNED__) {
+      __AI_MD_WARNED__ = true
+      try { console.warn('[AI助手] Markdown 渲染器加载失败，将降级为纯文本显示') } catch {}
+    }
     return null
   }
 }
@@ -2765,11 +2769,16 @@ async function sendFromInputWithAction(context){
 
       const visionOn = isVisionEnabledForConfig(cfg)
       let userMsg
+      let visionBlocks = null
+      let usedVision = false
+      let downgradedFromVision = false
       if (visionOn) {
         try {
           const blocks = await buildVisionContentBlocks(context, docCtx)
-          if (blocks && Array.isArray(blocks) && blocks.length) {
+          if (blocks && Array.isArray(blocks) && blocks.length && blocks.some(b => b && b.type === 'image_url')) {
             userMsg = { role: 'user', content: blocks }
+            visionBlocks = blocks
+            usedVision = true
           }
         } catch (e) {
           console.error('构造视觉上下文失败：', e)
@@ -2782,8 +2791,19 @@ async function sendFromInputWithAction(context){
       const finalMsgs = [{ role: 'system', content: system }, userMsg]
       userMsgs.forEach(m => finalMsgs.push(m))
 
+      // 纯文本降级版本：保留图片的文字说明，去掉 image_url 结构
+      let textOnlyMsgs = finalMsgs
+      if (usedVision && visionBlocks && Array.isArray(visionBlocks)) {
+        try {
+          const mergedText = visionBlocks.map(b => (b && b.type === 'text') ? String(b.text || '') : '').join('')
+          const textUserMsg = { role: 'user', content: mergedText || ('文档上下文：\n\n' + docCtx) }
+          textOnlyMsgs = [{ role: 'system', content: system }, textUserMsg]
+          userMsgs.forEach(m => textOnlyMsgs.push(m))
+        } catch {}
+      }
+
       const url = buildApiUrl(cfg)
-      const bodyObj = { model: resolveModelId(cfg), messages: finalMsgs, stream: !isFree }
+      const modelId = resolveModelId(cfg)
       const headers = buildApiHeaders(cfg)
 
       const chatEl = el('ai-chat')
@@ -2813,7 +2833,14 @@ async function sendFromInputWithAction(context){
 
       if (isFree) {
         // 免费代理模式：直接走非流式一次性请求，由后端持有真实 Key
-        const r = await fetchWithRetry(url, { method: 'POST', headers, body: JSON.stringify({ ...bodyObj, stream: false }) })
+        let r = await fetchWithRetry(url, { method: 'POST', headers, body: JSON.stringify({ model: modelId, messages: finalMsgs, stream: false }) })
+        // 如果带图请求被 4xx 拒绝且启用了视觉，则自动降级为纯文本请求
+        if (usedVision && r && !r.ok && r.status >= 400 && r.status < 500) {
+          try {
+            downgradedFromVision = true
+            r = await fetchWithRetry(url, { method: 'POST', headers, body: JSON.stringify({ model: modelId, messages: textOnlyMsgs, stream: false }) })
+          } catch {}
+        }
         removeThinking()
         const text = await r.text()
         const data = text ? JSON.parse(text) : null
@@ -2821,7 +2848,7 @@ async function sendFromInputWithAction(context){
         draft.textContent = finalText
       } else {
         // 首选用原生 fetch 进行流式解析（SSE）
-        const body = JSON.stringify(bodyObj)
+        const body = JSON.stringify({ model: modelId, messages: finalMsgs, stream: true })
         let firstChunkReceived = false
         try {
           const r2 = await fetchWithRetry(url, { method: 'POST', headers, body })
@@ -2860,9 +2887,15 @@ async function sendFromInputWithAction(context){
             }
           }
         } catch (e) {
-          // 流式失败兜底：改非流式一次性请求
+          // 流式失败兜底：先尝试非流式带图请求，再视情况降级为纯文本
           try {
-            const r3 = await fetchWithRetry(url, { method: 'POST', headers, body: JSON.stringify({ ...bodyObj, stream: false }) })
+            let r3 = await fetchWithRetry(url, { method: 'POST', headers, body: JSON.stringify({ model: modelId, messages: finalMsgs, stream: false }) })
+            if (usedVision && r3 && !r3.ok && r3.status >= 400 && r3.status < 500) {
+              try {
+                downgradedFromVision = true
+                r3 = await fetchWithRetry(url, { method: 'POST', headers, body: JSON.stringify({ model: modelId, messages: textOnlyMsgs, stream: false }) })
+              } catch {}
+            }
             removeThinking()
             const text = await r3.text()
             const data = text ? JSON.parse(text) : null
@@ -2885,6 +2918,14 @@ async function sendFromInputWithAction(context){
       } catch {}
       try { await maybeNameCurrentSession(context, cfg, finalText) } catch {}
       try { const elw = el('ai-assist-win'); if (elw) autoFitWindow(context, elw) } catch {}
+      // 若发生视觉降级，提示用户考虑开启图床以获得稳定的视觉能力
+      if (downgradedFromVision) {
+        try {
+          if (context && context.ui && typeof context.ui.notice === 'function') {
+            context.ui.notice('当前接口可能不支持内嵌图片或图片过大，已自动降级为仅使用文字描述。建议开启图床功能后再使用视觉模式。', 'warn', 4200)
+          }
+        } catch {}
+      }
     } catch (e) {
       console.error(e)
       context.ui.notice('AI 调用失败：' + (e && e.message ? e.message : '未知错误'), 'err', 4000)
