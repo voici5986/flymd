@@ -809,6 +809,13 @@ async function renderPostTable() {
       btnDl.textContent = '下载到本地'
       btnDl.addEventListener('click', () => { void downloadSinglePost(globalContextRef, p) })
       cellActions.appendChild(btnDl)
+
+      const btnUpdate = document.createElement('button')
+      btnUpdate.className = 'tm-typecho-btn'
+      btnUpdate.textContent = '用当前文档更新'
+      btnUpdate.style.marginLeft = '6px'
+      btnUpdate.addEventListener('click', () => { void publishCurrentForPost(globalContextRef, p) })
+      cellActions.appendChild(btnUpdate)
       row.appendChild(cellActions)
 
       listBodyEl.appendChild(row)
@@ -992,6 +999,111 @@ async function downloadSinglePost(context, post) {
   }
 }
 
+// ---- 发布 / 更新：使用当前文档覆盖远端 ----
+
+async function publishCurrentDocument(context) {
+  if (!context) return
+  sessionState.settings = await loadSettings(context)
+  const s = sessionState.settings
+  if (!s.endpoint || !s.username || !s.password) {
+    context.ui.notice('请先在“连接 / 下载设置”中配置 XML-RPC 地址、用户名和密码', 'err', 2600)
+    return
+  }
+  let meta = null
+  let body = ''
+  try {
+    meta = context.getDocMeta && context.getDocMeta()
+  } catch {}
+  try {
+    body = context.getDocBody ? context.getDocBody() : context.getEditorValue()
+  } catch {
+    body = ''
+  }
+  meta = meta || {}
+  body = String(body || '')
+  if (!body.trim()) {
+    context.ui.notice('当前文档内容为空，已取消发布', 'err', 2200)
+    return
+  }
+  const cid = meta.typechoId || meta.cid || meta.id
+  if (!cid && cid !== 0) {
+    context.ui.notice('当前文档缺少 typechoId/cid，无法确定远端文章，请先从 Typecho 导入或手动添加。', 'err', 3200)
+    return
+  }
+
+  const title = String(meta.title || '').trim() || '(未命名)'
+  const cats = Array.isArray(meta.categories) ? meta.categories : []
+  const tagArr = Array.isArray(meta.tags)
+    ? meta.tags
+    : (Array.isArray(meta.keywords) ? meta.keywords : [])
+  const tags = tagArr.map((x) => String(x || '').trim()).filter(Boolean)
+  const statusStr = String(meta.status || '').toLowerCase()
+  const draft = meta.draft === true || statusStr === 'draft'
+
+  let dtRaw = meta.dateCreated || meta.date || meta.typechoUpdatedAt || null
+  let dt = dtRaw ? new Date(dtRaw) : new Date()
+  if (!dt || isNaN(dt.getTime())) dt = new Date()
+
+  const confirmed = await context.ui.confirm(
+    `将使用当前文档内容覆盖 Typecho 上的文章（ID=${cid}，标题=${title}），是否继续？`
+  )
+  if (!confirmed) return
+
+  const postStruct = {
+    title,
+    description: body,
+    mt_keywords: tags.join(','),
+    categories: cats,
+    post_type: 'post',
+    wp_slug: meta.slug || meta.typechoSlug || '',
+    mt_allow_comments: 1,
+    dateCreated: dt
+  }
+
+  try {
+    await xmlRpcCall(context, s, 'metaWeblog.editPost', [
+      String(cid),
+      s.username,
+      s.password,
+      postStruct,
+      !draft
+    ])
+    context.ui.notice('远端文章已更新', 'ok', 2300)
+  } catch (e) {
+    console.error('[Typecho Manager] 发布当前文档失败', e)
+    const msg = e && e.message ? e.message : String(e || '未知错误')
+    context.ui.notice('更新远端文章失败：' + msg, 'err', 3200)
+  }
+}
+
+async function publishCurrentForPost(context, post) {
+  if (!context || !post) return
+  let meta = null
+  try {
+    meta = context.getDocMeta && context.getDocMeta()
+  } catch {}
+  meta = meta || {}
+
+  const cidPost = post.postid || post.postId || post.cid || post.id
+  const cidMeta = meta.typechoId || meta.cid || meta.id
+
+  if (!cidMeta && cidPost) {
+    const ok = await context.ui.confirm(
+      `当前文档没有 typechoId，将使用列表中的文章 ID=${cidPost} 作为目标，是否继续？`
+    )
+    if (!ok) return
+    meta.typechoId = String(cidPost)
+  } else if (cidMeta && cidPost && String(cidMeta) !== String(cidPost)) {
+    const ok = await context.ui.confirm(
+      `当前文档的 typechoId=${cidMeta} 与列表中的 ID=${cidPost} 不一致。\n\n仍要使用当前文档覆盖列表所选远端文章吗？`
+    )
+    if (!ok) return
+    meta.typechoId = String(cidPost)
+  }
+
+  await publishCurrentDocument(context)
+}
+
 // ---- 设置窗口：一次性填写所有选项 ----
 
 async function openSettingsDialog(context) {
@@ -1164,7 +1276,7 @@ async function openSettingsDialog(context) {
 // ---- 插件生命周期：右键菜单入口 ----
 
 let globalContextRef = null
-let ctxMenuDisposer = null
+let ctxMenuDisposers = []
 
 async function openManager(context) {
   globalContextRef = context
@@ -1183,18 +1295,33 @@ export async function activate(context) {
   globalContextRef = context
   sessionState.settings = await loadSettings(context)
   if (context.addContextMenuItem) {
-    ctxMenuDisposer = context.addContextMenuItem({
-      label: '管理 Typecho 博文',
-      icon: '📖',
-      onClick: () => { void openManager(globalContextRef) }
-    })
+    try {
+      const disposeManage = context.addContextMenuItem({
+        label: '管理 Typecho 博文',
+        icon: '📖',
+        onClick: () => { void openManager(globalContextRef) }
+      })
+      if (typeof disposeManage === 'function') ctxMenuDisposers.push(disposeManage)
+    } catch {}
+    try {
+      const disposePublish = context.addContextMenuItem({
+        label: '发布当前文档到 Typecho',
+        icon: '⬆️',
+        onClick: () => { void publishCurrentDocument(globalContextRef) }
+      })
+      if (typeof disposePublish === 'function') ctxMenuDisposers.push(disposePublish)
+    } catch {}
   }
 }
 
 export function deactivate() {
   globalContextRef = null
-  if (ctxMenuDisposer) {
-    try { ctxMenuDisposer() } catch {}
-    ctxMenuDisposer = null
+  if (ctxMenuDisposers && ctxMenuDisposers.length) {
+    for (const fn of ctxMenuDisposers) {
+      try {
+        if (typeof fn === 'function') fn()
+      } catch {}
+    }
   }
+  ctxMenuDisposers = []
 }
