@@ -480,6 +480,14 @@ export function initThemeUI(): void {
         document.head.appendChild(style)
       } catch {}
     }
+    // 启动时恢复已安装字体：将数据库中的字体全部注册为 @font-face，
+    // 确保升级或重启应用后，"本地: XXX" 选项仍然真实指向对应字体文件
+    try {
+      const list = loadFontDb()
+      for (const f of list) {
+        void injectFontFace(f)
+      }
+    } catch {}
     function mergeCustomOptions(): { body: Array<{label:string; stack:string}>, mono: Array<{label:string;stack:string}> } {
       const outB: Array<{label:string; stack:string}> = []
       const outM: Array<{label:string; stack:string}> = []
