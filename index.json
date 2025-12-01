@@ -85,6 +85,17 @@
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/xxtui-todo-push/manifest.json",
         "type": "manifest"
       }
+    },
+    {
+      "homepage": "https://github.com/xf959211192/telegraph-image-flymd",
+      "name": "Telegraph 图床上传",
+      "description": "粘贴/拖拽图片自动上传 Telegraph-Image 并插入 Markdown 外链",
+      "author": "",
+      "id": "telegraph-image-flymd",
+      "install": {
+        "ref": "xf959211192/telegraph-image-flymd@main",
+        "type": "github"
+      }
     }
   ]
 }
