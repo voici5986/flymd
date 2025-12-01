@@ -190,6 +190,66 @@ const response = await context.http.fetch('https://api.example.com/post', {
 });
 ```
 
+### context.htmlToMarkdown
+
+使用 flyMD 内置的 HTML → Markdown 转换器，将一段 HTML 文本转换为 Markdown 字符串。  
+适合从外部系统（博客后台 / Web API / 剪贴板等）获取 HTML 内容后，统一落地为本地 Markdown 文件。
+
+```javascript
+// 基本用法：将简单 HTML 片段转换为 Markdown
+const md = await context.htmlToMarkdown('<h1>标题</h1><p>一段<b>粗体</b>文字</p>');
+// md: "# 标题\n\n一段**粗体**文字"
+
+// 带 baseUrl 的用法：用于把相对链接转换为绝对链接
+const html = '<p><a href="/post/123">查看详情</a></p>';
+const md2 = await context.htmlToMarkdown(html, {
+  baseUrl: 'https://example.com'
+});
+// md2: "[查看详情](https://example.com/post/123)"
+```
+
+**参数说明：**
+
+- `html: string`：待转换的 HTML 字符串（必填）
+- `opts.baseUrl?: string`：可选，作为相对链接的基准 URL。  
+  例如远端返回 `<a href="/a/b">`，传入 `baseUrl: 'https://example.com'` 后会转换为 `https://example.com/a/b`。
+
+**返回值：**
+
+- `Promise<string>`：转换后的 Markdown 文本；  
+  - 如果传入为空或转换失败，会返回空字符串（不会抛出异常，方便插件按需回退处理）。
+
+**典型场景：Typecho / WordPress 文章拉取**
+
+配合 `context.http.fetch` 从远端 XML-RPC / REST API 拉取 HTML 内容后，使用 `context.htmlToMarkdown` 统一转换为 Markdown，再写入本地文件或当前文档正文。
+
+```javascript
+export async function activate(context) {
+  context.addMenuItem({
+    label: '从远端拉文章',
+    async onClick() {
+      // 1. 调用远端接口获取 HTML 内容
+      const resp = await context.http.fetch('https://blog.example.com/api/post/123');
+      const raw = await resp.json();
+      const html = raw.content || '';
+
+      // 2. 使用内置转换器转为 Markdown
+      const md = await context.htmlToMarkdown(html, {
+        baseUrl: 'https://blog.example.com'
+      });
+
+      // 3. 落到当前文档（或写本地文件）
+      if (md && md.trim()) {
+        context.setEditorValue(md);
+        context.ui.notice('文章已转换为 Markdown', 'ok');
+      } else {
+        context.ui.notice('HTML 转 Markdown 失败或内容为空', 'err');
+      }
+    }
+  });
+}
+```
+
 ### context.getFrontMatterRaw / context.getDocMeta / context.getDocBody
 
 读取当前文档头部的 YAML Front Matter 以及解析后的元数据，适合博客发布、文库增强、外部应用同步等场景统一使用。

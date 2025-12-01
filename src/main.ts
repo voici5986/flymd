@@ -11657,6 +11657,23 @@ async function activatePlugin(p: InstalledPlugin): Promise<void> {
   const getSourceTextForPlugin = () => {
     try { return String(editor.value || '') } catch { return '' }
   }
+  // 供插件使用的 HTML → Markdown 转换工具：按需动态加载内部转换器，避免主包体积膨胀
+  const htmlToMarkdownForPlugin = async (html: string, opts?: { baseUrl?: string }): Promise<string> => {
+    try {
+      const raw = String(html || '')
+      if (!raw.trim()) return ''
+      const mod: any = await import('./html2md')
+      const fn = (mod && (mod.htmlToMarkdown || mod.default)) as unknown
+      if (typeof fn !== 'function') {
+        console.warn(`[Plugin ${p.id}] htmlToMarkdown: 内部转换函数不可用`)
+        return ''
+      }
+      return await (fn as (h: string, o?: any) => string)(raw, opts || {})
+    } catch (e) {
+      console.error(`[Plugin ${p.id}] htmlToMarkdown 失败:`, e)
+      return ''
+    }
+  }
   // 供插件使用的 Front Matter/正文获取工具：始终基于当前源码文本即时计算，避免额外状态耦合
   const getFrontMatterForPlugin = () => {
     try {
@@ -11729,6 +11746,8 @@ async function activatePlugin(p: InstalledPlugin): Promise<void> {
   }
   const ctx = {
     http,
+    // HTML 相关工具
+    htmlToMarkdown: (html: string, opts?: { baseUrl?: string }) => htmlToMarkdownForPlugin(html, opts),
     invoke,
     openAiWindow,
     getAssetUrl: (relPath: string) => toPluginAssetUrl(pluginAssetsAbs, relPath),
