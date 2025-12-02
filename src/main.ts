@@ -83,6 +83,43 @@ let sanitizeHtml: ((html: string, cfg?: any) => string) | null = null
 let katexCssLoaded = false
 let hljsLoaded = false
 let mermaidReady = false
+
+// 获取 mermaid 初始化配置（根据夜间模式自动选择主题）
+function getMermaidConfig(): any {
+  const isDark = document.body.classList.contains('dark-mode') ||
+    (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  return {
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: isDark ? 'dark' : 'default',
+    logLevel: 'fatal' as any,
+    fontSize: 16 as any,
+    flowchart: { useMaxWidth: true } as any,
+    themeVariables: isDark ? {
+      fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif',
+      fontSize: '16px',
+      // 夜间模式配色
+      primaryColor: '#3c3c3c',
+      primaryTextColor: '#d4d4d4',
+      primaryBorderColor: '#505050',
+      lineColor: '#808080',
+      secondaryColor: '#252526',
+      tertiaryColor: '#1e1e1e',
+      background: '#1e1e1e',
+      mainBkg: '#252526',
+      secondBkg: '#1e1e1e',
+      border1: '#505050',
+      border2: '#3c3c3c',
+      arrowheadColor: '#d4d4d4',
+      textColor: '#d4d4d4',
+      nodeTextColor: '#d4d4d4',
+    } : {
+      fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif',
+      fontSize: '16px'
+    }
+  }
+}
+
 // Mermaid 工具（已拆分到 core/mermaid.ts）
 import { isMermaidCacheDisabled, getMermaidScale, setMermaidScaleClamped, adjustExistingMermaidSvgsForScale, exportMermaidViaDialog, createMermaidToolsFor, mermaidSvgCache, mermaidSvgCacheVersion, getCachedMermaidSvg, cacheMermaidSvg, normalizeMermaidSvg, postAttachMermaidSvgAdjust, invalidateMermaidSvgCache, MERMAID_SCALE_MIN, MERMAID_SCALE_MAX, MERMAID_SCALE_STEP } from './core/mermaid'
 // 当前 PDF 预览 URL（iframe 使用），用于页内跳转
@@ -4192,18 +4229,7 @@ async function renderPreview() {
         let mermaid: any
         try { mermaid = (await import('mermaid')).default } catch (e1) { try { mermaid = (await import('mermaid/dist/mermaid.esm.mjs')).default } catch (e2) { throw e2 } }
         if (!mermaidReady) {
-          mermaid.initialize({
-            startOnLoad: false,
-            securityLevel: 'strict',
-            theme: 'default',
-            logLevel: 'fatal' as any,
-            fontSize: 16 as any,
-            flowchart: { useMaxWidth: true } as any,
-            themeVariables: {
-              fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif',
-              fontSize: '16px'
-            } as any
-          });
+          mermaid.initialize(getMermaidConfig());
           mermaidReady = true
         }
         for (let i = 0; i < nodes.length; i++) {
@@ -4442,36 +4468,14 @@ async function renderPreview() {
       } catch {}
       if (!mermaidReady) {
         // 初始化 Mermaid；所见模式下降低日志级别，避免错误信息干扰输入体验
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: 'strict',
-          theme: 'default',
-          logLevel: 'fatal' as any,
-          fontSize: 16 as any,
-          flowchart: { useMaxWidth: true } as any,
-          themeVariables: {
-            fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif',
-            fontSize: '16px'
-          } as any
-        })
+        mermaid.initialize(getMermaidConfig())
         mermaidReady = true
         console.log('Mermaid 已初始化')
         try { decorateCodeBlocks(preview) } catch {}
       } else {
-        // 已初始化时，动态调整日志级别（切换所见/预览模式时生效）
+        // 已初始化时，动态调整主题（切换所见/预览模式或夜间模式时生效）
         try {
-          mermaid.initialize({
-            startOnLoad: false,
-            securityLevel: 'strict',
-            theme: 'default',
-            logLevel: 'fatal' as any,
-            fontSize: 16 as any,
-            flowchart: { useMaxWidth: true } as any,
-            themeVariables: {
-              fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif',
-              fontSize: '16px'
-            } as any
-          })
+          mermaid.initialize(getMermaidConfig())
         } catch {}
       }
       for (let i = 0; i < nodes.length; i++) {
@@ -7168,6 +7172,22 @@ window.addEventListener('flymd:mode:changed', (ev: Event) => {
 })
 // 监听主题变更事件，更新专注模式侧栏背景
 window.addEventListener('flymd:theme:changed', () => updateFocusSidebarBg())
+
+// 监听夜间模式切换事件，重置 mermaid 并刷新预览
+window.addEventListener('flymd:darkmode:changed', async () => {
+  try {
+    // 重置 mermaid 初始化状态，下次渲染时会使用新的主题配置
+    mermaidReady = false
+    // 清除 mermaid SVG 缓存，避免使用旧主题的缓存
+    try { invalidateMermaidSvgCache() } catch {}
+    // 根据当前模式刷新预览
+    if (mode === 'preview') {
+      await renderPreview()
+    } else if (wysiwyg) {
+      scheduleWysiwygRender()
+    }
+  } catch {}
+})
 
 // 暴露 updateFocusSidebarBg 到全局，供其他模块调用
 ;(window as any).updateFocusSidebarBg = updateFocusSidebarBg

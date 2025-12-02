@@ -2,6 +2,19 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v0.5.7
+- Added: Compact title bar mode with custom window controls drawn inside flyMD, toggled from the theme panel and persisted between launches, including integration with Focus Mode so the native title bar can be fully hidden.
+- Added: Syntax highlighting for code blocks in WYSIWYG mode plus a compact icon-style copy button that adapts to light/dark backgrounds for easier reading and copying of long code snippets.
+- Added: Typecho Manager upgrades including editable title in the download/publish dialog, automatic title fallback from the current file name, a new API that renames the local Markdown file to `ID-title` after publish, and better compatibility with themes that rely on a top-level `thumb` field.
+- Added: Third-party "Xiaohongshu copywriting generator" AI extension, now listed in the marketplace and acknowledged in the Chinese and English READMEs.
+- Improved: Night mode backgrounds for edit, WYSIWYG, reading and surrounding chrome (sidebar/menu/tabbar) with a new derived color model that keeps chrome visually close to the content area and avoids overly bright or overly dark bars.
+- Improved: Chrome colors for the title bar, menu bar, sidebar and tab bar now track the active mode (edit / WYSIWYG / reading) and theme, updating automatically when switching modes or changing theme preferences.
+- Improved: Images in WYSIWYG mode can be double-clicked to edit their source URL; the original local path is preserved in a dedicated attribute so you no longer see or edit `base64` / `asset:` intermediate URLs.
+- Improved: URL pasting behavior is now unified between edit and WYSIWYG modes — pressing `Ctrl+V` on a plain URL fetches the page `<title>` and inserts a link, powered by a shared `flymdFetchPageTitle` helper.
+- Improved: The insert-link dialog now focuses and selects the URL field by default for quick paste-to-replace, and the "+" tab button is always rendered as the last item so tabs align more predictably.
+- Fixed: Mermaid diagrams and code highlighting colors in dark mode to restore contrast and readability; WYSIWYG background color controls are disabled in dark mode to avoid unreadable combinations.
+- Fixed: A case where Backspace on an empty input could bubble up and close the dialog; Backspace at the start of text inputs/textareas is now intercepted so focus safely remains in the field.
+
 ## Update v0.5.6
 - Added: Official "Typecho Post Manager" extension that uses XML-RPC to fetch posts from Typecho, filter by date/category, and download them as local Markdown files, and it is now listed in the built-in extension marketplace.
 - Added: Typecho Manager now supports creating and publishing posts directly from flyMD, editing slug/cover/custom fields, and lazily loading categories from the remote site on first publish to reduce manual configuration.

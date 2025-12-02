@@ -159,6 +159,9 @@ function updateChromeColorsFromContainer(container: HTMLElement, fallbackBase?: 
   } catch {}
 }
 
+// 夜间模式下所见模式的固定背景色
+const WYSIWYG_BG_DARK = '#0b1016'
+
 // 根据当前模式更新外圈UI颜色（标题栏、侧栏等）
 export function updateChromeColorsForMode(mode: 'edit' | 'wysiwyg' | 'preview'): void {
   try {
@@ -168,8 +171,8 @@ export function updateChromeColorsForMode(mode: 'edit' | 'wysiwyg' | 'preview'):
 
     switch (mode) {
       case 'wysiwyg':
-        // 所见模式：夜间使用默认深色，日间使用用户设置的所见背景
-        base = isDarkMode ? (DEFAULT_PREFS.wysiwygBg || '#0b1016') : prefs.wysiwygBg
+        // 所见模式：夜间使用固定深色，日间使用用户设置的所见背景
+        base = isDarkMode ? WYSIWYG_BG_DARK : prefs.wysiwygBg
         break
       case 'preview':
         // 阅读模式
