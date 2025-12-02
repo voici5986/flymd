@@ -905,11 +905,11 @@ export function initThemeUI(): void {
         applyThemePrefs(cur)
         lastSaved = { ...cur }
       })
-    }
+      }
 
-    // 专注模式开关
-    const focusToggle = panel.querySelector('#focus-mode-toggle') as HTMLInputElement | null
-    if (focusToggle) {
+      // 专注模式开关
+      const focusToggle = panel.querySelector('#focus-mode-toggle') as HTMLInputElement | null
+      if (focusToggle) {
       // 初始化开关状态：同步当前 body 上的 focus-mode 类
       focusToggle.checked = document.body.classList.contains('focus-mode')
       // 监听开关变化
@@ -939,17 +939,36 @@ export function initThemeUI(): void {
           }
         }
       })
-      observer.observe(document.body, { attributes: true, attributeFilter: ['class'] })
-    }
+        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+      }
 
-    // 紧凑标题栏开关
-    const compactToggle = panel.querySelector('#compact-titlebar-toggle') as HTMLInputElement | null
-    if (compactToggle) {
-      // 初始化：同步 body 上的 compact-titlebar 类
-      compactToggle.checked = document.body.classList.contains('compact-titlebar')
-      compactToggle.addEventListener('change', async () => {
-        const enabled = compactToggle.checked
-        const setFunc = (window as any).flymdSetCompactTitlebar
+      // 紧凑标题栏开关
+      const compactToggle = panel.querySelector('#compact-titlebar-toggle') as HTMLInputElement | null
+      if (compactToggle) {
+        // 初始化：同步 body 上的 compact-titlebar 类（第一次打开面板时）
+        const syncCompactToggle = () => {
+          try {
+            compactToggle.checked = document.body.classList.contains('compact-titlebar')
+          } catch {}
+        }
+        syncCompactToggle()
+
+        // 监听 body.class 变化：当主进程根据 Store 恢复紧凑标题栏时，自动更新开关状态
+        try {
+          const compactObserver = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+              if (m.type === 'attributes' && m.attributeName === 'class') {
+                syncCompactToggle()
+                break
+              }
+            }
+          })
+          compactObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+        } catch {}
+
+        compactToggle.addEventListener('change', async () => {
+          const enabled = compactToggle.checked
+          const setFunc = (window as any).flymdSetCompactTitlebar
         if (typeof setFunc === 'function') {
           await setFunc(enabled)
         } else {

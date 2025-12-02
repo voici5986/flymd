@@ -7036,15 +7036,28 @@ function initFocusModeEvents() {
 
   // 监听来自主题面板开关的专注模式切换事件
   window.addEventListener('flymd:focus:toggle', async (ev: Event) => {
-    const detail = (ev as CustomEvent).detail || {}
-    const enabled = !!detail.enabled
-    focusMode = enabled
-    // 如果退出专注模式，确保 titlebar 可见
-    if (!focusMode) {
-      titlebar.classList.remove('show')
-    }
-    // 更新侧栏背景色
-    updateFocusSidebarBg()
+      const detail = (ev as CustomEvent).detail || {}
+      const enabled = !!detail.enabled
+      focusMode = enabled
+      // 如果退出专注模式，确保 titlebar 可见
+      if (!focusMode) {
+        titlebar.classList.remove('show')
+      }
+      // 更新侧栏背景色
+      updateFocusSidebarBg()
+    })
+
+  // 所见模式默认开关：主题面板勾选后，立即同步当前模式并持久化
+  window.addEventListener('flymd:wysiwyg:default', async (ev: Event) => {
+    try {
+      const detail = (ev as CustomEvent).detail || {}
+      const enabled = !!detail.enabled
+      // 便签模式下不自动切换所见模式，避免与简化界面冲突
+      if (stickyNoteMode) return
+      if (enabled !== wysiwyg) {
+        await setWysiwygEnabled(enabled)
+      }
+    } catch {}
   })
 }
 
