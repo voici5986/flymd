@@ -159,6 +159,39 @@ function updateChromeColorsFromContainer(container: HTMLElement, fallbackBase?: 
   } catch {}
 }
 
+// 根据当前模式更新外圈UI颜色（标题栏、侧栏等）
+export function updateChromeColorsForMode(mode: 'edit' | 'wysiwyg' | 'preview'): void {
+  try {
+    const prefs = loadThemePrefs()
+    const isDarkMode = document.body.classList.contains('dark-mode')
+    let base: string
+
+    switch (mode) {
+      case 'wysiwyg':
+        // 所见模式：夜间使用默认深色，日间使用用户设置的所见背景
+        base = isDarkMode ? (DEFAULT_PREFS.wysiwygBg || '#0b1016') : prefs.wysiwygBg
+        break
+      case 'preview':
+        // 阅读模式
+        base = isDarkMode ? (prefs.readBgDark || DEFAULT_PREFS.readBgDark || '#12100d') : prefs.readBg
+        break
+      default: // edit
+        base = isDarkMode ? (prefs.editBgDark || DEFAULT_PREFS.editBgDark || '#0b0c0e') : prefs.editBg
+    }
+
+    const derived = base ? deriveChromeColors(base) : null
+    const root = document.body
+
+    if (derived) {
+      root.style.setProperty('--chrome-bg', derived.chromeBg)
+      root.style.setProperty('--chrome-panel-bg', derived.chromePanelBg)
+    } else {
+      root.style.removeProperty('--chrome-bg')
+      root.style.removeProperty('--chrome-panel-bg')
+    }
+  } catch {}
+}
+
 export function applyThemePrefs(prefs: ThemePrefs): void {
   try {
     const c = getContainer()

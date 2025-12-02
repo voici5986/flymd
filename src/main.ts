@@ -18,7 +18,7 @@ const _startTime = performance.now()
 
 import './style.css'
 import './mobile.css'  // 移动端样式
-import { initThemeUI, applySavedTheme } from './theme'
+import { initThemeUI, applySavedTheme, updateChromeColorsForMode } from './theme'
 import { t, fmtStatus, getLocalePref, setLocalePref, getLocale } from './i18n'
 // KaTeX 样式改为按需动态加载（首次检测到公式时再加载）
 
@@ -2542,6 +2542,8 @@ async function setWysiwygEnabled(enable: boolean) {
         if (container) { container.classList.remove('wysiwyg-v2-loading'); container.classList.add('wysiwyg-v2'); }
         // 所见模式启用后应用当前缩放
         try { applyUiZoom() } catch {}
+        // 更新外圈UI颜色（标题栏、侧栏等）跟随所见模式背景
+        try { updateChromeColorsForMode('wysiwyg') } catch {}
         try { if (root) (root as HTMLElement).style.display = 'block' } catch {}
         try { preview.classList.add('hidden') } catch {}
         // 根据“库是否固定”应用布局：WYSIWYG V2 在固定库时仍占满全宽
@@ -2599,6 +2601,8 @@ async function setWysiwygEnabled(enable: boolean) {
         // 右下角提示已取消，无需移除
       }
       try { applyLibraryLayout() } catch {}
+      // 更新外圈UI颜色（标题栏、侧栏等）跟随当前模式背景
+      try { updateChromeColorsForMode(mode === 'preview' ? 'preview' : 'edit') } catch {}
       if (mode !== 'preview') { try { preview.classList.add('hidden') } catch {} } else { try { preview.classList.remove('hidden') } catch {} }
       try { if (container) container.classList.remove('no-caret') } catch {}
       try { if (wysiwygStatusEl) wysiwygStatusEl.classList.remove('show') } catch {}
