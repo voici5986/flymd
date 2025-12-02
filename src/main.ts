@@ -3750,10 +3750,10 @@ async function openLinkDialog(presetLabel: string, presetUrl = 'https://'): Prom
     btnCancel?.addEventListener('click', onCancel)
     btnClose?.addEventListener('click', onCancel)
     overlay.addEventListener('click', onOverlayClick)
-  // 测试连接事件
-  showLinkOverlay(true)
-    // 聚焦 URL 输入框，便于直接粘贴
-    setTimeout(() => inputUrl.focus(), 0)
+    // 测试连接事件
+    showLinkOverlay(true)
+    // 聚焦并选中 URL 输入框内容，方便直接粘贴覆盖
+    setTimeout(() => { try { inputUrl.focus(); inputUrl.select() } catch {} }, 0)
   })
 }
 // 更新标题和未保存标记
@@ -8904,7 +8904,7 @@ function bindEvents() {
       document.addEventListener('input', (e) => { try { const ev: any = e as any; if (ev?.isComposing || /Composition/i.test(String(ev?.inputType || ''))) return; handleInput(e as any) } catch {} }, true)
       document.addEventListener('keydown', (e) => { try { handleKeydown(e) } catch {} }, true)
       document.addEventListener('keydown', (e) => { try { handleTabIndent(e) } catch {} }, true)
-            document.addEventListener('keydown', (e) => {
+      document.addEventListener('keydown', (e) => {
         try {
           const ev = e as KeyboardEvent
           if (ev.key !== 'Tab' || ev.ctrlKey || ev.metaKey || !wysiwygV2Active) return
@@ -8964,6 +8964,24 @@ function bindEvents() {
             r.deleteContents()
             r.insertNode(document.createTextNode(em))
             try { sel.removeAllRanges(); const rr = document.createRange(); rr.setStart(r.endContainer, r.endOffset); rr.collapse(true); sel.addRange(rr) } catch {}
+          }
+        } catch {}
+      }, true)
+      document.addEventListener('keydown', (e: KeyboardEvent) => {
+        try {
+          if (e.key !== 'Backspace') return
+          const anyEv = e as any
+          if (anyEv?.defaultPrevented) return
+          const target = e.target as HTMLElement | null
+          if (!target) return
+          if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return
+          const el = target as HTMLInputElement | HTMLTextAreaElement
+          const s = el.selectionStart ?? 0
+          const end = el.selectionEnd ?? s
+          if (s === 0 && end === 0) {
+            e.preventDefault()
+            try { e.stopPropagation() } catch {}
+            try { (anyEv as any).stopImmediatePropagation && (anyEv as any).stopImmediatePropagation() } catch {}
           }
         } catch {}
       }, true)
