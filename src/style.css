@@ -5069,6 +5069,29 @@ body.dark-mode .preview pre {
   border-color: #2d3748 !important;
 }
 
+/* 夜间模式 - 阅读模式代码高亮样式（使用 !important 覆盖 --code-fg 的纯白色）*/
+body.dark-mode .preview code.hljs .hljs-keyword,
+body.dark-mode .preview code.hljs .hljs-selector-tag,
+body.dark-mode .preview code.hljs .hljs-built_in { color: #a78bfa !important; }
+body.dark-mode .preview code.hljs .hljs-title,
+body.dark-mode .preview code.hljs .hljs-section,
+body.dark-mode .preview code.hljs .hljs-function { color: #f472b6 !important; }
+body.dark-mode .preview code.hljs .hljs-string,
+body.dark-mode .preview code.hljs .hljs-attr,
+body.dark-mode .preview code.hljs .hljs-template-variable { color: #60a5fa !important; }
+body.dark-mode .preview code.hljs .hljs-number,
+body.dark-mode .preview code.hljs .hljs-literal,
+body.dark-mode .preview code.hljs .hljs-bullet { color: #34d399 !important; }
+body.dark-mode .preview code.hljs .hljs-comment,
+body.dark-mode .preview code.hljs .hljs-quote { color: #6b7280 !important; font-style: italic; }
+body.dark-mode .preview code.hljs .hljs-variable,
+body.dark-mode .preview code.hljs .hljs-params,
+body.dark-mode .preview code.hljs .hljs-property { color: #9cdcfe !important; }
+body.dark-mode .preview code.hljs .hljs-class,
+body.dark-mode .preview code.hljs .hljs-type { color: #4ec9b0 !important; }
+body.dark-mode .preview code.hljs .hljs-operator,
+body.dark-mode .preview code.hljs .hljs-punctuation { color: #d4d4d4 !important; }
+
 body.dark-mode .preview blockquote {
   border-left-color: #4b5563 !important;
   color: #9ca3af !important;
