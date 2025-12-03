@@ -1993,6 +1993,8 @@ try { initThemeUI() } catch {}
 try { initFocusModeEvents() } catch {}
 // 初始化窗口拖拽（为 mac / Linux 上的紧凑标题栏补齐拖动支持）
 try { initWindowDrag() } catch {}
+// 初始化窗口边缘 resize（decorations: false 时提供窗口调整大小功能）
+try { initWindowResize() } catch {}
 // 恢复专注模式状态（需要等 store 初始化后执行，见下方 store 初始化处）
 
 const editor = document.getElementById('editor') as HTMLTextAreaElement
@@ -7196,6 +7198,105 @@ function initWindowDrag() {
       const win = getCurrentWindow()
       void win.startDragging()
     } catch {}
+  })
+}
+
+// 窗口边缘 resize 初始化：为 decorations: false 时提供窗口调整大小功能
+function initWindowResize() {
+  // 创建 resize handles 容器
+  const container = document.createElement('div')
+  container.className = 'window-resize-handles'
+
+  // 创建 8 个 resize handles（四边 + 四角）
+  const handles = ['top', 'bottom', 'left', 'right', 'corner-nw', 'corner-ne', 'corner-sw', 'corner-se']
+  handles.forEach(dir => {
+    const handle = document.createElement('div')
+    handle.className = `window-resize-handle ${dir}`
+    handle.dataset.resizeDir = dir
+    container.appendChild(handle)
+  })
+  document.body.appendChild(container)
+
+  // resize 状态
+  let resizing = false
+  let startX = 0
+  let startY = 0
+  let startWidth = 0
+  let startHeight = 0
+  let startPosX = 0
+  let startPosY = 0
+  let direction = ''
+  const MIN_WIDTH = 600
+  const MIN_HEIGHT = 400
+
+  // mousedown：开始 resize
+  container.addEventListener('mousedown', async (e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (!target.classList.contains('window-resize-handle')) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    resizing = true
+    direction = target.dataset.resizeDir || ''
+    startX = e.screenX
+    startY = e.screenY
+
+    try {
+      const win = getCurrentWindow()
+      const size = await win.innerSize()
+      const pos = await win.outerPosition()
+      startWidth = size.width
+      startHeight = size.height
+      startPosX = pos.x
+      startPosY = pos.y
+    } catch {}
+  })
+
+  // mousemove：执行 resize
+  document.addEventListener('mousemove', async (e: MouseEvent) => {
+    if (!resizing) return
+
+    const deltaX = e.screenX - startX
+    const deltaY = e.screenY - startY
+
+    let newWidth = startWidth
+    let newHeight = startHeight
+    let newX = startPosX
+    let newY = startPosY
+
+    // 根据方向计算新尺寸和位置
+    if (direction.includes('right') || direction === 'corner-ne' || direction === 'corner-se') {
+      newWidth = Math.max(MIN_WIDTH, startWidth + deltaX)
+    }
+    if (direction.includes('left') || direction === 'corner-nw' || direction === 'corner-sw') {
+      const widthDelta = Math.min(deltaX, startWidth - MIN_WIDTH)
+      newWidth = startWidth - widthDelta
+      newX = startPosX + widthDelta
+    }
+    if (direction.includes('bottom') || direction === 'corner-sw' || direction === 'corner-se') {
+      newHeight = Math.max(MIN_HEIGHT, startHeight + deltaY)
+    }
+    if (direction.includes('top') || direction === 'corner-nw' || direction === 'corner-ne') {
+      const heightDelta = Math.min(deltaY, startHeight - MIN_HEIGHT)
+      newHeight = startHeight - heightDelta
+      newY = startPosY + heightDelta
+    }
+
+    try {
+      const win = getCurrentWindow()
+      // 先设置位置（如果需要），再设置尺寸
+      if (newX !== startPosX || newY !== startPosY) {
+        await win.setPosition({ type: 'Physical', x: Math.round(newX), y: Math.round(newY) })
+      }
+      await win.setSize({ type: 'Physical', width: Math.round(newWidth), height: Math.round(newHeight) })
+    } catch {}
+  })
+
+  // mouseup：结束 resize
+  document.addEventListener('mouseup', () => {
+    resizing = false
+    direction = ''
   })
 }
 

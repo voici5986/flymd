@@ -32,6 +32,9 @@ aws-sdk-s3 = { version = "1", features = ["rt-tokio"] }
 trash = "3"
 futures-util = "0.3"
 
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
 [profile.release]
 # 说明：release 配置优先减小体积和启动时间，后续不要随意改动以免引入性能回退
 panic = "abort"

@@ -6487,3 +6487,105 @@ body.sticky-note-mode .sticky-todo-btn:hover {
 body.sticky-note-mode .flymd-context-menu .context-menu-note {
   font-size: 10px;
 }
+
+/* ========================================
+   窗口边缘 Resize Handles
+   用于 decorations: false 时的窗口调整大小
+   ======================================== */
+
+/* resize handles 容器 */
+.window-resize-handles {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 99999;
+}
+
+/* 通用 resize handle 样式 */
+.window-resize-handle {
+  position: absolute;
+  pointer-events: auto;
+  background: transparent;
+}
+
+/* 四边 resize handles */
+.window-resize-handle.top {
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 5px;
+  cursor: n-resize;
+}
+
+.window-resize-handle.bottom {
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 5px;
+  cursor: s-resize;
+}
+
+.window-resize-handle.left {
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 5px;
+  cursor: w-resize;
+}
+
+.window-resize-handle.right {
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 5px;
+  cursor: e-resize;
+}
+
+/* 四角 resize handles */
+.window-resize-handle.corner-nw {
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nw-resize;
+}
+
+.window-resize-handle.corner-ne {
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: ne-resize;
+}
+
+.window-resize-handle.corner-sw {
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: sw-resize;
+}
+
+.window-resize-handle.corner-se {
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: se-resize;
+}
+
+/* 右下角可选的视觉提示（可注释掉） */
+/*
+.window-resize-handle.corner-se::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, transparent 50%, rgba(127,127,127,0.2) 50%);
+}
+*/

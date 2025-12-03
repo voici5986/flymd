@@ -398,6 +398,28 @@ fn main() {
       if let Some(win) = app.get_webview_window("main") {
         #[cfg(target_os = "windows")]
         {
+          // 移除 Windows 窗口边框
+          use windows::Win32::Foundation::HWND;
+          use windows::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongW, SetWindowLongW, GWL_STYLE, GWL_EXSTYLE,
+            WS_CAPTION, WS_THICKFRAME, WS_SYSMENU, WS_MINIMIZEBOX, WS_MAXIMIZEBOX,
+            WS_EX_DLGMODALFRAME, WS_EX_CLIENTEDGE, WS_EX_STATICEDGE,
+          };
+          if let Ok(hwnd) = win.hwnd() {
+            let hwnd = HWND(hwnd.0);
+            unsafe {
+              // 移除标准窗口边框样式
+              let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+              let new_style = style & !(WS_CAPTION.0 | WS_THICKFRAME.0 | WS_SYSMENU.0 | WS_MINIMIZEBOX.0 | WS_MAXIMIZEBOX.0);
+              SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
+
+              // 移除扩展样式中的边框
+              let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+              let new_ex_style = ex_style & !(WS_EX_DLGMODALFRAME.0 | WS_EX_CLIENTEDGE.0 | WS_EX_STATICEDGE.0);
+              SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex_style as i32);
+            }
+          }
+
           let win_clone = win.clone();
           std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(120));
