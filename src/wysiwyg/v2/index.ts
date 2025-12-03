@@ -837,6 +837,8 @@ function refreshCodeCopyButtonsNow() {
         delBtn.style.pointerEvents = 'auto'
         ;(delBtn as any).__targetPre = pre
         ;(delBtn as any).__deleteArmed = false
+        // 保存原始 SVG 图标用于重置
+        const delBtnOriginalHTML = delBtn.innerHTML
         delBtn.addEventListener('click', (ev) => {
           ev.preventDefault()
           ev.stopPropagation()
@@ -850,6 +852,14 @@ function refreshCodeCopyButtonsNow() {
           }
           const targetPre = (btn as any).__targetPre as HTMLElement | null
           if (targetPre) deleteWysiwygNodeByDom(targetPre, ['code_block'])
+        })
+        // 失焦时重置确认状态
+        delBtn.addEventListener('blur', () => {
+          if ((delBtn as any).__deleteArmed) {
+            ;(delBtn as any).__deleteArmed = false
+            delBtn.innerHTML = delBtnOriginalHTML
+            delBtn.classList.remove('armed')
+          }
         })
         wrap.appendChild(delBtn)
         // Copy 按钮（右侧）
@@ -1191,7 +1201,7 @@ function enterImageSourceEdit(hitEl: HTMLElement) {
     btnOk.addEventListener('click', () => { apply() })
     btnDelete.addEventListener('click', (ev) => {
       ev.preventDefault()
-      // 第一次点击只进入“待确认”状态，第二次点击才真正删除图片
+      // 第一次点击只进入"待确认"状态，第二次点击才真正删除图片
       if (!(btnDelete as any)._armed) {
         ;(btnDelete as any)._armed = true
         btnDelete.textContent = '确认删除'
@@ -1199,6 +1209,13 @@ function enterImageSourceEdit(hitEl: HTMLElement) {
       }
       deleteMilkdownImageFromDom(img)
       close()
+    })
+    // 删除按钮失焦时重置确认状态
+    btnDelete.addEventListener('blur', () => {
+      if ((btnDelete as any)._armed) {
+        ;(btnDelete as any)._armed = false
+        btnDelete.textContent = 'Delete'
+      }
     })
 
     setTimeout(() => { try { urlInput.focus(); urlInput.select() } catch {} }, 0)
@@ -1296,17 +1313,39 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
         apply()
       }
     })
+    // 点击其他区域关闭编辑框（但点击 Delete 按钮时不关闭）
+    ta.addEventListener('blur', (ev) => {
+      const related = (ev as FocusEvent).relatedTarget as HTMLElement | null
+      // 如果焦点转移到 Delete 按钮，不关闭
+      if (related && (related === delBtn || related.closest?.('button') === delBtn)) return
+      try { ov?.removeChild(wrap) } catch {}
+    })
 
     let deleteArmed = false
+    const resetDeleteState = () => {
+      if (deleteArmed) {
+        deleteArmed = false
+        delBtn.textContent = 'Delete'
+      }
+    }
     delBtn.addEventListener('click', (ev) => {
       ev.preventDefault()
-      // 第一次点击只进入“待确认”状态，第二次点击才真正删除公式
+      // 第一次点击只进入"待确认"状态，第二次点击才真正删除公式
       if (!deleteArmed) {
         deleteArmed = true
         delBtn.textContent = '确认删除'
         return
       }
       deleteWysiwygNodeByDom(mathEl, ['math_inline', 'math_block'])
+      try { ov?.removeChild(wrap) } catch {}
+    })
+    // 删除按钮失焦时重置确认状态，并关闭编辑框（除非焦点转移到 textarea）
+    delBtn.addEventListener('blur', (ev) => {
+      const related = (ev as FocusEvent).relatedTarget as HTMLElement | null
+      resetDeleteState()
+      // 如果焦点转移到 textarea，不关闭编辑框（允许用户继续编辑）
+      if (related === ta) return
+      // 焦点转移到其他地方，关闭编辑框
       try { ov?.removeChild(wrap) } catch {}
     })
 
