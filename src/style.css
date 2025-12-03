@@ -4757,7 +4757,7 @@ body.dark-mode .ProseMirror span {
 }
 
 body.dark-mode .ProseMirror code {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #f3f4f6 !important;
 }
 
@@ -4857,7 +4857,7 @@ body.dark-mode .theme-swatch {
 
 body.dark-mode .typo-btn,
 body.dark-mode .md-btn {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #e5e7eb !important;
   border-color: #374151 !important;
 }
@@ -4874,7 +4874,7 @@ body.dark-mode .md-btn.active {
 }
 
 body.dark-mode .theme-fonts select {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #e5e7eb !important;
   border-color: #374151 !important;
 }
@@ -4913,7 +4913,7 @@ body.dark-mode input[type="url"],
 body.dark-mode input[type="number"],
 body.dark-mode textarea,
 body.dark-mode select {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #e5e7eb !important;
   border-color: #374151 !important;
 }
@@ -4932,7 +4932,7 @@ body.dark-mode select:focus {
 
 /* 夜间模式 - 按钮 */
 body.dark-mode button:not(.typo-btn):not(.md-btn) {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #e5e7eb !important;
   border-color: #374151 !important;
 }
@@ -4968,7 +4968,7 @@ body.dark-mode #find-replace-panel {
 }
 
 body.dark-mode #find-replace-panel input {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #e5e7eb !important;
   border-color: #374151 !important;
 }
@@ -4988,15 +4988,15 @@ body.dark-mode a:hover {
 
 /* 夜间模式 - 滚动条 */
 body.dark-mode ::-webkit-scrollbar-track {
-  background: #1f2937 !important;
+  background: transparent !important;
 }
 
 body.dark-mode ::-webkit-scrollbar-thumb {
-  background: #4b5563 !important;
+  background: rgba(255,255,255,0.12) !important;
 }
 
 body.dark-mode ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280 !important;
+  background: rgba(255,255,255,0.2) !important;
 }
 
 /* 夜间模式 - AI助手窗口 */
@@ -5009,7 +5009,7 @@ body.dark-mode [class*="ai-"] {
 
 body.dark-mode .ai-assistant input,
 body.dark-mode .ai-assistant textarea {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #e5e7eb !important;
 }
 
@@ -5059,7 +5059,7 @@ body.dark-mode .preview-body {
 }
 
 body.dark-mode .preview code {
-  background: #1f2937 !important;
+  background: #1a1b1e !important;
   color: #f3f4f6 !important;
 }
 
@@ -5830,7 +5830,7 @@ body.dark-mode .tabbar {
   }
 
 body.dark-mode .tabbar-tab.active {
-    background: var(--chrome-panel-bg, #1f2937) !important;
+    background: var(--chrome-panel-bg, #1a1b1e) !important;
   color: #e5e7eb !important;
 }
 
