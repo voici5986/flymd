@@ -460,3 +460,73 @@ export function showRemoteDeleteDialog(filename: string): Promise<TwoChoiceResul
     document.addEventListener('keydown', handleKeyDown)
   })
 }
+
+/**
+ * WebDAV safe 模式：本地存在但远端不存在时的上传确认对话框
+ * @param filename 文件名
+ * @returns Promise<TwoChoiceResult> - 'confirm': 上传本地到远端, 'cancel': 仅保留本地
+ */
+export function showUploadMissingRemoteDialog(filename: string): Promise<TwoChoiceResult> {
+  return new Promise((resolve) => {
+    injectStyles()
+
+    const overlay = document.createElement('div')
+    overlay.className = 'custom-dialog-overlay'
+
+    const box = document.createElement('div')
+    box.className = 'custom-dialog-box'
+
+    const titleEl = document.createElement('div')
+    titleEl.className = 'custom-dialog-title'
+    titleEl.innerHTML = `<span class="custom-dialog-icon">📤</span>上传本地文件到远端`
+
+    const messageEl = document.createElement('div')
+    messageEl.className = 'custom-dialog-message'
+    messageEl.textContent = `文件：${filename}\n\n本地存在该文件，但远端当前不存在（可能是新建，也可能是被其他设备删除）。请选择操作：`
+
+    const buttonsContainer = document.createElement('div')
+    buttonsContainer.className = 'custom-dialog-buttons'
+
+    const keepLocalBtn = document.createElement('button')
+    keepLocalBtn.className = 'custom-dialog-button'
+    keepLocalBtn.textContent = '仅保留本地'
+    keepLocalBtn.onclick = () => closeDialog('cancel')
+
+    const uploadBtn = document.createElement('button')
+    uploadBtn.className = 'custom-dialog-button primary'
+    uploadBtn.textContent = '上传到远端'
+    uploadBtn.onclick = () => closeDialog('confirm')
+
+    buttonsContainer.appendChild(keepLocalBtn)
+    buttonsContainer.appendChild(uploadBtn)
+
+    box.appendChild(titleEl)
+    box.appendChild(messageEl)
+    box.appendChild(buttonsContainer)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => uploadBtn.focus(), 50)
+
+    function closeDialog(result: TwoChoiceResult) {
+      overlay.style.animation = 'dialogFadeIn 0.1s ease reverse'
+      setTimeout(() => {
+        overlay.remove()
+        resolve(result)
+      }, 100)
+    }
+
+    overlay.onclick = (e) => {
+      if (e.target === overlay) closeDialog('cancel')
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeDialog('cancel')
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+  })
+}

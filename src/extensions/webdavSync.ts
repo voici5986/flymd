@@ -9,7 +9,7 @@ import { appLocalDataDir } from '@tauri-apps/api/path'
 import { openPath } from '@tauri-apps/plugin-opener'
 import { ask } from '@tauri-apps/plugin-dialog'
 import { t } from '../i18n'
-import { showConflictDialog, showLocalDeleteDialog, showRemoteDeleteDialog } from '../dialog'
+import { showConflictDialog, showLocalDeleteDialog, showRemoteDeleteDialog, showUploadMissingRemoteDialog } from '../dialog'
 
 // 当前同步通知ID（用于更新同一条通知）
 let _currentSyncNotificationId: string | null = null
@@ -231,15 +231,29 @@ async function loadSyncMetadataProfile(input: SyncProfileInput): Promise<SyncMet
 
   const isFreshProfile = !loaded
   let legacyDetected = false
+  let meta: SyncMetadata | null = loaded
   if (isFreshProfile) {
     try {
       legacyDetected = await exists(profile.legacyPath as any)
     } catch {
       legacyDetected = false
     }
+
+    // 尝试从旧版全局元数据中恢复可用信息（仅作为提示，不直接驱动删除逻辑）
+    if (!meta && legacyDetected) {
+      try {
+        const legacyMeta = await readMetadataFile(profile.legacyPath)
+        if (legacyMeta) {
+          meta = legacyMeta
+        }
+      } catch {
+        // 读取失败时忽略，保持空元数据，防止误用损坏的旧数据
+        meta = null
+      }
+    }
   }
 
-  return { meta: loaded || { files: {}, lastSyncTime: 0 }, profile, isFreshProfile, legacyDetected }
+  return { meta: meta || { files: {}, lastSyncTime: 0 }, profile, isFreshProfile, legacyDetected }
 }
 
 // 保存同步元数据
@@ -1365,13 +1379,124 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
       const remote = remoteIdx.get(k)
       const last = lastMeta.files[k]
 
-      // 情况1：本地有，远程无
-      if (local && !remote) {
-        if (forceSafePull && last) {
-          await syncLog('[safe-mode] ' + k + ' 检测到潜在跨库差异，跳过删除远端逻辑，改为上传本地版本')
-          plan.push({ type: 'upload', rel: k, reason: 'safe-mode-local' })
+      // forceSafePull 模式：检测到旧版元数据但当前库没有独立配置
+      // 为了绝对安全，此模式下：
+      // - 不根据旧元数据推断“删除”，避免误删远端或本地文件
+      // - 优先拉取“远端有、本地无”的文件（安全填坑）
+      // - 对于本地和远端都存在的文件：
+      //   * 若没有历史记录 → 视为有争议，完全不动
+      //   * 若仅一侧相对 lastMeta 发生修改 → 视为安全单向变化，允许按常规方向同步
+      //   * 若两侧都变或无法判断远端是否变化 → 视为有争议，本轮不动，留给后续正常轮次/用户决策
+      if (forceSafePull) {
+        // 远端有，本地无：总是安全拉取
+        if (!local && remote) {
+          await syncLog('[safe-mode] ' + k + ' forceSafePull: 仅拉取远端版本')
+          plan.push({ type: 'download', rel: k, reason: 'safe-mode-remote' })
           continue
         }
+
+        // 本地有，远端无：不自动上传，避免把可能已被其他设备删除的内容重新写回远端
+        if (local && !remote) {
+          await syncLog('[safe-mode] ' + k + ' forceSafePull: 本地存在但远端不存在，将询问用户是否上传')
+          try {
+            const result = await showUploadMissingRemoteDialog(k)
+            if (result === 'confirm') {
+              await syncLog('[safe-mode-apply] ' + k + ' forceSafePull: 用户选择上传本地文件到远端')
+              plan.push({ type: 'upload', rel: k, reason: 'safe-mode-local-confirm-upload' } as any)
+            } else {
+              await syncLog('[safe-mode-skip] ' + k + ' forceSafePull: 用户选择不上传，仅保留本地文件')
+            }
+          } catch (e) {
+            await syncLog('[safe-mode-error] ' + k + ' forceSafePull: 询问用户是否上传失败，将跳过此文件: ' + ((e as any)?.message || e))
+          }
+          continue
+        }
+
+        // 本地与远端均存在：根据 lastMeta 判断是否只有单侧变化
+        if (local && remote) {
+          if (!last) {
+            // 没有历史记录：首次见到该文件，双方都有内容，视为有争议，完全不动
+            await syncLog('[safe-mode] ' + k + ' forceSafePull: 本地与远端均存在但无历史记录，跳过自动同步以避免误覆盖')
+            continue
+          }
+
+          const localHash = local.hash || ''
+          const lastHash = last.hash || ''
+          const localChanged = localHash !== lastHash
+
+          let remoteChanged = false
+          let remoteChangeReason = ''
+          if (last.remoteEtag && remote.etag) {
+            // 优先使用 ETag 判断远端变化
+            remoteChanged = last.remoteEtag !== remote.etag
+            if (remoteChanged) remoteChangeReason = 'etag-diff'
+          } else if (last.remoteMtime && remote.mtime) {
+            // 其次使用远端 mtime（考虑 clockSkewMs 容错）
+            const clockSkew = Math.max(Math.abs(cfg.clockSkewMs || 0), 1000)
+            remoteChanged = Math.abs(last.remoteMtime - remote.mtime) > clockSkew
+            if (remoteChanged) remoteChangeReason = 'mtime-diff'
+          } else {
+            // 无法可靠判断远端是否变化：视为潜在争议，改为直接询问用户选择本地或远端版本
+            await syncLog('[safe-mode-conflict] ' + k + ' forceSafePull: 缺少可靠远端元数据（no etag/mtime），将询问用户选择本地或远端版本')
+            try {
+              const result = await showConflictDialog(k)
+              if (result === 'local') {
+                await syncLog('[safe-mode-apply] ' + k + ' forceSafePull: 用户在无远端元数据场景下选择保留本地版本，按本地上传')
+                plan.push({ type: 'upload', rel: k, reason: 'safe-mode-manual-local-no-remote-meta' } as any)
+              } else if (result === 'remote') {
+                await syncLog('[safe-mode-apply] ' + k + ' forceSafePull: 用户在无远端元数据场景下选择保留远端版本，按远端下载')
+                plan.push({ type: 'download', rel: k, reason: 'safe-mode-manual-remote-no-remote-meta' } as any)
+              } else {
+                await syncLog('[safe-mode-skip] ' + k + ' forceSafePull: 用户在无远端元数据场景下取消操作，跳过此文件')
+              }
+            } catch (e) {
+              await syncLog('[safe-mode-error] ' + k + ' forceSafePull: 询问用户选择本地或远端版本失败，将跳过此文件: ' + ((e as any)?.message || e))
+            }
+            continue
+          }
+
+          const changedCount = (localChanged ? 1 : 0) + (remoteChanged ? 1 : 0)
+          if (changedCount === 0) {
+            // 双方都未变化：无需动作
+            continue
+          }
+
+          if (changedCount > 1) {
+            // 双方都变：潜在冲突，直接弹出冲突对话框让用户选择
+            await syncLog('[safe-mode-conflict] ' + k + ' forceSafePull: 检测到本地与远端都已修改，将询问用户选择本地或远端版本')
+            try {
+              const result = await showConflictDialog(k)
+              if (result === 'local') {
+                await syncLog('[safe-mode-apply] ' + k + ' forceSafePull: 用户在双向修改场景下选择保留本地版本，按本地上传')
+                plan.push({ type: 'upload', rel: k, reason: 'safe-mode-manual-local-both-modified' } as any)
+              } else if (result === 'remote') {
+                await syncLog('[safe-mode-apply] ' + k + ' forceSafePull: 用户在双向修改场景下选择保留远端版本，按远端下载')
+                plan.push({ type: 'download', rel: k, reason: 'safe-mode-manual-remote-both-modified' } as any)
+              } else {
+                await syncLog('[safe-mode-skip] ' + k + ' forceSafePull: 用户在双向修改场景下取消操作，跳过此文件')
+              }
+            } catch (e) {
+              await syncLog('[safe-mode-error] ' + k + ' forceSafePull: 询问用户选择本地或远端版本失败，将跳过此文件: ' + ((e as any)?.message || e))
+            }
+            continue
+          }
+
+          // 仅一侧变化：视为安全单向同步（无需再次询问）
+          if (localChanged) {
+            await syncLog('[safe-mode-apply] ' + k + ' forceSafePull: 仅检测到本地修改，按本地上传')
+            plan.push({ type: 'upload', rel: k, reason: 'safe-mode-local-modified' })
+          } else if (remoteChanged) {
+            await syncLog('[safe-mode-apply] ' + k + ' forceSafePull: 仅检测到远端修改，按远端下载')
+            plan.push({ type: 'download', rel: k, reason: 'safe-mode-remote-modified' })
+          }
+          continue
+        }
+
+        // 其余情况（本地与远端都不存在）无需处理
+      }
+
+      // 情况1：本地有，远程无
+      if (local && !remote) {
         if (last) {
           // 上次同步过，现在远程没有了
           // 检查本地文件是否已修改（通过哈希比对）
@@ -1409,11 +1534,6 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
       }
       // 情况2：本地无，远程有
       else if (!local && remote) {
-        if (forceSafePull && last) {
-          await syncLog('[safe-mode] ' + k + ' 检测到潜在跨库差异，跳过删除远端文件提示，改为下载远端版本')
-          plan.push({ type: 'download', rel: k, reason: 'safe-mode-remote' })
-          continue
-        }
         if (last) {
           // 上次同步过，现在本地没有了 → 用户可能删除了本地文件
           // 询问用户是否同步删除远程文件
@@ -1426,28 +1546,30 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
       }
       // 情况3：本地和远程都有
       else if (local && remote) {
+        // 没有历史元数据：这是首次在当前设备看到该文件，本地和远程都有，视为潜在冲突
+        if (!last) {
+          await syncLog('[conflict-first-sync] ' + k + ' 本地和远程均存在但无历史记录，视为首次同步冲突')
+          plan.push({ type: 'conflict', rel: k, reason: 'first-sync' })
+          continue
+        }
+
         const localHash = local.hash || ''
-        const lastHash = last?.hash || ''
+        const lastHash = last.hash || ''
 
         // 使用 ETag 或 mtime 判断远程是否变化（避免下载）
         let remoteChanged = false
         let remoteChangeReason = ''
-        if (last?.remoteEtag && remote.etag) {
+        if (last.remoteEtag && remote.etag) {
           // 优先使用 ETag
           remoteChanged = last.remoteEtag !== remote.etag
           if (remoteChanged) remoteChangeReason = 'etag-diff'
-        } else if (last?.remoteMtime && remote.mtime) {
-          // 其次使用远程 mtime
-          remoteChanged = Math.abs(last.remoteMtime - remote.mtime) > 1000  // 容错1秒
+        } else if (last.remoteMtime && remote.mtime) {
+          // 其次使用远程 mtime（考虑 clockSkewMs 容错）
+          const clockSkew = Math.max(Math.abs(cfg.clockSkewMs || 0), 1000)
+          remoteChanged = Math.abs(last.remoteMtime - remote.mtime) > clockSkew
           if (remoteChanged) remoteChangeReason = 'mtime-diff'
-        } else if (!last) {
-          // 如果没有上次记录，需要判断是否变化
-          // 这种情况可能是首次同步或元数据丢失
-          remoteChanged = false  // 假设没变化，避免误判
-          remoteChangeReason = 'no-last-meta'
         } else {
-          // 兜底：如果没有remoteEtag和remoteMtime（旧版本元数据），保守处理
-          // 不判断为远程变化，避免触发不必要的同步
+          // 兜底：缺少可靠远端元数据时不依赖时间判断远端变化，避免错误假定“远端未变”
           remoteChanged = false
           remoteChangeReason = 'no-remote-meta-fallback'
         }
