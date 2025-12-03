@@ -5058,7 +5058,8 @@ body.dark-mode .preview-body {
   color: #e5e7eb !important;
 }
 
-body.dark-mode .preview code {
+/* 夜间模式 - 仅为阅读模式中的“行内代码”设置底色，避免覆盖代码块语法高亮 */
+body.dark-mode .preview :not(pre) > code {
   background: #1a1b1e !important;
   color: #f3f4f6 !important;
 }
