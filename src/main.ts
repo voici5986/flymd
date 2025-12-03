@@ -8066,6 +8066,13 @@ function createStickyNoteControls() {
 async function enterStickyNoteMode(filePath: string) {
   stickyNoteMode = true
 
+  // 强制切换到亮色模式（仅当前便签窗口，不影响其他实例）
+  try {
+    document.body.classList.remove('dark-mode')
+  } catch (e) {
+    console.error('[便签模式] 切换亮色模式失败:', e)
+  }
+
   // 预先加载便签配置（透明度 / 颜色 / 提醒状态），确保首次渲染时状态就绪
   try {
     const prefs = await loadStickyNotePrefs()
@@ -11780,6 +11787,9 @@ async function getMarketUrl(): Promise<string | null> {
   return 'https://raw.githubusercontent.com/flyhunterl/flymd/main/index.json'
 }
 
+// 插件市场缓存版本（用于在排序规则/结构变更时主动失效旧缓存）
+const PLUGIN_MARKET_CACHE_VERSION = 2
+
 // 插件市场渠道：GitHub / 官网
 type PluginMarketChannel = 'github' | 'official'
 
@@ -11813,7 +11823,10 @@ async function loadInstallablePlugins(force = false): Promise<InstallableItem[]>
       const c = (await store.get('pluginMarket:cache')) as any
       const now = Date.now()
       if (c && Array.isArray(c.items) && typeof c.ts === 'number' && typeof c.ttl === 'number') {
-        if (now - c.ts < c.ttl) return c.items as InstallableItem[]
+        const ver = Number.isFinite(c.cacheVersion) ? c.cacheVersion : 0
+        if (ver === PLUGIN_MARKET_CACHE_VERSION && now - c.ts < c.ttl) {
+          return c.items as InstallableItem[]
+        }
       }
     }
   } catch {}
@@ -11861,7 +11874,7 @@ async function loadInstallablePlugins(force = false): Promise<InstallableItem[]>
       items = items.slice(0, 100)
       if (store) {
         try {
-          await store.set('pluginMarket:cache', { ts: Date.now(), ttl: ttlMs, items, tried })
+          await store.set('pluginMarket:cache', { cacheVersion: PLUGIN_MARKET_CACHE_VERSION, ts: Date.now(), ttl: ttlMs, items, tried })
           await store.save()
         } catch {}
       }
