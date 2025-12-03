@@ -5599,7 +5599,6 @@ body.focus-mode .library .lib-action-btn.active {
 /* 关闭按钮特殊样式 - 电源按钮风格 */
 .custom-titlebar-btn.custom-titlebar-close {
   font-size: 0;  /* 隐藏原始文字，使用CSS绘制的电源按钮图标 */
-  transform: translateY(7px);  /* 向下微调7px，使按钮垂直居中对齐 */
   position: relative;
   opacity: 0.5;  /* 保持与其他按钮一致的透明度 */
 }
@@ -5608,9 +5607,9 @@ body.focus-mode .library .lib-action-btn.active {
 .custom-titlebar-btn.custom-titlebar-close::before {
   content: '';
   position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 1.2px solid currentColor;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
   border-radius: 50%;
   top: 50%;
   left: 50%;
@@ -5624,8 +5623,8 @@ body.focus-mode .library .lib-action-btn.active {
 .custom-titlebar-btn.custom-titlebar-close::after {
   content: '';
   position: absolute;
-  width: 1.2px;
-  height: 5px;
+  width: 1.5px;
+  height: 7px;
   background: currentColor;
   top: 50%;
   left: 50%;
@@ -5637,7 +5636,15 @@ body.focus-mode .library .lib-action-btn.active {
   background: rgba(232, 17, 35, 0.9);
   color: white;
   opacity: 1;
-  transform: translateY(7px);  /* 保持与正常状态相同的位移 */
+}
+
+/* 便签模式：关闭按钮专用位移调整 */
+body.sticky-note-mode .custom-titlebar-btn.custom-titlebar-close {
+  transform: translateY(7px);  /* 便签模式下向下微调7px */
+}
+
+body.sticky-note-mode .custom-titlebar-btn.custom-titlebar-close:hover {
+  transform: translateY(7px);  /* 保持位移 */
 }
 
 /* 退出专注模式按钮样式 */
