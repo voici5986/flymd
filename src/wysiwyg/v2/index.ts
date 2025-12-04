@@ -1691,6 +1691,16 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
 
     inner.appendChild(ta)
 
+    // 统一关闭逻辑：移除覆盖层并解绑文档级事件
+    let docMouseDownHandler: ((ev: MouseEvent) => void) | null = null
+    const closeOverlay = () => {
+      try { ov?.removeChild(wrap) } catch {}
+      if (docMouseDownHandler) {
+        try { document.removeEventListener('mousedown', docMouseDownHandler, true) } catch {}
+        docMouseDownHandler = null
+      }
+    }
+
     const apply = () => {
       let v = ta.value
       v = String(v || '').trim()
@@ -1704,7 +1714,7 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
       }
       // 更新公式并在块级公式后插入新段落（使用缓存的位置信息）
       const resultView = updateMilkdownMathFromDom(mathEl, v, isBlk, cachedFrom, cachedTo)
-      try { ov?.removeChild(wrap) } catch {}
+      closeOverlay()
       // 恢复编辑器焦点
       if (resultView) {
         setTimeout(() => {
@@ -1716,7 +1726,7 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
     ta.addEventListener('keydown', (ev) => {
       const kev = ev as KeyboardEvent
       if (kev.key === 'Escape') {
-        try { ov?.removeChild(wrap) } catch {}
+        closeOverlay()
         // 恢复编辑器焦点
         const view: any = (_editor as any)?.ctx?.get?.(editorViewCtx)
         if (view) setTimeout(() => { try { view.focus() } catch {} }, 50)
@@ -1727,23 +1737,18 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
         apply()
       }
     })
-    // 标记当前是否是点击 Delete 按钮触发的失焦，避免把点击 Delete 误当成“点击外部”而自动保存并关闭
-    let blurFromDeleteClick = false
-    delBtn.addEventListener('mousedown', () => {
-      blurFromDeleteClick = true
-    })
-    // 点击其他区域：自动应用当前输入，再关闭编辑框（但点击 Delete 按钮时不关闭）
-    ta.addEventListener('blur', (ev) => {
-      const related = (ev as FocusEvent).relatedTarget as HTMLElement | null
-      // 某些 WebView 下 relatedTarget 可能拿不到，这里再用标记兜底一次
-      if (blurFromDeleteClick) {
-        blurFromDeleteClick = false
-        return
-      }
-      // 如果焦点转移到 Delete 按钮，不关闭，让删除逻辑接管
-      if (related && (related === delBtn || related.closest?.('button') === delBtn)) return
-      apply()
-    })
+    // 文档级点击检测：点击覆盖层外部时自动应用并关闭；点击 Delete / 文本框等内部元素则不干预
+    docMouseDownHandler = (ev: MouseEvent) => {
+      try {
+        const t = ev.target as HTMLElement | null
+        if (!t) return
+        // 点击在覆盖层内部：交给内部按钮 / 文本框处理
+        if (wrap.contains(t)) return
+        // 点击在外部：应用当前输入并关闭编辑框
+        apply()
+      } catch {}
+    }
+    try { document.addEventListener('mousedown', docMouseDownHandler, true) } catch {}
 
     let deleteArmed = false
     const resetDeleteState = () => {
@@ -1761,16 +1766,14 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
         return
       }
       deleteWysiwygNodeByDom(mathEl, ['math_inline', 'math_block'])
-      try { ov?.removeChild(wrap) } catch {}
+      closeOverlay()
     })
-    // 删除按钮失焦时重置确认状态，并关闭编辑框（除非焦点转移到 textarea）
+    // 删除按钮失焦时仅重置确认状态，不再负责关闭编辑框（关闭由文档级点击和 apply 控制）
     delBtn.addEventListener('blur', (ev) => {
       const related = (ev as FocusEvent).relatedTarget as HTMLElement | null
       resetDeleteState()
-      // 如果焦点转移到 textarea，不关闭编辑框（允许用户继续编辑）
+      // 焦点转移回 textarea 时，继续允许编辑；其它情况由文档级点击逻辑处理
       if (related === ta) return
-      // 焦点转移到其他地方，关闭编辑框
-      try { ov?.removeChild(wrap) } catch {}
     })
 
     wrap.appendChild(inner)
