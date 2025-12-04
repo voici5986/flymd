@@ -284,7 +284,8 @@
           }
         }
           const close = codeClose(inserted)
-          if (close) {
+          // 中文输入法下不处理反引号，避免与 ``` 代码块补全冲突
+          if (close && inserted !== '`') {
             if (hadSel) {
               ta.value = prev.slice(0, a) + inserted + removed + close + prev.slice(prev.length - b)
               // 环抱补全后光标移到闭合符号之后，而不是选中中间内容
