@@ -203,6 +203,23 @@ export class HighlightCodeBlockNodeView implements NodeView {
       this.langDropdown.classList.add('show')
     })
 
+    // 当前选中索引（-1 表示无选中）
+    let selectedIndex = -1
+
+    // 更新选中项高亮
+    const updateSelection = () => {
+      const items = this.langDropdown.querySelectorAll('.code-lang-item')
+      items.forEach((item, i) => {
+        if (i === selectedIndex) {
+          item.classList.add('selected')
+          // 滚动到可见区域
+          item.scrollIntoView({ block: 'nearest' })
+        } else {
+          item.classList.remove('selected')
+        }
+      })
+    }
+
     // 点击下拉项（使用 mousedown 防止 blur 先触发）
     this.langDropdown.addEventListener('mousedown', (e) => {
       e.preventDefault() // 阻止 blur 触发
@@ -213,13 +230,28 @@ export class HighlightCodeBlockNodeView implements NodeView {
       }
     })
 
-    // 回车确认
+    // 键盘导航
     this.langInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      const items = this.langDropdown.querySelectorAll('.code-lang-item')
+      const itemCount = items.length
+
+      if (e.key === 'ArrowDown') {
         e.preventDefault()
-        const firstItem = this.langDropdown.querySelector('.code-lang-item')
-        if (firstItem) {
-          const langId = firstItem.getAttribute('data-lang') || this.langInput.value
+        if (itemCount > 0) {
+          selectedIndex = (selectedIndex + 1) % itemCount
+          updateSelection()
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        if (itemCount > 0) {
+          selectedIndex = selectedIndex <= 0 ? itemCount - 1 : selectedIndex - 1
+          updateSelection()
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const selectedItem = selectedIndex >= 0 ? items[selectedIndex] : items[0]
+        if (selectedItem) {
+          const langId = selectedItem.getAttribute('data-lang') || this.langInput.value
           selectLanguage(langId)
         } else {
           selectLanguage(this.langInput.value)
@@ -229,6 +261,11 @@ export class HighlightCodeBlockNodeView implements NodeView {
         this.langDropdown.classList.remove('show')
         this.langInput.blur()
       }
+    })
+
+    // 输入时重置选中索引
+    this.langInput.addEventListener('input', () => {
+      selectedIndex = -1
     })
 
     // 常用别名映射

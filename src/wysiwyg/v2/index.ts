@@ -786,6 +786,7 @@ function tryHandleMathEnter(ev: KeyboardEvent) {
             let dom: HTMLElement | null = null
             try { dom = viewNow.nodeDOM(nodePos) as HTMLElement | null } catch {}
             if (dom) {
+              try { (dom as any).dataset.flymdNewMath = '1' } catch {}
               try { enterLatexSourceEdit(dom) } catch {}
             }
             break
@@ -1293,9 +1294,12 @@ function onPmSelectionChange() {
 
 //  闭合后再渲染（不在输入起始处触发）
 let _mathReparseTimer: number | null = null
+let _suppressMathReparse = false // 在手动更新数学节点后临时阻止 reparse
 function scheduleMathBlockReparse() {
+  if (_suppressMathReparse) return // 阻止重复处理
   try { if (_mathReparseTimer != null) { clearTimeout(_mathReparseTimer); _mathReparseTimer = null } } catch {}
   _mathReparseTimer = window.setTimeout(async () => {
+    if (_suppressMathReparse) return // 再次检查
     try {
       const mdNow = await (_editor as any).action(getMarkdown())
       if (/\$\$[\s\S]*?\$\$/m.test(String(mdNow || ''))) {
@@ -1306,6 +1310,10 @@ function scheduleMathBlockReparse() {
 }
 function updateMilkdownMathFromDom(mathEl: HTMLElement, newValue: string) {
   try {
+    // 阻止 scheduleMathBlockReparse 重复处理
+    _suppressMathReparse = true
+    setTimeout(() => { _suppressMathReparse = false }, 500)
+
     const view: any = (_editor as any)?.ctx?.get?.(editorViewCtx)
     if (!view || !mathEl) return
     let pos: number | null = null
@@ -1313,12 +1321,37 @@ function updateMilkdownMathFromDom(mathEl: HTMLElement, newValue: string) {
     if (pos == null || typeof pos !== 'number') return
     const state = view.state
     const $pos = state.doc.resolve(pos)
-    let from = pos, to = pos
     const isMath = (n: any) => !!n && (n.type?.name === 'math_inline' || n.type?.name === 'math_block')
-    if ($pos.nodeAfter && isMath($pos.nodeAfter)) { to = pos + $pos.nodeAfter.nodeSize }
-    else if ($pos.nodeBefore && isMath($pos.nodeBefore)) { from = pos - $pos.nodeBefore.nodeSize }
-    const schema = state.schema
     const isBlock = (mathEl.dataset?.type === 'math_block' || mathEl.tagName === 'DIV')
+    const targetType = isBlock ? 'math_block' : 'math_inline'
+
+    // 更可靠的位置查找：向上遍历深度找到 math 节点
+    let from = -1, to = -1
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node.type?.name === targetType) {
+        from = $pos.before(d)
+        to = $pos.after(d)
+        break
+      }
+    }
+    // 回退：检查 nodeAfter/nodeBefore
+    if (from < 0) {
+      if ($pos.nodeAfter && isMath($pos.nodeAfter)) {
+        from = pos
+        to = pos + $pos.nodeAfter.nodeSize
+      } else if ($pos.nodeBefore && isMath($pos.nodeBefore)) {
+        from = pos - $pos.nodeBefore.nodeSize
+        to = pos
+      }
+    }
+    // 仍未找到则不执行
+    if (from < 0 || to < 0 || from === to) {
+      console.warn('[updateMilkdownMathFromDom] 无法找到 math 节点位置')
+      return
+    }
+
+    const schema = state.schema
     let node: any
     if (isBlock) {
       const t = schema.nodes['math_block']
@@ -1331,7 +1364,9 @@ function updateMilkdownMathFromDom(mathEl: HTMLElement, newValue: string) {
     if (!node) return
     const tr = state.tr.replaceRangeWith(from, to, node)
     view.dispatch(tr.scrollIntoView())
-  } catch {}
+  } catch (e) {
+    console.error('[updateMilkdownMathFromDom] 错误:', e)
+  }
 }
 // 从图片 DOM 反向更新 Milkdown 文档中的 image 节点
 function updateMilkdownImageFromDom(imgEl: HTMLImageElement, newSrc: string, newAlt: string) {
@@ -1506,7 +1541,10 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
   try {
     const mathEl = (hitEl.closest("div[data-type='math_block']") as HTMLElement) || (hitEl.closest("span[data-type='math_inline']") as HTMLElement)
     if (!mathEl) return
-    const code = (mathEl.dataset?.value || mathEl.textContent || '').trim()
+    const isNew = !!(mathEl as any).dataset?.flymdNewMath
+    try { delete (mathEl as any).dataset?.flymdNewMath } catch {}
+    const rawCode = (mathEl.dataset?.value || mathEl.textContent || '')
+    const code = String(rawCode || '').trim()
     const ov = ensureOverlayHost()
     const hostRc = (_root as HTMLElement).getBoundingClientRect()
     const rc = mathEl.getBoundingClientRect()
@@ -1556,7 +1594,9 @@ function enterLatexSourceEdit(hitEl: HTMLElement) {
     inner.appendChild(header)
 
     const ta = document.createElement('textarea')
-    ta.value = (isBlock ? ('$$\n' + (code || '') + '\n$$') : ('$' + (code || '') + '$'))
+    const placeholder = '在此输入Katex公式'
+    const displayCode = (isBlock && isNew && !code) ? placeholder : code
+    ta.value = (isBlock ? ('$$\n' + (displayCode || '') + '\n$$') : ('$' + (displayCode || '') + '$'))
     ta.style.width = '100%'
     // 根据公式类型与渲染高度估算一个更宽松的编辑高度，避免复杂公式被挤在两行内
     const baseLines = isBlock ? 4 : 3

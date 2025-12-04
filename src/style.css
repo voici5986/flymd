@@ -3872,8 +3872,16 @@ body.dark-mode .container.wysiwyg-v2 .ProseMirror pre .highlight-layer .hljs-pun
   cursor: pointer;
   transition: background 0.1s ease;
 }
-.container.wysiwyg-v2 .ProseMirror pre.code-block-wrapper .code-lang-item:hover {
-  background: rgba(127, 127, 127, 0.1);
+.container.wysiwyg-v2 .ProseMirror pre.code-block-wrapper .code-lang-item:hover,
+.container.wysiwyg-v2 .ProseMirror pre.code-block-wrapper .code-lang-item.selected {
+  background: rgba(127, 127, 127, 0.15);
+}
+.container.wysiwyg-v2 .ProseMirror pre.code-block-wrapper .code-lang-item.selected {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+}
+.container.wysiwyg-v2 .ProseMirror pre.code-block-wrapper .code-lang-item.selected .code-lang-name {
+  color: #fff;
 }
 .container.wysiwyg-v2 .ProseMirror pre.code-block-wrapper .code-lang-icon {
   font-size: 14px;
