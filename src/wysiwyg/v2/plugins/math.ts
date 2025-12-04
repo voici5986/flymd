@@ -45,6 +45,9 @@ class MathInlineNodeView implements NodeView {
       const code = this.node.textContent || ''
       const value = this.node.attrs.value || code
 
+      // 将原始公式内容同步到 DOM 属性，供外层编辑逻辑安全读取
+      try { (this.dom as HTMLElement).dataset.value = value } catch {}
+
       // 动态导入 KaTeX 及其 CSS（CSS 只会加载一次，用于隐藏 .katex-mathml）
       const [katex] = await Promise.all([
         import('katex'),
@@ -123,6 +126,9 @@ class MathBlockNodeView implements NodeView {
   private async renderMath() {
     try {
       const value = this.node.attrs.value || this.node.textContent || ''
+
+      // 将原始公式内容同步到 DOM 属性，供外层编辑逻辑安全读取
+      try { (this.dom as HTMLElement).dataset.value = value } catch {}
 
       // 动态导入 KaTeX 及其 CSS（CSS 只会加载一次，用于隐藏 .katex-mathml）
       const [katex] = await Promise.all([
