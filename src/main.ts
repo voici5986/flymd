@@ -56,6 +56,23 @@ import { initPlatformIntegration, mobileSaveFile, isMobilePlatform } from './pla
 import { createImageUploader } from './core/imageUpload'
 import { createPluginMarket, compareInstallableItems, FALLBACK_INSTALLABLES } from './extensions/market'
 import type { InstallableItem } from './extensions/market'
+import {
+  ensurePluginsDir,
+  parseRepoInput,
+  compareVersions,
+  getHttpClient,
+  fetchTextSmart,
+  fetchBinarySmart,
+  resolvePluginManifestUrl,
+  getPluginUpdateStates,
+  loadInstalledPlugins,
+  saveInstalledPlugins,
+  installPluginFromGitCore,
+  installPluginFromLocalCore,
+  type PluginManifest,
+  type InstalledPlugin,
+  type PluginUpdateState,
+} from './extensions/runtime'
 // 应用版本号（用于窗口标题/关于弹窗）
 const APP_VERSION: string = (pkg as any)?.version ?? '0.0.0'
 
@@ -444,27 +461,15 @@ let currentFilePath: string | null = null
 // YAML Front Matter 当前缓存，仅用于渲染/所见模式，源码始终保留完整文本
 let currentFrontMatter: string | null = null
 // 全局“未保存更改”标记（供关闭时提示与扩展查询）
-let dirty = false; // 是否有未保存更改（此处需加分号，避免下一行以括号开头被解析为对 false 的函数调用）
+let dirty = false // 是否有未保存更改（此处需加分号，避免下一行以括号开头被解析为对 false 的函数调用）
 // 暴露一个轻量只读查询函数，避免直接访问变量引起耦合
-(window as any).flymdIsDirty = () => dirty
+;(window as any).flymdIsDirty = () => dirty
 // 最近一次粘贴组合键：normal=Ctrl+V, plain=Ctrl+Shift+V；用于在 paste 事件中区分行为
 let _lastPasteCombo: 'normal' | 'plain' | null = null
 
-  // 配置存储（使用 tauri store）
-  let store: Store | null = null
+// 配置存储（使用 tauri store）
+let store: Store | null = null
 let uploaderEnabledSnapshot = false
-// 插件管理（简单实现）
-type PluginManifest = {
-  id: string
-  name?: string
-  version?: string
-  author?: string
-  description?: string
-  main?: string
-  minHostVersion?: string
-  assets?: string[]
-}
-type InstalledPlugin = { id: string; name?: string; version?: string; enabled?: boolean; showInMenuBar?: boolean; dir: string; main: string; builtin?: boolean; description?: string; manifestUrl?: string }
 
 // 右键菜单相关类型
 type ContextMenuContext = {
@@ -11631,25 +11636,6 @@ async function ensureAiAssistantAutoInstall(): Promise<void> {
   }
 }
 
-async function ensurePluginsDir(): Promise<void> {
-  try { await mkdir(PLUGINS_DIR as any, { baseDir: BaseDirectory.AppLocalData, recursive: true } as any) } catch {}
-}
-
-async function getHttpClient(): Promise<{ fetch?: any; Body?: any; ResponseType?: any; available?: () => Promise<boolean> } | null> {
-  try {
-    const mod: any = await import('@tauri-apps/plugin-http')
-    const http = {
-      fetch: mod?.fetch,
-      Body: mod?.Body,
-      ResponseType: mod?.ResponseType,
-      // 标记可用：存在 fetch 即视为可用，避免因网络失败误报不可用
-      available: async () => true,
-    }
-    if (typeof http.fetch === 'function') return http
-    return null
-  } catch { return null }
-}
-
 function pluginNotice(msg: string, level: 'ok' | 'err' = 'ok', ms?: number) {
   try {
     // 使用新的通知系统
@@ -11668,107 +11654,11 @@ function pluginNotice(msg: string, level: 'ok' | 'err' = 'ok', ms?: number) {
 }
 
 async function getInstalledPlugins(): Promise<Record<string, InstalledPlugin>> {
-  try {
-    if (!store) return {}
-    const p = await store.get('plugins')
-    const obj = (p && typeof p === 'object') ? (p as any) : {}
-    const map = obj?.installed && typeof obj.installed === 'object' ? obj.installed : {}
-    return map as Record<string, InstalledPlugin>
-  } catch { return {} }
+  return await loadInstalledPlugins(store)
 }
 
 async function setInstalledPlugins(map: Record<string, InstalledPlugin>): Promise<void> {
-  try {
-    if (!store) return
-    const old = (await store.get('plugins')) as any || {}
-    old.installed = map
-    await store.set('plugins', old)
-    await store.save()
-  } catch {}
-}
-
-function parseRepoInput(inputRaw: string): { type: 'github' | 'http'; manifestUrl: string; mainUrl?: string } | null {
-  const input = (inputRaw || '').trim()
-  if (!input) return null
-  if (/^https?:\/\//i.test(input)) {
-    let u = input
-    if (!/manifest\.json$/i.test(u)) {
-      if (!u.endsWith('/')) u += '/'
-      u += 'manifest.json'
-    }
-    return { type: 'http', manifestUrl: u }
-  }
-  const m = input.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:@([A-Za-z0-9_.\/-]+))?$/)
-  if (m) {
-    const user = m[1], repo = m[2], branch = m[3] || 'main'
-    const base = `https://raw.githubusercontent.com/${user}/${repo}/${branch}/`
-    return { type: 'github', manifestUrl: base + 'manifest.json' }
-  }
-  return null
-}
-
-// ��װ�汾�Ƚϣ�ֻ�������.�����ܣ��͸�����
-function compareVersions(a?: string, b?: string): number {
-  if (!a || !b) return 0
-  const as = String(a).split('.')
-  const bs = String(b).split('.')
-  const len = Math.max(as.length, bs.length)
-  for (let i = 0; i < len; i++) {
-    const av = parseInt(as[i] || '0', 10)
-    const bv = parseInt(bs[i] || '0', 10)
-    if (!Number.isFinite(av) || !Number.isFinite(bv)) {
-      const sa = as[i] || ''
-      const sb = bs[i] || ''
-      if (sa === sb) continue
-      return sa > sb ? 1 : -1
-    }
-    if (av === bv) continue
-    return av > bv ? 1 : -1
-  }
-  return 0
-}
-
-async function fetchTextSmart(url: string): Promise<string> {
-  try {
-    const http = await getHttpClient()
-    if (http && http.fetch) {
-      const resp = await http.fetch(url, { method: 'GET', responseType: http.ResponseType?.Text })
-      if (resp && (resp.ok === true || (typeof resp.status === 'number' && resp.status >= 200 && resp.status < 300))) {
-        const text = typeof resp.text === 'function' ? await resp.text() : (resp.data || '')
-        return String(text || '')
-      }
-    }
-  } catch {}
-  const r2 = await fetch(url)
-  if (!r2.ok) throw new Error(`HTTP ${r2.status}`)
-  return await r2.text()
-}
-
-async function fetchBinarySmart(url: string): Promise<Uint8Array> {
-  try {
-    const http = await getHttpClient()
-    if (http && http.fetch) {
-      const resp = await http.fetch(url, { method: 'GET', responseType: http.ResponseType?.Binary })
-      if (resp && (resp.ok === true || (typeof resp.status === 'number' && resp.status >= 200 && resp.status < 300))) {
-        if (resp.data instanceof Uint8Array) return resp.data
-        if (Array.isArray(resp.data)) return new Uint8Array(resp.data)
-        if (resp.arrayBuffer) {
-          const buf = await resp.arrayBuffer()
-          if (buf) return new Uint8Array(buf)
-        }
-        if (resp.data && typeof resp.data === 'string') {
-          const binaryString = resp.data as string
-          const arr = new Uint8Array(binaryString.length)
-          for (let i = 0; i < binaryString.length; i++) arr[i] = binaryString.charCodeAt(i) & 0xff
-          return arr
-        }
-      }
-    }
-  } catch {}
-  const r2 = await fetch(url)
-  if (!r2.ok) throw new Error(`HTTP ${r2.status}`)
-  const buf = await r2.arrayBuffer()
-  return new Uint8Array(buf)
+  await saveInstalledPlugins(store, map)
 }
 
 // 插件市场：通过 extensions/market 模块实现，保留旧 API 名称
@@ -11795,159 +11685,18 @@ async function loadInstallablePlugins(force = false): Promise<InstallableItem[]>
   return _pluginMarket.loadInstallablePlugins(force)
 }
 async function installPluginFromGit(inputRaw: string, opt?: { enabled?: boolean }): Promise<InstalledPlugin> {
-  await ensurePluginsDir()
-  const parsed = parseRepoInput(inputRaw)
-  if (!parsed) throw new Error('无法识别的输入，请输入 URL 或 username/repo[@branch]')
-  const manifestText = await fetchTextSmart(parsed.manifestUrl)
-  let manifest: PluginManifest
-  try { manifest = JSON.parse(manifestText) as PluginManifest } catch { throw new Error('manifest.json 解析失败') }
-  if (!manifest?.id) throw new Error('manifest.json 缺少 id')
-
-  // 检查宿主版本兼容性
-  if (manifest.minHostVersion) {
-    const currentVersion = APP_VERSION
-    const requiredVersion = manifest.minHostVersion
-    if (compareVersions(currentVersion, requiredVersion) < 0) {
-      throw new Error(
-        `此扩展需要 flyMD ${requiredVersion} 或更高版本，当前版本为 ${currentVersion}。\n` +
-        `请先升级 flyMD 再安装此扩展。`
-      )
-    }
-  }
-
-  async function ensurePluginPath(dirPath: string, relPath: string): Promise<void> {
-    const parts = relPath.split('/').filter((p) => !!p)
-    if (parts.length <= 1) return
-    let cur = dirPath
-    for (let i = 0; i < parts.length - 1; i++) {
-      cur += '/' + parts[i]
-      try { await mkdir(cur as any, { baseDir: BaseDirectory.AppLocalData, recursive: true } as any) } catch {}
-    }
-  }
-
-  const mainRel = (manifest.main || 'main.js').replace(/^\/+/, '')
-  const mainUrl = parsed.manifestUrl.replace(/manifest\.json$/i, '') + mainRel
-  const mainCode = await fetchTextSmart(mainUrl)
-  // 保存文件
-  const dir = `${PLUGINS_DIR}/${manifest.id}`
-  await mkdir(dir as any, { baseDir: BaseDirectory.AppLocalData, recursive: true } as any)
-  await writeTextFile(`${dir}/manifest.json` as any, JSON.stringify(manifest, null, 2), { baseDir: BaseDirectory.AppLocalData } as any)
-  await writeTextFile(`${dir}/${mainRel}` as any, mainCode, { baseDir: BaseDirectory.AppLocalData } as any)
-  const assetList = Array.isArray(manifest.assets) ? manifest.assets : []
-  const assetBase = parsed.manifestUrl.replace(/manifest\.json$/i, '')
-  for (const raw of assetList) {
-    let rel = String(raw || '').trim()
-    if (!rel) continue
-    rel = rel.replace(/\\/g, '/').replace(/^\/+/, '')
-    if (!rel || rel.includes('..')) continue
-    try {
-      await ensurePluginPath(dir, rel)
-      const data = await fetchBinarySmart(assetBase + rel)
-      await writeFile(`${dir}/${rel}` as any, data, { baseDir: BaseDirectory.AppLocalData } as any)
-    } catch (e) {
-      console.warn(`[Extensions] 资源下载失败: ${rel}`, e)
-    }
-  }
-  const enabled = (opt && typeof opt.enabled === 'boolean') ? opt.enabled : true
-  const record: InstalledPlugin = {
-    id: manifest.id,
-    name: manifest.name,
-    version: manifest.version,
-    enabled,
-    showInMenuBar: false, // 新安装的插件默认收纳到"插件"菜单
-    dir,
-    main: mainRel,
-    description: manifest.description,
-    manifestUrl: parsed.manifestUrl,
-  }
-  const map = await getInstalledPlugins()
-  map[manifest.id] = record
-  await setInstalledPlugins(map)
-  return record
+  return await installPluginFromGitCore(inputRaw, opt, {
+    appVersion: APP_VERSION,
+    store,
+  })
 }
 
 // 从本地文件夹安装扩展
 async function installPluginFromLocal(sourcePath: string, opt?: { enabled?: boolean }): Promise<InstalledPlugin> {
-  await ensurePluginsDir()
-
-  // 读取 manifest.json
-  const manifestPath = `${sourcePath}/manifest.json`
-  let manifestText: string
-  try {
-    manifestText = await readTextFile(manifestPath)
-  } catch {
-    throw new Error('未找到 manifest.json 文件')
-  }
-
-  let manifest: PluginManifest
-  try {
-    manifest = JSON.parse(manifestText) as PluginManifest
-  } catch {
-    throw new Error('manifest.json 解析失败')
-  }
-
-  if (!manifest?.id) throw new Error('manifest.json 缺少 id')
-
-  // 检查宿主版本兼容性
-  if (manifest.minHostVersion) {
-    const currentVersion = APP_VERSION
-    const requiredVersion = manifest.minHostVersion
-    if (compareVersions(currentVersion, requiredVersion) < 0) {
-      throw new Error(
-        `此扩展需要 flyMD ${requiredVersion} 或更高版本，当前版本为 ${currentVersion}。\n` +
-        `请先升级 flyMD 再安装此扩展。`
-      )
-    }
-  }
-
-  // 递归复制文件夹
-  async function copyDirRecursive(src: string, dest: string): Promise<void> {
-    try {
-      await mkdir(dest as any, { baseDir: BaseDirectory.AppLocalData, recursive: true } as any)
-    } catch {}
-
-    const entries = await readDir(src)
-    for (const entry of entries as any[]) {
-      const srcPath = `${src}/${entry.name}`
-      const destPath = `${dest}/${entry.name}`
-
-      if (entry.isDirectory) {
-        await copyDirRecursive(srcPath, destPath)
-      } else {
-        // 复制文件
-        try {
-          const content = await readFile(srcPath)
-          await writeFile(destPath as any, content, { baseDir: BaseDirectory.AppLocalData } as any)
-        } catch (e) {
-          console.warn(`复制文件失败: ${srcPath}`, e)
-        }
-      }
-    }
-  }
-
-  // 目标目录
-  const dir = `${PLUGINS_DIR}/${manifest.id}`
-  await copyDirRecursive(sourcePath, dir)
-
-  const mainRel = (manifest.main || 'main.js').replace(/^\/+/, '')
-  const enabled = (opt && typeof opt.enabled === 'boolean') ? opt.enabled : true
-
-  const record: InstalledPlugin = {
-    id: manifest.id,
-    name: manifest.name,
-    version: manifest.version,
-    enabled,
-    showInMenuBar: false,
-    dir,
-    main: mainRel,
-    description: manifest.description,
-    manifestUrl: '', // 本地安装没有 URL
-  }
-
-  const map = await getInstalledPlugins()
-  map[manifest.id] = record
-  await setInstalledPlugins(map)
-  return record
+  return await installPluginFromLocalCore(sourcePath, opt, {
+    appVersion: APP_VERSION,
+    store,
+  })
 }
 
 async function readPluginMainCode(p: InstalledPlugin): Promise<string> {
@@ -12502,58 +12251,6 @@ async function deactivatePlugin(id: string): Promise<void> {
     }
   } catch {}
 }
-
-// ��չ�����������µ�״̬
-type PluginUpdateState = {
-  manifestUrl: string
-  remoteVersion: string
-}
-
-// ����װ����չ��Ӧ�µ� manifest URL�����优����洢�У��ȴ��������г���
-function resolvePluginManifestUrl(p: InstalledPlugin, market: InstallableItem[]): string | null {
-  if (p.manifestUrl && /^https?:\/\//i.test(p.manifestUrl)) return p.manifestUrl
-  if (!market.length) return null
-  for (const it of market) {
-    if (!it || it.id !== p.id) continue
-    const ref = it.install && typeof it.install.ref === 'string' ? it.install.ref : ''
-    if (!ref) return null
-    const parsed = parseRepoInput(ref)
-    return parsed?.manifestUrl || null
-  }
-  return null
-}
-
-// ���远�� manifest �����汾��
-async function fetchRemoteManifestVersion(url: string): Promise<string | null> {
-  try {
-    const text = await fetchTextSmart(url)
-    const json = JSON.parse(text) as PluginManifest
-    const v = json && typeof json.version === 'string' ? json.version : null
-    return v || null
-  } catch {
-    return null
-  }
-}
-
-  // 读取已安装扩展的“可更新”状态（只返回有新版本的）
-  async function getPluginUpdateStates(list: InstalledPlugin[], market: InstallableItem[]): Promise<Record<string, PluginUpdateState>> {
-  const res: Record<string, PluginUpdateState> = {}
-  if (!list.length) return res
-  const tasks: Promise<void>[] = []
-  for (const p of list) {
-    if (!p.version) continue
-    tasks.push((async () => {
-      const url = resolvePluginManifestUrl(p, market)
-      if (!url) return
-      const remote = await fetchRemoteManifestVersion(url)
-      if (!remote) return
-      if (compareVersions(remote, p.version) <= 0) return
-      res[p.id] = { manifestUrl: url, remoteVersion: remote }
-    })())
-  }
-  await Promise.all(tasks)
-    return res
-  }
 
   // 启动时扩展更新检查：仅在应用启动后后台检查一次
   async function checkPluginUpdatesOnStartup(): Promise<void> {
@@ -13440,18 +13137,6 @@ async function loadAndActivateEnabledPlugins(): Promise<void> {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 // 将所见模式开关暴露到全局，便于在 WYSIWYG V2 覆盖层中通过双击切换至源码模式
 try { (window as any).flymdSetWysiwygEnabled = async (enable: boolean) => { try { await setWysiwygEnabled(enable) } catch (e) { console.error('flymdSetWysiwygEnabled 调用失败', e) } } } catch {}
 
@@ -13469,36 +13154,6 @@ try {
     } catch (e) { console.error('flymdSetPluginMarketUrl 失败', e); return false }
   }
 } catch {}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 // 预览消毒开关：允许在发行版关闭预览消毒（定位构建差异问题），
