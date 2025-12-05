@@ -249,6 +249,15 @@ FlyMD supports enhancing functionality through extension plugins:
 | Batch Export PDF | Batch export Markdown to PDF |
 | Word Count | Real-time character count, word count, reading time |
 
+### 🧩 Featured Extensions
+
+| Extension | Description |
+|-----------|-------------|
+| High-Precision PDF Parser | Accurate PDF text, table and outline parsing, ideal for technical docs and research papers |
+| Markdown Table Assistant | Generate, align and reorder Markdown tables in one step, no more manual spacing hell |
+| Collaborative Editing | Real-time multi-user editing via collaboration server with cursor sync and basic conflict handling |
+| Typecho Post Manager | Manage Typecho drafts, snapshots and rollbacks locally with one-click publish and update |
+
 ---
 
 ## 📊 Performance Metrics
