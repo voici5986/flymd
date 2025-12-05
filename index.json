@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2025-12-05T12:00:00Z",
+  "updatedAt": "2025-12-05T18:00:00Z",
   "ttlSeconds": 3600,
   "items": [
     {
@@ -58,6 +58,17 @@
       "featured": true,
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/pdf2doc/manifest.json",
+        "type": "manifest"
+      }
+    },
+    {
+      "homepage": "https://github.com/flyhunterl/flymd",
+      "name": "发送到 Blinko",
+      "description": "右键菜单一键将当前内容发送到 Blinko",
+      "author": "flyMD",
+      "id": "blinko-snap",
+      "install": {
+        "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/blinko-snap/manifest.json",
         "type": "manifest"
       }
     },

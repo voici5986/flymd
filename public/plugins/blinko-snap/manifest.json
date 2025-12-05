@@ -1,0 +1,9 @@
+{
+  "id": "blinko-snap",
+  "name": "发送到 Blinko",
+  "version": "1.0.0",
+  "author": "flyMD",
+  "description": "右键菜单一键将当前内容发送到 Blinko",
+  "main": "main.js"
+}
+
