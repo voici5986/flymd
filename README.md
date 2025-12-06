@@ -24,12 +24,9 @@
 </p>
 
 
-## 界面预览
-<p align="center">
-  <img alt="91a418d22f073814d0d915e2cdc97f81" src="https://github.com/user-attachments/assets/f007f4cd-4c3f-46f7-8080-72e2128990e1" width="32%" />
-  <img alt="cf36b7504cd5a1c3f384a77d1e66bc05" src="https://github.com/user-attachments/assets/391ef7ec-9741-4c3e-b5ef-b8573ebf021c" width="32%" />
-  <img alt="9fe6a88ac611b3d72599cebe20d20c74" src="https://github.com/user-attachments/assets/2d84d6fe-623b-48cf-8d6f-3e925a9d6b12" width="32%" />
-</p>
+## PDF高精度解析+翻译演示
+
+![PDF高精度解析翻译](https://github.com/user-attachments/assets/5e711375-4c58-4432-9acd-27de92cef81a)
 
 ---
 
