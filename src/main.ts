@@ -1233,6 +1233,12 @@ try { initThemeUI() } catch {}
     try { updateFocusSidebarBg() } catch {}
   } catch {}
 }
+// 将紧凑标题栏切换函数暴露到全局，供主题面板调用
+;(window as any).flymdSetCompactTitlebar = async (enabled: boolean) => {
+  try {
+    await setCompactTitlebar(enabled, store, true)
+  } catch {}
+}
 // 初始化专注模式事件
 try { initFocusModeEvents() } catch {}
 // 初始化窗口拖拽（为 mac / Linux 上的紧凑标题栏补齐拖动支持）
@@ -9278,8 +9284,8 @@ function bindEvents() {
     } catch {}
     // 读取紧凑标题栏设置并应用
     try {
-      const compact = await getCompactTitlebar()
-      await setCompactTitlebar(compact, false)
+      const compact = await getCompactTitlebar(store)
+      await setCompactTitlebar(compact, store, false)
     } catch {}
     await maybeAutoImportPortableBackup()
     try {
