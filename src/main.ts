@@ -102,6 +102,12 @@ import {
   type PluginUpdateState,
 } from './extensions/runtime'
 import {
+  createPluginHost,
+  type PluginHost,
+  type PluginHostDeps,
+  type PluginHostState,
+} from './extensions/pluginHost'
+import {
   CORE_AI_EXTENSION_ID,
   ensureCoreExtensionsAfterStartup,
   markCoreExtensionBlocked,
@@ -656,6 +662,7 @@ const builtinPlugins: InstalledPlugin[] = [
 ]
 const activePlugins = new Map<string, any>() // id -> module
 const pluginMenuAdded = new Map<string, boolean>() // 限制每个插件仅添加一个菜单项
+const pluginMenuDisposers = new Map<string, Array<() => void>>() // 每个插件对应的菜单清理函数
 // 插件 API 注册表：namespace -> { pluginId, api }
 type PluginAPIRecord = { pluginId: string; api: any }
 const pluginAPIRegistry = new Map<string, PluginAPIRecord>()
@@ -6027,14 +6034,11 @@ function addStickyTodoButtons() {
 // 处理便签模式待办项推送
 async function handleStickyTodoPush(todoText: string, index: number) {
   try {
-    // 直接从 pluginAPIRegistry 获取 xxtui 插件 API
-    const record = pluginAPIRegistry.get('xxtui-todo-push')
-    if (!record || !record.api || !record.api.pushToXxtui) {
+    const api = pluginHost.getPluginAPI('xxtui-todo-push')
+    if (!api || !api.pushToXxtui) {
       alert('xxtui 插件未安装或未启用\n\n请在"插件"菜单中启用 xxtui 插件')
       return
     }
-
-    const api = record.api
 
     // 调用推送 API
     const success = await api.pushToXxtui('[TODO]', todoText)
@@ -6053,14 +6057,11 @@ async function handleStickyTodoPush(todoText: string, index: number) {
 // 处理便签模式待办项创建提醒
 async function handleStickyTodoReminder(todoText: string, index: number, btn?: HTMLButtonElement) {
   try {
-    // 直接从 pluginAPIRegistry 获取 xxtui 插件 API
-    const record = pluginAPIRegistry.get('xxtui-todo-push')
-    if (!record || !record.api || !record.api.parseAndCreateReminders) {
+    const api = pluginHost.getPluginAPI('xxtui-todo-push')
+    if (!api || !api.parseAndCreateReminders) {
       alert('xxtui 插件未安装或未启用\n\n请在"插件"菜单中启用 xxtui 插件')
       return
     }
-
-    const api = record.api
 
     // 将单条待办文本包装成完整格式，以便插件解析
     const todoMarkdown = `- [ ] ${todoText}`
@@ -8985,7 +8986,7 @@ function bindEvents() {
         installPluginFromLocal,
         activatePlugin,
         deactivatePlugin,
-        getActivePluginModule: (id: string) => activePlugins.get(id),
+        getActivePluginModule: (id: string) => pluginHost.getActivePluginModule(id),
         coreAiExtensionId: CORE_AI_EXTENSION_ID,
         markCoreExtensionBlocked: (id: string) => markCoreExtensionBlocked(store, id),
         removePluginDir: (dir: string) => removeDirRecursive(dir),
@@ -9297,6 +9298,56 @@ async function setInstalledPlugins(map: Record<string, InstalledPlugin>): Promis
   await saveInstalledPlugins(store, map)
 }
 
+// 插件宿主：封装激活/停用与运行时上下文，避免 main.ts 继续臃肿
+const pluginHostState: PluginHostState = {
+  activePlugins,
+  pluginMenuAdded,
+  pluginMenuDisposers,
+  pluginAPIRegistry,
+  pluginContextMenuItems,
+  pluginSelectionHandlers,
+  pluginDockPanels,
+}
+
+const pluginHostDeps: PluginHostDeps = {
+  getStore: () => store,
+  getEditor: () => editor,
+  getPreviewRoot: () => preview,
+  getCurrentFilePath: () => currentFilePath,
+  isPreviewMode: () => mode === 'preview',
+  isWysiwyg: () => !!wysiwyg || !!wysiwygV2Active,
+  renderPreview: () => { void renderPreview() },
+  scheduleWysiwygRender: () => { try { scheduleWysiwygRender() } catch {} },
+  markDirtyAndRefresh: () => {
+    try {
+      dirty = true
+      refreshTitle()
+      refreshStatus()
+    } catch {}
+  },
+  splitYamlFrontMatter: (raw: string) => splitYamlFrontMatter(raw),
+  yamlLoad: (raw: string) => yamlLoad(raw),
+  pluginNotice: (msg: string, level?: 'ok' | 'err', ms?: number) => pluginNotice(msg, level, ms),
+  confirmNative: (message: string, title?: string) => confirmNative(message, title),
+  exportCurrentDocToPdf: (target: string) => exportCurrentDocToPdf(target),
+  openFileByPath: (path: string) => openFile2(path),
+  createStickyNote: async (filePath: string) => {
+    try {
+      const fn = (window as any).flymdCreateStickyNote
+      if (typeof fn !== 'function') {
+        throw new Error('当前环境不支持便签功能')
+      }
+      await fn(filePath)
+    } catch (e) {
+      console.error('createStickyNote 失败', e)
+      throw e
+    }
+  },
+  updatePluginDockGaps: () => updatePluginDockGaps(),
+}
+
+const pluginHost: PluginHost = createPluginHost(pluginHostDeps, pluginHostState)
+
 // 插件市场：通过 extensions/market 模块实现，保留旧 API 名称
 const _pluginMarket = createPluginMarket({
   getStore: () => store,
@@ -9335,633 +9386,19 @@ async function installPluginFromLocal(sourcePath: string, opt?: { enabled?: bool
   })
 }
 
-async function readPluginMainCode(p: InstalledPlugin): Promise<string> {
-  const path = `${p.dir}/${p.main || 'main.js'}`
-  return await readTextFile(path as any, { baseDir: BaseDirectory.AppLocalData } as any)
-}
-
 async function activatePlugin(p: InstalledPlugin): Promise<void> {
-  if (activePlugins.has(p.id)) return
-  const code = await readPluginMainCode(p)
-  const dataUrl = 'data:text/javascript;charset=utf-8,' + encodeURIComponent(code)
-  const mod: any = await import(/* @vite-ignore */ dataUrl)
-  const http = await getHttpClient()
-  const pluginAssetsAbs = await resolvePluginInstallAbsolute(p.dir)
-  async function openAiWindow() {
-    try {
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-      const label = 'ai-assistant-' + Math.random().toString(36).slice(2, 8)
-      new WebviewWindow(label, { url: 'index.html#ai-assistant', width: 860, height: 640, title: 'AI 助手' })
-    } catch (e) { console.error('openAiWindow 失败', e) }
-  }
-  const getSourceTextForPlugin = () => {
-    try { return String(editor.value || '') } catch { return '' }
-  }
-  // 供插件使用的 HTML → Markdown 转换工具：按需动态加载内部转换器，避免主包体积膨胀
-  const htmlToMarkdownForPlugin = async (html: string, opts?: { baseUrl?: string }): Promise<string> => {
-    try {
-      const raw = String(html || '')
-      if (!raw.trim()) return ''
-      const mod: any = await import('./html2md')
-      const fn = (mod && (mod.htmlToMarkdown || mod.default)) as unknown
-      if (typeof fn !== 'function') {
-        console.warn(`[Plugin ${p.id}] htmlToMarkdown: 内部转换函数不可用`)
-        return ''
-      }
-      return await (fn as (h: string, o?: any) => string)(raw, opts || {})
-    } catch (e) {
-      console.error(`[Plugin ${p.id}] htmlToMarkdown 失败:`, e)
-      return ''
-    }
-  }
-  // 供插件使用的 Front Matter/正文获取工具：始终基于当前源码文本即时计算，避免额外状态耦合
-  const getFrontMatterForPlugin = () => {
-    try {
-      const src = getSourceTextForPlugin()
-      const r = splitYamlFrontMatter(src)
-      return r.frontMatter
-    } catch {
-      return null
-    }
-  }
-  const getDocBodyForPlugin = () => {
-    try {
-      const src = getSourceTextForPlugin()
-      const r = splitYamlFrontMatter(src)
-      return r.body
-    } catch {
-      return getSourceTextForPlugin()
-    }
-  }
-  const getDocMetaForPlugin = (): any | null => {
-    try {
-      const fm = getFrontMatterForPlugin()
-      if (!fm) return null
-      // 提取 YAML 内容：去掉首尾分隔线，仅保留中间部分
-      let s = String(fm)
-      // 去掉 BOM 与起始 ---
-      s = s.replace(/^\uFEFF?---\s*\r?\n?/, '')
-      // 去掉结尾 ---（行首行尾的空白一并去除）
-      s = s.replace(/\r?\n---\s*$/, '')
-      const doc = yamlLoad(s)
-      if (!doc || typeof doc !== 'object') return null
-      return doc
-    } catch {
-      return null
-    }
-  }
-  const getSourceSelectionForPlugin = () => {
-    try {
-      const s = editor.selectionStart >>> 0
-      const e = editor.selectionEnd >>> 0
-      const a = Math.min(s, e)
-      const b = Math.max(s, e)
-      const text = getSourceTextForPlugin().slice(a, b)
-      return { start: a, end: b, text }
-    } catch {
-      return { start: 0, end: 0, text: '' }
-    }
-  }
-  const getLineTextForPlugin = (lineNumber: number): string => {
-    try {
-      const n = Number(lineNumber)
-      if (!Number.isFinite(n)) return ''
-      const idx = Math.max(1, Math.floor(n)) - 1
-      const lines = getSourceTextForPlugin().split(/\r?\n/)
-      if (idx < 0 || idx >= lines.length) return ''
-      return lines[idx]
-    } catch {
-      return ''
-    }
-  }
-  const notifySelectionChangeForPlugins = () => {
-    try {
-      const sel = getSourceSelectionForPlugin()
-      for (const fn of pluginSelectionHandlers.values()) {
-        if (typeof fn === 'function') {
-          try { fn(sel) } catch (e) { console.error('[Plugin] onSelectionChange 失败', e) }
-        }
-      }
-    } catch {}
-  }
-  const ctx = {
-    http,
-    // HTML 相关工具
-    htmlToMarkdown: (html: string, opts?: { baseUrl?: string }) => htmlToMarkdownForPlugin(html, opts),
-    invoke,
-    openAiWindow,
-    getAssetUrl: (relPath: string) => toPluginAssetUrl(pluginAssetsAbs, relPath),
-    layout: {
-      // 注册一个由宿主管理间距的 Panel（如 AI 助手侧边栏/底部面板）
-      registerPanel: (panelId: string, opt: { side: PluginDockSide; size: number; visible?: boolean }): PluginDockPanelHandle => {
-        try {
-          const id = String(panelId || 'default')
-          const key = getPluginDockKey(p.id, id)
-          const side: PluginDockSide = (opt && opt.side) || 'left'
-          const size = Math.max(0, Number(opt && opt.size) || 0)
-          const visible = !!(opt && (typeof opt.visible === 'boolean' ? opt.visible : true))
-          const state: PluginDockPanelState = { pluginId: p.id, panelId: id, side, size, visible }
-          pluginDockPanels.set(key, state)
-          updatePluginDockGaps()
-          const handle: PluginDockPanelHandle = {
-            setVisible(v: boolean) {
-              const cur = pluginDockPanels.get(key)
-              if (!cur) return
-              cur.visible = !!v
-              pluginDockPanels.set(key, cur)
-              updatePluginDockGaps()
-            },
-            setSide(s: PluginDockSide) {
-              const cur = pluginDockPanels.get(key)
-              if (!cur) return
-              cur.side = s
-              pluginDockPanels.set(key, cur)
-              updatePluginDockGaps()
-            },
-            setSize(sz: number) {
-              const cur = pluginDockPanels.get(key)
-              if (!cur) return
-              cur.size = Math.max(0, Number(sz) || 0)
-              pluginDockPanels.set(key, cur)
-              updatePluginDockGaps()
-            },
-            update(opt2: { side?: PluginDockSide; size?: number; visible?: boolean }) {
-              const cur = pluginDockPanels.get(key)
-              if (!cur) return
-              if (opt2.side) cur.side = opt2.side
-              if (typeof opt2.size === 'number') cur.size = Math.max(0, Number(opt2.size) || 0)
-              if (typeof opt2.visible === 'boolean') cur.visible = opt2.visible
-              pluginDockPanels.set(key, cur)
-              updatePluginDockGaps()
-            },
-            dispose() {
-              pluginDockPanels.delete(key)
-              updatePluginDockGaps()
-            }
-          }
-          return handle
-        } catch {
-          const noop: PluginDockPanelHandle = {
-            setVisible: () => {},
-            setSide: () => {},
-            setSize: () => {},
-            update: () => {},
-            dispose: () => {}
-          }
-          return noop
-        }
-      }
-    },
-    storage: {
-      get: async (key: string) => {
-        try { if (!store) return null; const all = (await store.get('plugin:' + p.id)) as any || {}; return all[key] } catch { return null }
-      },
-      set: async (key: string, value: any) => { try { if (!store) return; const all = (await store.get('plugin:' + p.id)) as any || {}; all[key] = value; await store.set('plugin:' + p.id, all); await store.save() } catch {} }
-    },
-    addMenuItem: (opt: { label: string; title?: string; onClick?: () => void; children?: any[] }) => {
-      try {
-        if (pluginMenuAdded.get(p.id)) return () => {}
-        pluginMenuAdded.set(p.id, true)
-
-        // 检查是否独立显示在菜单栏
-        if (p.showInMenuBar) {
-          // 独立显示：添加到菜单栏（原有逻辑）
-          const bar = document.querySelector('.menubar') as HTMLDivElement | null
-          if (!bar) return () => {}
-
-          const el = document.createElement('div')
-          el.className = 'menu-item'
-          el.textContent = (p.id === 'typecho-publisher-flymd') ? '发布' : (opt.label || '扩展')
-          if (opt.title) el.title = opt.title
-
-          // 支持下拉菜单
-          if (opt.children && opt.children.length > 0) {
-            el.addEventListener('click', (ev) => {
-              ev.preventDefault()
-              ev.stopPropagation()
-              try {
-                togglePluginDropdown(el, opt.children || [])
-              } catch (e) { console.error(e) }
-            })
-          } else {
-            el.addEventListener('click', (ev) => {
-              ev.preventDefault()
-              ev.stopPropagation()
-              try { opt.onClick && opt.onClick() } catch (e) { console.error(e) }
-            })
-          }
-
-          bar.appendChild(el)
-          return () => { try { el.remove() } catch {} }
-        } else {
-          // 收纳到"插件"菜单
-          addToPluginsMenu(p.id, {
-            label: opt.label || '扩展',
-            onClick: opt.onClick,
-            children: opt.children
-          })
-          return () => { removeFromPluginsMenu(p.id) }
-        }
-      } catch { return () => {} }
-    },
-    ui: {
-      // 简化的通知方法（向后兼容）
-      notice: (msg: string, level?: 'ok' | 'err', ms?: number) => pluginNotice(msg, level, ms),
-      // 完整的通知 API
-      showNotification: (message: string, options?: { type?: 'success' | 'error' | 'info', duration?: number, onClick?: () => void }) => {
-        try {
-          const opt = options || {}
-          let notifType: NotificationType = 'plugin-success'
-          if (opt.type === 'error') notifType = 'plugin-error'
-          else if (opt.type === 'info') notifType = 'extension'
-          else notifType = 'plugin-success'
-
-          return NotificationManager.show(notifType, message, opt.duration, opt.onClick)
-        } catch (e) {
-          console.error('[Plugin] showNotification 失败', e)
-          return ''
-        }
-      },
-      // 隐藏通知
-      hideNotification: (id: string) => {
-        try {
-          NotificationManager.hide(id)
-        } catch (e) {
-          console.error('[Plugin] hideNotification 失败', e)
-        }
-      },
-      // 确认对话框
-      confirm: async (message: string) => { try { return await confirmNative(message, '确认') } catch { return false } }
-    },
-    // 当前文件相关
-    getCurrentFilePath: () => {
-      try {
-        return currentFilePath
-      } catch {
-        return null
-      }
-    },
-    getEditorValue: () => getSourceTextForPlugin(),
-    setEditorValue: (v: string) => { try { editor.value = v; dirty = true; refreshTitle(); refreshStatus(); if (mode === 'preview') { void renderPreview() } else if (wysiwyg) { scheduleWysiwygRender() } } catch {} },
-    getSelection: () => getSourceSelectionForPlugin(),
-    getSelectedMarkdown: () => getSourceSelectionForPlugin().text,
-    getSourceText: () => getSourceTextForPlugin(),
-    // Front Matter / 元数据相关 API：若文首未使用标准头部写法，则返回 null 或原始全文
-    getFrontMatterRaw: () => getFrontMatterForPlugin(),
-    getDocBody: () => getDocBodyForPlugin(),
-    getDocMeta: () => getDocMetaForPlugin(),
-    getLineText: (lineNumber: number) => getLineTextForPlugin(lineNumber),
-    replaceRange: (start: number, end: number, text: string) => { try { const v = String(editor.value || ''); const a = Math.max(0, Math.min(start >>> 0, end >>> 0)); const b = Math.max(start >>> 0, end >>> 0); editor.value = v.slice(0, a) + String(text || '') + v.slice(b); const caret = a + String(text || '').length; editor.selectionStart = editor.selectionEnd = caret; dirty = true; refreshTitle(); refreshStatus(); if (mode === 'preview') { void renderPreview() } else if (wysiwyg) { scheduleWysiwygRender() } } catch {} },
-    insertAtCursor: (text: string) => { try { const s = editor.selectionStart >>> 0; const e = editor.selectionEnd >>> 0; const a = Math.min(s, e); const b = Math.max(s, e); const v = String(editor.value || ''); editor.value = v.slice(0, a) + String(text || '') + v.slice(b); const caret = a + String(text || '').length; editor.selectionStart = editor.selectionEnd = caret; dirty = true; refreshTitle(); refreshStatus(); if (mode === 'preview') { void renderPreview() } else if (wysiwyg) { scheduleWysiwygRender() } } catch {} },
-    // 按绝对路径读取本地二进制文件（主要用于 PDF / 图片等）
-    readFileBinary: async (absPath: string) => {
-      try {
-        const p = String(absPath || '').trim()
-        if (!p) {
-          throw new Error('absPath 不能为空')
-        }
-        const bytes = await readFile(p as any)
-        if (bytes instanceof Uint8Array) return bytes
-        if (Array.isArray(bytes)) return new Uint8Array(bytes as any)
-        if ((bytes as any)?.buffer instanceof ArrayBuffer) return new Uint8Array((bytes as any).buffer)
-        throw new Error('无法解析文件字节数据')
-      } catch (e) {
-        console.error(`[Plugin ${p.id}] readFileBinary 失败:`, e)
-        throw e
-      }
-    },
-    openFileByPath: async (path: string) => {
-      try { await openFile2(path) } catch (e) { console.error('plugin openFileByPath 失败', e); throw e }
-    },
-    createStickyNote: async (filePath: string) => {
-      try {
-        const fn = (window as any).flymdCreateStickyNote
-        if (typeof fn !== 'function') {
-          throw new Error('当前环境不支持便签功能')
-        }
-        await fn(filePath)
-      } catch (e) {
-        console.error('plugin createStickyNote 失败', e)
-        throw e
-      }
-    },
-    exportCurrentToPdf: async (target: string) => {
-      try { await exportCurrentDocToPdf(target) } catch (e) { console.error('plugin exportCurrentToPdf 失败', e); throw e }
-    },
-    pickDirectory: async (opt?: { defaultPath?: string }) => {
-      try {
-        if (typeof open !== 'function') {
-          alert('目录选择功能需要在桌面版中使用')
-          return ''
-        }
-        const picked = await open({
-          directory: true,
-          defaultPath: opt && opt.defaultPath ? opt.defaultPath : undefined
-        } as any)
-        const dir = (typeof picked === 'string') ? picked : ((picked as any)?.path || '')
-        return dir ? String(dir) : ''
-      } catch (e) {
-        console.error('plugin pickDirectory 失败', e)
-        return ''
-      }
-    },
-    pickDocFiles: async (opt?: { multiple?: boolean }) => {
-      try {
-        if (typeof open !== 'function') {
-          alert('文件打开功能需要在 Tauri 应用中使用')
-          return [] as string[]
-        }
-        const sel = await open({
-          multiple: !!(opt && opt.multiple),
-          filters: [
-            { name: 'Markdown', extensions: ['md', 'markdown', 'txt'] },
-          ]
-        })
-        if (!sel) return [] as string[]
-        if (Array.isArray(sel)) return sel.map(x => String(x || ''))
-        return [String(sel)]
-      } catch (e) {
-        console.error('plugin pickDocFiles 失败', e)
-        return [] as string[]
-      }
-    },
-    addContextMenuItem: (config: ContextMenuItemConfig) => {
-      try {
-        // 注册右键菜单项
-        pluginContextMenuItems.push({
-          pluginId: p.id,
-          config: config
-        })
-
-        // 返回移除函数
-        return () => {
-          try {
-            const index = pluginContextMenuItems.findIndex(
-              item => item.pluginId === p.id && item.config === config
-            )
-            if (index >= 0) {
-              pluginContextMenuItems.splice(index, 1)
-            }
-          } catch {}
-        }
-      } catch {
-        return () => {}
-      }
-    },
-    // 插件间通信 API
-    registerAPI: (namespace: string, api: any) => {
-      try {
-        if (!namespace || typeof namespace !== 'string') {
-          console.warn(`[Plugin ${p.id}] registerAPI: namespace 必须是非空字符串`)
-          return
-        }
-
-        // 检查命名空间是否已被占用
-        const existing = pluginAPIRegistry.get(namespace)
-        if (existing && existing.pluginId !== p.id) {
-          console.warn(
-            `[Plugin ${p.id}] registerAPI: 命名空间 "${namespace}" 已被插件 "${existing.pluginId}" 占用，` +
-            `请使用不同的命名空间或卸载冲突的插件`
-          )
-          return
-        }
-
-        // 注册 API
-        pluginAPIRegistry.set(namespace, {
-          pluginId: p.id,
-          api: api
-        })
-
-        console.log(`[Plugin ${p.id}] 已注册 API: ${namespace}`)
-      } catch (e) {
-        console.error(`[Plugin ${p.id}] registerAPI 失败:`, e)
-      }
-    },
-      getPluginAPI: (namespace: string) => {
-        try {
-          if (!namespace || typeof namespace !== 'string') {
-            console.warn(`[Plugin ${p.id}] getPluginAPI: namespace 必须是非空字符串`)
-            return null
-          }
-
-          const record = pluginAPIRegistry.get(namespace)
-          if (!record) {
-            return null
-          }
-
-          return record.api
-        } catch (e) {
-          console.error(`[Plugin ${p.id}] getPluginAPI 失败:`, e)
-          return null
-        }
-      },
-      // 编辑器源码选区变化监听（供协同等高级插件使用）
-      onSelectionChange: (listener: ((sel: { start: number; end: number; text: string }) => void) | null) => {
-        try {
-          if (!listener) {
-            pluginSelectionHandlers.delete(p.id)
-          } else {
-            pluginSelectionHandlers.set(p.id, listener)
-          }
-       } catch {}
-      },
-     // 获取预览 DOM 元素（用于导出等功能）
-     getPreviewElement: () => {
-       try {
-         return preview.querySelector('.preview-body') as HTMLElement | null
-       } catch (e) {
-         console.error(`[Plugin ${p.id}] getPreviewElement 失败:`, e)
-         return null
-       }
-     },
-     // 读取本地图片并返回 data URL，供视觉类插件使用
-     readImageAsDataUrl: async (absPath: string) => {
-       try {
-         if (typeof readFile !== 'function') {
-           throw new Error('读取图片功能需要在 Tauri 应用中使用')
-         }
-         const abs = String(absPath || '').trim()
-         if (!abs) {
-           throw new Error('absPath 不能为空')
-         }
-         const bytes = await readFile(abs as any)
-         const mime = (() => {
-           const m = abs.toLowerCase().match(/\.([a-z0-9]+)$/)
-           switch (m?.[1]) {
-             case 'jpg':
-             case 'jpeg': return 'image/jpeg'
-             case 'png': return 'image/png'
-             case 'gif': return 'image/gif'
-             case 'webp': return 'image/webp'
-             case 'bmp': return 'image/bmp'
-             case 'avif': return 'image/avif'
-             case 'ico': return 'image/x-icon'
-             case 'svg': return 'image/svg+xml'
-             default: return 'application/octet-stream'
-           }
-         })()
-         const blob = new Blob([bytes], { type: mime })
-         const dataUrl = await new Promise<string>((resolve, reject) => {
-           try {
-             const fr = new FileReader()
-             fr.onerror = () => reject(fr.error || new Error('读取图片失败'))
-             fr.onload = () => resolve(String(fr.result || ''))
-             fr.readAsDataURL(blob)
-           } catch (e) { reject(e as any) }
-         })
-         return dataUrl
-       } catch (e) {
-         console.error(`[Plugin ${p.id}] readImageAsDataUrl 失败:`, e)
-         throw e
-       }
-     },
-     // 弹出保存对话框并保存二进制文件
-     saveFileWithDialog: async (opt: { filters?: Array<{ name: string, extensions: string[] }>, data: Uint8Array, defaultName?: string }) => {
-       try {
-         if (typeof save !== 'function' || typeof writeFile !== 'function') {
-           throw new Error('文件保存功能需要在 Tauri 应用中使用')
-        }
-        if (!opt || !opt.data) {
-          throw new Error('缺少 data 参数')
-        }
-        const target = await save({
-          filters: opt.filters || [{ name: '所有文件', extensions: ['*'] }],
-          defaultPath: opt.defaultName
-        })
-        if (!target) {
-          return null // 用户取消
-        }
-        await writeFile(target as any, opt.data as any)
-        return target as string
-      } catch (e) {
-        console.error(`[Plugin ${p.id}] saveFileWithDialog 失败:`, e)
-        throw e
-      }
-    },
-  }
-  try { (window as any).__pluginCtx__ = (window as any).__pluginCtx__ || {}; (window as any).__pluginCtx__[p.id] = ctx } catch {}
-  if (typeof mod?.activate === 'function') {
-    await mod.activate(ctx)
-  }
-  activePlugins.set(p.id, mod)
+  return pluginHost.activatePlugin(p)
 }
 
 async function deactivatePlugin(id: string): Promise<void> {
-  const mod = activePlugins.get(id)
-  if (!mod) return
-  try { if (typeof mod?.deactivate === 'function') await mod.deactivate() } catch {}
-  activePlugins.delete(id)
-  try { pluginMenuAdded.delete(id) } catch {}
-  // 移除插件注册的右键菜单项
-  try {
-    for (let i = pluginContextMenuItems.length - 1; i >= 0; i--) {
-      if (pluginContextMenuItems[i]?.pluginId === id) {
-        pluginContextMenuItems.splice(i, 1)
-      }
-    }
-  } catch {}
-  // 移除插件注册的布局 Panel
-  try {
-    const keysToDelete: string[] = []
-    for (const [key, panel] of pluginDockPanels.entries()) {
-      if (panel.pluginId === id) {
-        keysToDelete.push(key)
-      }
-    }
-    for (const key of keysToDelete) {
-      pluginDockPanels.delete(key)
-    }
-    updatePluginDockGaps()
-  } catch {}
-  // 移除插件注册的所有 API
-  try {
-    const namespacesToRemove: string[] = []
-    for (const [namespace, record] of pluginAPIRegistry.entries()) {
-      if (record.pluginId === id) {
-        namespacesToRemove.push(namespace)
-      }
-    }
-    for (const namespace of namespacesToRemove) {
-      pluginAPIRegistry.delete(namespace)
-      console.log(`[Plugin ${id}] 已移除 API: ${namespace}`)
-    }
-  } catch {}
+  return pluginHost.deactivatePlugin(id)
 }
 
-// 打开插件设置：供扩展面板通过宿主调用
 async function openPluginSettings(p: InstalledPlugin): Promise<void> {
-  try {
-    const mod = activePlugins.get(p.id)
-    const http = await getHttpClient()
-    const ctx = {
-      http,
-      invoke,
-      storage: {
-        get: async (key: string) => {
-          try {
-            if (!store) return null
-            const all = (await store.get('plugin:' + p.id)) as any || {}
-            return all[key]
-          } catch {
-            return null
-          }
-        },
-        set: async (key: string, value: any) => {
-          try {
-            if (!store) return
-            const all = (await store.get('plugin:' + p.id)) as any || {}
-            all[key] = value
-            await store.set('plugin:' + p.id, all)
-            await store.save()
-          } catch {}
-        }
-      },
-      ui: {
-        notice: (msg: string, level?: 'ok' | 'err', ms?: number) => pluginNotice(msg, level, ms),
-        showNotification: (message: string, options?: { type?: 'success' | 'error' | 'info', duration?: number, onClick?: () => void }) => {
-          try {
-            const opt = options || {}
-            let notifType: NotificationType = 'plugin-success'
-            if (opt.type === 'error') notifType = 'plugin-error'
-            else if (opt.type === 'info') notifType = 'extension'
-            else notifType = 'plugin-success'
-            return NotificationManager.show(notifType, message, opt.duration, opt.onClick)
-          } catch (err) {
-            console.error('[Plugin] showNotification 失败', err)
-            return ''
-          }
-        },
-        hideNotification: (id: string) => {
-          try {
-            NotificationManager.hide(id)
-          } catch (err) {
-            console.error('[Plugin] hideNotification 失败', err)
-          }
-        },
-        confirm: async (m: string) => { try { return await confirmNative(m) } catch { return false } }
-      },
-      getEditorValue: () => editor.value,
-      setEditorValue: (v: string) => {
-        try {
-          editor.value = v
-          dirty = true
-          refreshTitle()
-          refreshStatus()
-          if (mode === 'preview') { void renderPreview() } else if (wysiwyg) { scheduleWysiwygRender() }
-        } catch {}
-      },
-    }
-    if (mod && typeof (mod as any).openSettings === 'function') {
-      await (mod as any).openSettings(ctx)
-    } else {
-      pluginNotice(t('ext.settings.notProvided'), 'err', 1600)
-    }
-  } catch (err) {
-    showError(t('ext.settings.openFail'), err)
-  }
+  return pluginHost.openPluginSettings(p)
 }
 
-  // 启动时扩展更新检查：仅在应用启动后后台检查一次
+// 启动时扩展更新检查：仅在应用启动后后台检查一次
   async function checkPluginUpdatesOnStartup(): Promise<void> {
     try {
       if (!store) return
@@ -10130,3 +9567,4 @@ function shouldSanitizePreview(): boolean {
 
 // 初始化多标签系统（包装器模式，最小侵入）
 import('./tabs/integration').catch(e => console.warn('[Tabs] Failed to load tab system:', e))
+
