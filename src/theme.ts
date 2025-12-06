@@ -403,16 +403,10 @@ export function loadThemePrefs(): ThemePrefs {
 }
 
 export function applySavedTheme(): void {
-  // 首先检测系统深色模式，如果是则强制启用夜间模式
+  // 读取用户保存的夜间模式设置（不强制跟随系统）
   try {
-    const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    if (isSystemDark) {
-      document.body.classList.add('dark-mode')
-    } else {
-      // 非系统深色模式时，读取用户保存的设置
-      const savedDark = localStorage.getItem('flymd:darkmode') === 'true'
-      document.body.classList.toggle('dark-mode', savedDark)
-    }
+    const savedDark = localStorage.getItem('flymd:darkmode') === 'true'
+    document.body.classList.toggle('dark-mode', savedDark)
   } catch {}
 
   const prefs = loadThemePrefs()
@@ -1496,15 +1490,8 @@ export function initThemeUI(): void {
     const darkModeToggle = panel.querySelector('#dark-mode-toggle') as HTMLInputElement | null
     if (darkModeToggle) {
       const DARK_MODE_KEY = 'flymd:darkmode'
-      // 检测系统是否为深色模式
-      const isSystemDarkMode = (): boolean => {
-        try {
-          return window.matchMedia('(prefers-color-scheme: dark)').matches
-        } catch { return false }
-      }
       const getDarkMode = (): boolean => {
-        // 如果系统是深色模式，强制启用夜间模式
-        if (isSystemDarkMode()) return true
+        // 读取用户保存的设置（不强制跟随系统）
         try {
           const v = localStorage.getItem(DARK_MODE_KEY)
           return v === 'true'
@@ -1525,10 +1512,9 @@ export function initThemeUI(): void {
           window.dispatchEvent(ev)
         } catch {}
       }
-      // 初始化开关状态（系统深色模式会强制开启）
+      // 初始化开关状态（用户可自由切换）
       const isDark = getDarkMode()
       darkModeToggle.checked = isDark
-      darkModeToggle.disabled = isSystemDarkMode() // 系统深色模式时禁用开关
       document.body.classList.toggle('dark-mode', isDark)
       // 监听开关变化
       darkModeToggle.addEventListener('change', () => {
