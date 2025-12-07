@@ -597,15 +597,34 @@ body.compact-titlebar .window-btn.window-close:hover {
   transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .preview.hidden { display: none; }
+/* 分屏模式下：允许预览在逻辑上带有 hidden 标记但仍保持可见（仅源码分屏使用） */
+.container.split-preview:not(.wysiwyg):not(.wysiwyg-v2) .preview.hidden { display: block; }
 
 /* 修复：阅读(预览)模式下 Ctrl+F 计数翻倍
    原因：预览遮罩显示时，底下的 textarea 仍可被浏览器“页面查找”命中，
          导致同一段文本在编辑器与预览各匹配一次，计数翻倍。
    方案：当预览可见时，将编辑器彻底从可见渲染树移除。
    注意：所见(WYSIWYG)模式已单独隐藏预览，不受本规则影响。 */
-.container:not(.wysiwyg-v2):has(#preview:not(.hidden)) .editor {
+.container:not(.wysiwyg-v2):not(.split-preview):has(#preview:not(.hidden)) .editor {
   display: none !important; /* 从布局和查找目标中移除 */
   visibility: hidden !important; /* 进一步确保不被 find-in-page 计入 */
+}
+
+/* 源码 + 阅读分屏布局：仅在非所见模式下生效 */
+.container.split-preview:not(.wysiwyg):not(.wysiwyg-v2) .editor {
+  display: block;
+  margin: 0;
+  box-sizing: border-box;
+  height: calc(100% - 60px - var(--workspace-bottom-gap, 0px));
+  width: 55%;
+  padding-left: calc(24px + var(--workspace-left-gap, 0px));
+  padding-right: 16px;
+}
+.container.split-preview:not(.wysiwyg):not(.wysiwyg-v2) .preview {
+  left: 55%;
+  right: 0;
+  padding-left: 16px;
+  padding-right: calc(20px + var(--workspace-right-gap, 0px));
 }
 
 /* 阅读模式（非所见）背景：仅当不在所见模式时应用，避免影响所见叠加/真实所见 */

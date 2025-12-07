@@ -6173,6 +6173,8 @@ function showFileMenu() {
 function showModeMenu() {
   const anchor = document.getElementById('btn-mode') as HTMLDivElement | null
   if (!anchor) return
+  const flymd = (window as any)
+  const splitEnabled = !!flymd.flymdGetSplitPreviewEnabled?.()
   showTopMenu(anchor, [
     { label: t('mode.edit'), accel: 'Ctrl+E', action: async () => {
       saveScrollPosition()
@@ -6208,6 +6210,20 @@ function showModeMenu() {
       try { await setWysiwygEnabled(true) } catch {}
       try { notifyModeChange() } catch {}
     } },
+    {
+      label: `${splitEnabled ? '✓ ' : ''}源码 + 阅读分屏`,
+      accel: 'Ctrl+Shift+E',
+      action: () => {
+        try {
+          const fm = (window as any)
+          if (typeof fm.flymdToggleSplitPreview === 'function') {
+            fm.flymdToggleSplitPreview()
+          } else {
+            alert('当前环境不支持分屏功能')
+          }
+        } catch {}
+      }
+    },
   ])
 }
 
@@ -7602,11 +7618,24 @@ function bindEvents() {
       }
       return
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'e') {
       e.preventDefault();
       try { e.stopPropagation() } catch {}
       try { (e as any).stopImmediatePropagation && (e as any).stopImmediatePropagation() } catch {}
       await handleToggleModeShortcut();
+      return
+    }
+    // 源码模式分屏：Ctrl+Shift+E，委托给分屏模块（仅源码模式生效）
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
+      e.preventDefault()
+      try { e.stopPropagation() } catch {}
+      try { (e as any).stopImmediatePropagation && (e as any).stopImmediatePropagation() } catch {}
+      try {
+        const flymd = (window as any)
+        if (typeof flymd.flymdToggleSplitPreview === 'function') {
+          flymd.flymdToggleSplitPreview()
+        }
+      } catch {}
       return
     }
     if (e.ctrlKey && e.key.toLowerCase() === 'b') {
@@ -8784,3 +8813,5 @@ function shouldSanitizePreview(): boolean {
 }
 // 初始化多标签系统（包装器模式，最小侵入）
 import('./tabs/integration').catch(e => console.warn('[Tabs] Failed to load tab system:', e))
+// 初始化源码+阅读分屏（仅源码模式，包装器模式）
+import('./modes/sourcePreviewSplit').catch(e => console.warn('[SplitPreview] Failed to init split view:', e))

@@ -109,6 +109,7 @@ export type NotificationType =
   | 'mode-edit'
   | 'mode-preview'
   | 'mode-wysiwyg'
+  | 'mode-split'
 
 interface NotificationConfig {
   icon: string
@@ -171,6 +172,11 @@ export class NotificationManager {
     'mode-wysiwyg': {
       icon: '📝',
       bgColor: 'rgba(139,92,246,0.16)', // 所见模式：偏紫
+      duration: 1600
+    },
+    'mode-split': {
+      icon: '🪟',
+      bgColor: 'rgba(59,130,246,0.18)', // 分屏：略偏蓝
       duration: 1600
     }
   }
@@ -322,4 +328,3 @@ export function updateSyncStatus(msg: string): void {
 try {
   ;(window as any).NotificationManager = NotificationManager
 } catch {}
-
