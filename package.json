@@ -43,6 +43,7 @@
     "js-yaml": "^4.1.1",
     "katex": "^0.16.10",
     "markdown-it": "^13.0.2",
+    "markdown-it-footnote": "^3.0.3",
     "markdown-it-katex": "^2.0.3",
     "mermaid": "^11.10.0",
     "pdfjs-dist": "^5.4.394"

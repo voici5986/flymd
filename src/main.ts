@@ -2753,6 +2753,14 @@ async function ensureRenderer() {
         return `<pre><code class="hljs">${esc}</code></pre>`
       }
     })
+    // 启用脚注支持（[^1] / [^name] 语法）
+    try {
+      const footnoteMod = await import('./plugins/markdownItFootnote')
+      const applyFootnote = (footnoteMod as any).default as ((m: any) => void) | undefined
+      if (typeof applyFootnote === 'function') applyFootnote(md)
+    } catch (e) {
+      console.warn('markdown-it-footnote 加载失败：', e)
+    }
     // 启用 KaTeX 支持（$...$ / $$...$$）
     try {
       const katexPlugin = (await import('./plugins/markdownItKatex')).default as any
@@ -3060,6 +3068,12 @@ async function renderPreview() {
       try { injectPreviewMeta(buf, previewMeta) } catch {}
       preview.innerHTML = ''
       preview.appendChild(buf)
+      // 预览脚注增强：跳转 + 悬浮
+      try {
+        const footnoteMod = await import('./plugins/markdownItFootnote')
+        const enhance = (footnoteMod as any).enhanceFootnotes as ((root: HTMLElement) => void) | undefined
+        if (typeof enhance === 'function') enhance(preview)
+      } catch {}
       try { decorateCodeBlocks(preview) } catch {}
       // 便签模式：为待办项添加推送和提醒按钮，并自动调整窗口高度
       try { if (stickyNoteMode) { addStickyTodoButtons(); scheduleAdjustStickyHeight() } } catch {}
@@ -3074,6 +3088,9 @@ async function renderPreview() {
   // 外链安全属性
   preview.querySelectorAll('a[href]').forEach((a) => {
     const el = a as HTMLAnchorElement
+    const href = el.getAttribute('href') || ''
+    // 脚注/反向脚注链接：保持为页内跳转，不改 target
+    if (href.startsWith('#fn') || href.startsWith('#fnref')) return
     el.target = '_blank'
     el.rel = 'noopener noreferrer'
   })

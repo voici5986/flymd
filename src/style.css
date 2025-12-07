@@ -1177,6 +1177,22 @@ body > .block-menu { display: none !important; }
   font-size: 12px;
   color: var(--muted);
 }
+.md-footnote-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 360px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--preview-bg, #ffffff);
+  color: var(--fg, #0f172a);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+  text-align: left;
+  word-wrap: break-word;
+  word-break: break-word;
+}
 .preview-meta-header {
   display: flex;
   align-items: center;
@@ -5402,6 +5418,11 @@ body.dark-mode .preview,
 body.dark-mode .preview-body {
   background: var(--preview-bg) !important;
   color: #e5e7eb !important;
+}
+body.dark-mode .md-footnote-tooltip {
+  background: #020617;
+  color: #e5e7eb;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.65);
 }
 
 /* 夜间模式 - 仅为阅读模式中的“行内代码”设置底色，避免覆盖代码块语法高亮 */
