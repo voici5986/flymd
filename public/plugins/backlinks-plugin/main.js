@@ -22,6 +22,8 @@ let indexState = {
 let _pollTimer = null
 let _panelRoot = null
 let _panelHandle = null
+// 预览区域 wiki 链接点击处理器
+let _previewClickHandler = null
 // AI 推荐缓存：normPath -> [{ path, title, name }]
 const _aiRelatedCache = new Map()
 // 文档内容签名缓存：normPath -> hash，用于增量更新当前文档索引
@@ -186,9 +188,13 @@ function getDocNameFromPath(path) {
 function extractWikiLinks(text) {
   const links = []
   if (!text || typeof text !== 'string') return links
+  // 所见模式可能将 [[...]] 转义为 \[\[...\]\]，这里先还原
+  const normText = text
+    .replace(/\\\[\[/g, '[[')
+    .replace(/\\\]\]/g, ']]')
   const re = /\[\[([^\]]+)\]\]/g
   let m
-  while ((m = re.exec(text)) != null) {
+  while ((m = re.exec(normText)) != null) {
     let raw = (m[1] || '').trim()
     if (!raw) continue
 
@@ -217,6 +223,89 @@ function extractWikiLinks(text) {
     links.push(raw)
   }
   return links
+}
+
+// 解析单个 [[...]] 的内部内容，拆出用于解析目标文档的“名称”
+// 复用 extractWikiLinks 中的规则，但返回单个字符串
+function parseWikiLinkCore(rawInner) {
+  if (!rawInner) return ''
+  let raw = String(rawInner || '').trim()
+  if (!raw) return ''
+
+  const pipeIdx = raw.indexOf('|')
+  if (pipeIdx >= 0) {
+    raw = raw.slice(0, pipeIdx).trim()
+  }
+
+  if (raw.startsWith('#') || raw.startsWith('^')) return ''
+
+  const hashIdx = raw.indexOf('#')
+  if (hashIdx >= 0) {
+    raw = raw.slice(0, hashIdx).trim()
+  }
+
+  const caretIdx = raw.indexOf('^')
+  if (caretIdx >= 0) {
+    raw = raw.slice(0, caretIdx).trim()
+  }
+
+  return raw.trim()
+}
+
+// 在当前 Selection 所在的文本节点中，查找光标落在的 [[...]] 片段
+function findWikiLinkAtSelection() {
+  try {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return null
+    const range = sel.getRangeAt(0)
+    const node = range.startContainer
+    if (!node || node.nodeType !== 3) return null
+    const text = String(node.textContent || '')
+    if (!text.includes('[[')) return null
+    const offset = range.startOffset >>> 0
+    const re = /\[\[([^\]]+)\]\]/g
+    let m
+    while ((m = re.exec(text)) != null) {
+      const start = m.index >>> 0
+      const end = start + m[0].length
+      if (offset >= start && offset <= end) {
+        const inner = m[1] || ''
+        const core = parseWikiLinkCore(inner)
+        if (!core) return null
+        return { core, full: m[0], inner }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// 根据名称在索引中解析目标文档并打开
+function openWikiLinkTarget(context, coreName) {
+  try {
+    if (!coreName) return
+    if (!indexState.docs || !indexState.docs.size) {
+      context.ui.notice('索引为空，请先重建双向链接索引', 'err', 2000)
+      return
+    }
+    const targetNorm = resolveLinkTarget(coreName, indexState.docs)
+    if (!targetNorm) {
+      context.ui.notice('未找到链接目标：' + coreName, 'err', 2000)
+      return
+    }
+    const info = indexState.docs.get(targetNorm)
+    const realPath = info && info.path
+    if (!realPath) {
+      context.ui.notice('链接目标路径无效：' + coreName, 'err', 2000)
+      return
+    }
+    context.openFileByPath(realPath).catch(() => {
+      context.ui.notice('打开文档失败：' + coreName, 'err', 2000)
+    })
+  } catch (e) {
+    console.error('[backlinks] 打开 wiki 链接失败', e)
+  }
 }
 
 // 在 docs 列表中，对一个“名称”解析成目标文档路径
@@ -289,6 +378,126 @@ async function saveIndexToStorage(context) {
     await context.storage.set('backlinksIndex_v1', data)
   } catch {
     // 存储失败不影响正常使用
+  }
+}
+
+// 在预览 DOM 中，将 [[名称]] 文本包裹为可点击链接
+function decoratePreviewWikiLinks(context) {
+  try {
+    if (!context || typeof context.getPreviewElement !== 'function') return
+    const root = context.getPreviewElement()
+    if (!root) return
+
+    // 先移除旧的包装，避免重复嵌套
+    root.querySelectorAll('.flymd-wikilink').forEach((el) => {
+      try {
+        const parent = el.parentNode
+        if (!parent) return
+        parent.replaceChild(document.createTextNode(el.textContent || ''), el)
+      } catch {}
+    })
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
+    const nodes = []
+    let n
+    while ((n = walker.nextNode())) {
+      nodes.push(n)
+    }
+
+    const re = /\[\[([^\]]+)\]\]/g
+
+    nodes.forEach((node) => {
+      try {
+        const text = String(node.textContent || '')
+        if (!text.includes('[[')) return
+        if (node.parentElement && node.parentElement.closest('.flymd-wikilink')) return
+
+        const frag = document.createDocumentFragment()
+        let lastIdx = 0
+        let m
+        while ((m = re.exec(text)) != null) {
+          const start = m.index >>> 0
+          const full = m[0]
+          const inner = m[1] || ''
+          if (start > lastIdx) {
+            frag.appendChild(document.createTextNode(text.slice(lastIdx, start)))
+          }
+
+          const span = document.createElement('span')
+          span.className = 'flymd-wikilink'
+          span.textContent = full
+          span.style.color = '#2563eb'
+          span.style.cursor = 'pointer'
+          span.style.textDecoration = 'underline'
+
+          const core = parseWikiLinkCore(inner)
+          if (core && indexState.docs && indexState.docs.size) {
+            const targetNorm = resolveLinkTarget(core, indexState.docs)
+            if (targetNorm) {
+              const info = indexState.docs.get(targetNorm)
+              const realPath = info && info.path
+              if (realPath) {
+                span.dataset.targetPath = realPath
+              }
+            }
+          }
+
+          frag.appendChild(span)
+          lastIdx = start + full.length
+        }
+        if (lastIdx < text.length) {
+          frag.appendChild(document.createTextNode(text.slice(lastIdx)))
+        }
+        node.parentNode && node.parentNode.replaceChild(frag, node)
+      } catch {}
+    })
+
+    if (!_previewClickHandler) {
+      _previewClickHandler = (ev) => {
+        try {
+          const target = ev.target
+          if (!root.contains(target)) return
+          const el = target.closest && target.closest('.flymd-wikilink')
+          if (!el) return
+          const coreText = String(el.textContent || '')
+          const m = coreText.match(/\[\[([^\]]+)\]\]/)
+          const inner = m && m[1] ? m[1] : ''
+          const core = parseWikiLinkCore(inner)
+          ev.preventDefault()
+          ev.stopPropagation()
+          openWikiLinkTarget(context, core)
+        } catch {}
+      }
+      root.addEventListener('click', _previewClickHandler, true)
+    }
+  } catch (e) {
+    console.error('[backlinks] decoratePreviewWikiLinks 失败', e)
+  }
+}
+
+// 所见模式：点击 [[名称]] 时跳转到对应文档（不改 Milkdown DOM，仅拦截点击）
+function bindWysiwygWikiLinkClicks(context) {
+  try {
+    if (_wysiwygClickHandler) return
+    _wysiwygClickHandler = (ev) => {
+      try {
+        const container = document.querySelector('.container')
+        if (!container || !container.classList.contains('wysiwyg-v2')) return
+        const root = document.getElementById('md-wysiwyg-root')
+        if (!root || !root.contains(ev.target)) return
+        if (ev.button !== 0) return
+
+        const hit = findWikiLinkAtSelection()
+        if (!hit) return
+
+        ev.preventDefault()
+        ev.stopPropagation()
+        openWikiLinkTarget(context, hit.core)
+      } catch {}
+    }
+    document.addEventListener('click', _wysiwygClickHandler, true)
+  } catch (e) {
+    console.error('[backlinks] 绑定所见模式 wiki 链接点击失败', e)
   }
 }
 
@@ -982,6 +1191,37 @@ function renderBacklinksPanel(context, panelRoot) {
   titleEl.textContent = '反向链接'
   header.appendChild(titleEl)
 
+  // 右侧操作区：重建索引 + 关闭按钮
+  const actionsWrap = document.createElement('div')
+  actionsWrap.style.display = 'flex'
+  actionsWrap.style.alignItems = 'center'
+  actionsWrap.style.gap = '4px'
+
+  const rebuildBtn = document.createElement('button')
+  rebuildBtn.textContent = '重建索引'
+  rebuildBtn.title = '扫描库内所有 Markdown，重新计算双向链接'
+  rebuildBtn.style.border = '1px solid rgba(0,0,0,0.18)'
+  rebuildBtn.style.background = 'transparent'
+  rebuildBtn.style.cursor = 'pointer'
+  rebuildBtn.style.fontSize = '11px'
+  rebuildBtn.style.padding = '0 6px'
+  rebuildBtn.style.borderRadius = '3px'
+  rebuildBtn.onclick = async () => {
+    try {
+      rebuildBtn.disabled = true
+      rebuildBtn.textContent = '重建中…'
+      await rebuildIndex(context)
+      renderBacklinksPanel(context, panelRoot)
+    } catch (e) {
+      console.error('[backlinks] 面板内重建索引失败', e)
+      context.ui.notice('重建双向链接索引失败', 'err', 2500)
+    } finally {
+      rebuildBtn.disabled = false
+      rebuildBtn.textContent = '重建索引'
+    }
+  }
+  actionsWrap.appendChild(rebuildBtn)
+
   const closeBtn = document.createElement('button')
   closeBtn.textContent = '×'
   closeBtn.title = '关闭反向链接面板'
@@ -1008,7 +1248,9 @@ function renderBacklinksPanel(context, panelRoot) {
       // 忽略关闭异常
     }
   }
-  header.appendChild(closeBtn)
+  actionsWrap.appendChild(closeBtn)
+
+  header.appendChild(actionsWrap)
 
   container.appendChild(header)
 
@@ -1316,12 +1558,17 @@ export async function activate(context) {
 
   // 初始渲染
   renderBacklinksPanel(context, panelRoot)
+  // 初始增强预览中的 [[名称]] 链接
+  try {
+    decoratePreviewWikiLinks(context)
+  } catch {}
 
   // 绑定编辑器 [[标题]] 补全
   try {
     // 暴露 context 给内部补全逻辑使用
     window.__backlinksContext = context
     bindEditorForLinkSuggest(context)
+    bindWysiwygWikiLinkClicks(context)
   } catch (e) {
     console.error('[backlinks] 初始化链接补全失败', e)
   }
@@ -1349,11 +1596,13 @@ export async function activate(context) {
         if (cur && cur !== lastPath) {
           lastPath = cur
           renderBacklinksPanel(context, panelRoot)
+          try { decoratePreviewWikiLinks(context) } catch {}
           return
         }
         // 同一文档：也定期重绘，以反映刚编辑完的链接变化
         if (cur) {
           renderBacklinksPanel(context, panelRoot)
+          try { decoratePreviewWikiLinks(context) } catch {}
         }
       } catch {
         // 忽略刷新过程中的任何异常
@@ -1423,6 +1672,39 @@ export async function activate(context) {
     })
   } catch (e) {
     console.error('[backlinks] 注册右键“插入双向链接”失败', e)
+  }
+
+  // 编辑区 / 所见模式右键：显示 / 隐藏反向链接面板
+  try {
+    context.addContextMenuItem({
+      label: '显示/隐藏双向链接面板',
+      icon: '🧷',
+      condition: (ctx) => {
+        return ctx.mode === 'edit' || ctx.mode === 'preview' || ctx.mode === 'wysiwyg'
+      },
+      onClick: () => {
+        try {
+          if (!_panelRoot) return
+          const visible =
+            !_panelRoot.style.display || _panelRoot.style.display !== 'none'
+          if (visible) {
+            _panelRoot.style.display = 'none'
+            if (_panelHandle && typeof _panelHandle.setVisible === 'function') {
+              _panelHandle.setVisible(false)
+            }
+          } else {
+            _panelRoot.style.display = 'flex'
+            if (_panelHandle && typeof _panelHandle.setVisible === 'function') {
+              _panelHandle.setVisible(true)
+            }
+          }
+        } catch (e) {
+          console.error('[backlinks] 右键切换面板显示失败', e)
+        }
+      },
+    })
+  } catch (e) {
+    console.error('[backlinks] 注册右键“显示/隐藏双向链接面板”失败', e)
   }
 
   // 选区变化时轻量刷新（用于当前文件切换时手动触发）
