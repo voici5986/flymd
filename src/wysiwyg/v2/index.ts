@@ -450,8 +450,6 @@ export async function disableWysiwygV2() {
   } catch {}
   _root = null
   _onChange = null
-  // 返回最新的 Markdown 内容，供 main.ts 回写到 editor.value
-  return _lastMd
 }
 
 export function isWysiwygV2Enabled(): boolean { return !!_editor }
@@ -2051,11 +2049,6 @@ export function wysiwygV2GetSelectedText(): string {
   } catch {
     return ''
   }
-}
-
-// 获取所见模式的最新 Markdown 内容（用于模式切换时的数据回写）
-export function getWysiwygV2Markdown(): string {
-  return _lastMd || ''
 }
 
 
