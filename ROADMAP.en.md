@@ -2,6 +2,16 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v0.6.9
+- Added: New “Backlinks” plugin built on `[[Title]]` wiki-style syntax that automatically builds forward and backward links between notes and exposes a side panel to inspect which notes reference the current document, with a one-click “rebuild index” action.
+- Added: Backlinks panel now integrates AI-powered semantic related-note suggestions; under the current document you can see AI-picked related notes, left-click to open the note, or right-click to insert a `[[link]]` to it at the cursor.
+- Added: New editor context-menu entries such as “Insert backlink” and “Refresh backlinks for current note”, making it easier to wrap selected text with `[[Title]]` links; when used together with the AI assistant plugin you can insert AI-recommended related notes with a single action.
+- Improved: Source mode now has inline `[[title]]` completion; when you type `[[` in the plain Markdown editor, a suggestion box pops up listing notes from the current library and you can pick one with arrow keys + Enter (note: title completion for backlinks is currently only available in source mode; WYSIWYG mode automatically disables this feature).
+- Improved: The “PDF & Image High-Precision Parser” extension now downloads remote images to local storage and reads them via the plugin runtime, reducing the chance of broken images when CDN links expire.
+- Fixed: On macOS, double-clicking document icons or opening files/libraries from Finder on a cold start could fail to deliver the path to flyMD; path handling has been hardened so these entry points behave more reliably.
+- Fixed: In some multi-monitor setups with certain resolution/DPI combinations, the main window could grow abnormally large or beyond screen bounds; window sizing has been adjusted to stay within a reasonable range.
+- Misc: WYSIWYG v2 now handles bracket escaping and image paths more carefully so Obsidian-style `[[links]]` survive mode switches as much as possible, and several internal implementation details have been cleaned up.
+
 ## Update v0.6.8
 - Added: A “Paste as plain text” entry in the context menu so you can insert stripped text in any mode without bringing over messy styles from web pages or rich-text editors.
 - Improved: The source-mode paste conversion pipeline for HTML → Markdown, reducing extra blank lines, broken lists and other formatting glitches so pasted content stays closer to the original semantics.

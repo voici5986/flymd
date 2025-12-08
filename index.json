@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2025-12-05T18:00:00Z",
+  "updatedAt": "2025-12-08T18:00:00Z",
   "ttlSeconds": 3600,
   "items": [
     {
@@ -173,6 +173,18 @@
       "id": "git-history",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/git-history/manifest.json",
+        "type": "manifest"
+      }
+    },
+    {
+      "homepage": "https://github.com/flyhunterl/flymd",
+      "name": "双向链接（Backlinks）",
+      "description": "基于 [[标题]] 语法自动建立笔记之间的正向/反向链接，并提供反向链接侧边面板与 AI 关联推荐。",
+      "author": "flyMD",
+      "id": "flymd-backlinks",
+      "featured": true,
+      "install": {
+        "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/backlinks-plugin/manifest.json",
         "type": "manifest"
       }
     }
