@@ -396,8 +396,21 @@ export async function enableWysiwygV2(root: HTMLElement, initialMd: string, onCh
           })
         } catch { return markdown }
       })()
-      _lastMd = md2
-      try { _onChange?.(md2) } catch {}
+      // Markdown转义字符反转义处理：还原被 Milkdown/remark 转义的方括号
+      const md3 = (() => {
+        try {
+          let s = String(md2)
+          // 第1步：还原 Obsidian 双向链接 \[\[ -> [[
+          // 必须先处理双方括号，避免后续单方括号处理影响它
+          s = s.replace(/\\\[\[/g, '[[').replace(/\\\]\]/g, ']]')
+          // 第2步：还原单个方括号的转义 \[ -> [ 和 \] -> ]
+          // 使用简单的全局替换，因为双方括号已经在第1步处理过了
+          s = s.replace(/\\\[/g, '[').replace(/\\\]/g, ']')
+          return s
+        } catch { return md2 }
+      })()
+      _lastMd = md3
+      try { _onChange?.(md3) } catch {}
       try { setTimeout(() => { try { rewriteLocalImagesToAsset() } catch {} }, 0) } catch {}
       try { scheduleCodeCopyRefresh() } catch {}
       // Markdown 更新时，也刷新 Mermaid 渲染 - 已由 Milkdown 插件处理
@@ -437,6 +450,8 @@ export async function disableWysiwygV2() {
   } catch {}
   _root = null
   _onChange = null
+  // 返回最新的 Markdown 内容，供 main.ts 回写到 editor.value
+  return _lastMd
 }
 
 export function isWysiwygV2Enabled(): boolean { return !!_editor }
@@ -2036,6 +2051,11 @@ export function wysiwygV2GetSelectedText(): string {
   } catch {
     return ''
   }
+}
+
+// 获取所见模式的最新 Markdown 内容（用于模式切换时的数据回写）
+export function getWysiwygV2Markdown(): string {
+  return _lastMd || ''
 }
 
 
