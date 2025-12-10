@@ -167,6 +167,18 @@
       }
     },
     {
+      "homepage": "https://github.com/TGU-HansJack/flyshow",
+      "name": "Flyshow 一键发布",
+      "description": "将当前笔记列表以 Markdown 形式推送到 Flyshow 服务端，一键生成可在线访问的静态站点，支持自定义主题和多端访问。",
+      "author": "HansJack",
+      "id": "flyshow",
+      "category": "发布/同步",
+      "install": {
+        "ref": "TGU-HansJack/flyshow@main",
+        "type": "github"
+      }
+    },
+    {
       "homepage": "https://github.com/flyhunterl/flymd",
       "name": "Typecho 博文管理",
       "description": "从 Typecho 拉取博文列表并下载为本地 Markdown，支持按时间 / 分类筛选，同时支持从当前文档覆盖远端文章。",
