@@ -1,7 +1,7 @@
 {
   "id": "flymd-backlinks",
   "name": "双向链接（Backlinks）",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": "flyMD user",
   "description": "提供双向链接/反向链接侧边面板。（暂不支持所见模式）",
   "main": "main.js",

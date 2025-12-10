@@ -170,6 +170,29 @@ function deserializeIndexState(raw) {
   return next
 }
 
+// 为其他插件提供只读索引快照（避免直接暴露内部 Map/Set）
+function getIndexSnapshotForAPI() {
+  try {
+    return serializeIndexState(indexState)
+  } catch {
+    // 理论上不应该走到这里，出错时退回一个空索引
+    return serializeIndexState(deserializeIndexState(null))
+  }
+}
+
+// 注册 backlinks 索引 API，供关系图等插件复用
+function registerBacklinksIndexAPI(context) {
+  try {
+    if (!context || typeof context.registerAPI !== 'function') return
+    context.registerAPI('backlinks-index', {
+      // 返回当前内存中的索引快照（纯对象，可序列化）
+      getIndexSnapshot: () => getIndexSnapshotForAPI(),
+    })
+  } catch (e) {
+    console.error('[backlinks] 注册 backlinks-index API 失败', e)
+  }
+}
+
 // 从正文里猜标题：找首个一级标题
 function guessTitleFromBody(body) {
   if (!body || typeof body !== 'string') return ''
@@ -1511,6 +1534,9 @@ async function loadAiRelatedDocs(context, currentNorm) {
 export async function activate(context) {
   // 启动时先尝试加载已有索引
   await loadIndexFromStorage(context)
+
+  // 将索引通过插件 API 暴露出去，供其他插件（关系图等）复用
+  registerBacklinksIndexAPI(context)
 
   // 注册布局 Panel：放在右侧，宽度固定 260px
   const panelSize = 260

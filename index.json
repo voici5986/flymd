@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2025-12-10T10:40:00Z",
+  "updatedAt": "2025-12-10T11:50:00Z",
   "ttlSeconds": 3600,
   "items": [
     {
@@ -237,6 +237,19 @@
       "category": "知识管理",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/backlinks-plugin/manifest.json",
+        "type": "manifest"
+      }
+    },
+    {
+      "homepage": "https://github.com/flyhunterl/flymd",
+      "name": "关系图谱（Graph View）",
+      "description": "基于双向链接索引的关系图谱视图，将当前文档作为中心展示局部关系网络。",
+      "author": "flyMD",
+      "id": "flymd-graph-view",
+      "featured": true,
+      "category": "知识管理",
+      "install": {
+        "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/graph-view/manifest.json",
         "type": "manifest"
       }
     }
