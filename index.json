@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2025-12-10T09:40:00Z",
+  "updatedAt": "2025-12-10T10:40:00Z",
   "ttlSeconds": 3600,
   "items": [
     {
@@ -9,6 +9,7 @@
       "description": "发布到 Typecho",
       "author": "HansJack",
       "id": "typecho-publisher-flymd",
+      "category": "发布/同步",
       "install": {
         "ref": "TGU-HansJack/typecho-publisher-flymd@http",
         "type": "github"
@@ -20,6 +21,7 @@
       "description": "发布到 Halo",
       "author": "HansJack",
       "id": "flymd-halo",
+      "category": "发布/同步",
       "install": {
         "ref": "TGU-HansJack/flymd-halo@main",
         "type": "github"
@@ -32,6 +34,7 @@
       "author": "飞速MarkDown",
       "id": "ai-assistant",
       "featured": true,
+      "category": "AI",
       "rank": 1,
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/ai-assistant/manifest.json",
@@ -44,6 +47,7 @@
       "description": "一次选择多个文档并批量导出为 PDF",
       "author": "飞速MarkDown",
       "id": "batch-pdf",
+      "category": "文档工具",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/batch-pdf/manifest.json",
         "type": "manifest"
@@ -56,6 +60,7 @@
       "author": "flyMD",
       "id": "pdf2doc",
       "featured": true,
+      "category": "文档工具",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/pdf2doc/manifest.json",
         "type": "manifest"
@@ -67,6 +72,7 @@
       "description": "使用 MinerU 官方 API 对本地 PDF / 图片发起解析，返回结果压缩包链接。",
       "author": "flyMD",
       "id": "mineru",
+      "category": "文档工具",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/mineru/manifest.json",
         "type": "manifest"
@@ -78,6 +84,7 @@
       "description": "右键菜单一键将当前内容发送到 Blinko",
       "author": "flyMD",
       "id": "blinko-snap",
+      "category": "发布/同步",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/blinko-snap/manifest.json",
         "type": "manifest"
@@ -91,6 +98,7 @@
       "id": "markdown-table",
       "featured": true,
       "rank": 3,
+      "category": "编辑增强",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/markdown-table/manifest.json",
         "type": "manifest"
@@ -102,6 +110,7 @@
       "description": "连接协同服务器的简单多人协同插件",
       "author": "flyMD",
       "id": "local-collab-os",
+      "category": "协同/版本",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/local-collab-os/manifest.json",
         "type": "manifest"
@@ -115,6 +124,7 @@
       "id": "xxtui-todo-push",
       "featured": true,
       "rank": 2,
+      "category": "发布/同步",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/xxtui-todo-push/manifest.json",
         "type": "manifest"
@@ -126,6 +136,7 @@
       "description": "粘贴/拖拽图片自动上传 Telegraph-Image 并插入 Markdown 外链",
       "author": "",
       "id": "telegraph-image-flymd",
+      "category": "图床上传",
       "install": {
         "ref": "xf959211192/telegraph-image-flymd@main",
         "type": "github"
@@ -137,6 +148,7 @@
       "description": "通过本地 PicList 内置 HTTP 服务器上传本地图片，并将 Markdown 中的本地路径替换为图床外链。",
       "author": "flyMD",
       "id": "piclist-uploader",
+      "category": "图床上传",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/piclist-uploader/manifest.json",
         "type": "manifest"
@@ -149,6 +161,7 @@
       "author": "flyMD",
       "id": "typecho-manager",
       "featured": true,
+      "category": "发布/同步",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/typecho-manager/manifest.json",
         "type": "manifest"
@@ -160,6 +173,7 @@
       "description": "接入 AI，内置小红书爆款风格，支持一键润色、扩写与自定义提示词模板。",
       "author": "Vita0519",
       "id": "xhs-copywriter",
+      "category": "AI",
       "install": {
         "ref": "Vita0519/AI-Copywriting-All-Rounder@main",
         "type": "github"
@@ -171,6 +185,7 @@
       "description": "从本地 Word / Excel 文件解析并导入为 Markdown。",
       "author": "flyMD",
       "id": "office-importer",
+      "category": "文档工具",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/office-importer/manifest.json",
         "type": "manifest"
@@ -182,6 +197,7 @@
       "description": "为当前库和文档提供 Git 快照与历史查看侧栏，并支持一键回滚到指定版本。",
       "author": "flyMD",
       "id": "git-history",
+      "category": "协同/版本",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/git-history/manifest.json",
         "type": "manifest"
@@ -194,6 +210,7 @@
       "author": "flyMD",
       "id": "flymd-backlinks",
       "featured": true,
+      "category": "知识管理",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/backlinks-plugin/manifest.json",
         "type": "manifest"
