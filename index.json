@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2025-12-10T11:50:00Z",
+  "updatedAt": "2025-12-10T16:00:00Z",
   "ttlSeconds": 3600,
   "items": [
     {
@@ -250,6 +250,18 @@
       "category": "知识管理",
       "install": {
         "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/graph-view/manifest.json",
+        "type": "manifest"
+      }
+    },
+    {
+      "homepage": "https://github.com/flyhunterl/flymd",
+      "name": "富文本悬浮工具条",
+      "description": "提供可拖拽且可吸附到顶部的悬浮工具条，并支持自定义标题快捷键等编辑增强功能。",
+      "author": "flyMD",
+      "id": "floating-toolbar",
+      "category": "编辑增强",
+      "install": {
+        "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/floating-toolbar/manifest.json",
         "type": "manifest"
       }
     }
