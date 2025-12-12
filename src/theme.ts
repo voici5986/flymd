@@ -11,6 +11,7 @@
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { readFile, writeFile, mkdir, exists, remove, BaseDirectory } from '@tauri-apps/plugin-fs'
 import { homeDir, desktopDir, join } from '@tauri-apps/api/path'
+import { t } from './i18n'
 export type MdStyleId = 'standard' | 'github' | 'notion' | 'journal' | 'card' | 'docs' | 'typora' | 'obsidian' | 'bear' | 'minimalist'
 
 export interface ThemePrefs {
@@ -510,8 +511,8 @@ function createPanel(): HTMLDivElement {
   panel.id = 'theme-panel'
   panel.innerHTML = `
     <div class="theme-panel-header">
-      <span class="theme-panel-title">主题设置</span>
-      <button class="theme-panel-close" title="关闭">
+      <span class="theme-panel-title">${t('theme.panel.title')}</span>
+      <button class="theme-panel-close" title="${t('theme.panel.close')}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -522,35 +523,35 @@ function createPanel(): HTMLDivElement {
     <div class="theme-section theme-focus-section">
       <div class="theme-focus-row">
         <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="focus-mode-toggle">
-          <span class="theme-toggle-text">专注模式</span>
+          <span class="theme-toggle-text">${t('theme.focusMode')}</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="focus-mode-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
           </div>
         </label>
         <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="wysiwyg-default-toggle">
-          <span class="theme-toggle-text">所见模式</span>
+          <span class="theme-toggle-text">${t('theme.wysiwygMode')}</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="wysiwyg-default-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
           </div>
         </label>
         <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="sourcemode-default-toggle">
-          <span class="theme-toggle-text">源码模式</span>
+          <span class="theme-toggle-text">${t('theme.sourceMode')}</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="sourcemode-default-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
           </div>
         </label>
         <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="dark-mode-toggle">
-          <span class="theme-toggle-text">夜间模式</span>
+          <span class="theme-toggle-text">${t('theme.darkMode')}</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="dark-mode-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
           </div>
         </label>
         <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="compact-titlebar-toggle">
-          <span class="theme-toggle-text">紧凑标题栏</span>
+          <span class="theme-toggle-text">${t('theme.compactTitlebar')}</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="compact-titlebar-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
@@ -559,53 +560,53 @@ function createPanel(): HTMLDivElement {
       </div>
     </div>
     <div class="theme-section">
-      <div class="theme-title">编辑背景</div>
+      <div class="theme-title">${t('theme.editBg')}</div>
       <div class="theme-swatches" data-target="edit"></div>
       <div class="theme-options-row">
         <label class="theme-checkbox-label">
           <input type="checkbox" id="parchment-edit-toggle" class="theme-checkbox" />
-          <span>羊皮风格</span>
+          <span>${t('theme.parchment')}</span>
         </label>
         <div class="theme-custom-color-inline">
           <input type="text" id="custom-color-edit" class="theme-color-input" placeholder="#FFFFFF" maxlength="7" data-target="edit" />
-          <button class="theme-apply-btn" data-target="edit">应用</button>
+          <button class="theme-apply-btn" data-target="edit">${t('theme.apply')}</button>
         </div>
         <label class="theme-checkbox-label">
           <input type="checkbox" id="grid-bg-toggle" class="theme-checkbox" />
-          <span>网格背景</span>
+          <span>${t('theme.gridBg')}</span>
         </label>
       </div>
     </div>
     <div class="theme-section">
-      <div class="theme-title">阅读背景</div>
+      <div class="theme-title">${t('theme.readBg')}</div>
       <div class="theme-swatches" data-target="read"></div>
       <div class="theme-options-row">
         <label class="theme-checkbox-label">
           <input type="checkbox" id="parchment-read-toggle" class="theme-checkbox" />
-          <span>羊皮风格</span>
+          <span>${t('theme.parchment')}</span>
         </label>
         <div class="theme-custom-color-inline">
           <input type="text" id="custom-color-read" class="theme-color-input" placeholder="#FFFFFF" maxlength="7" data-target="read" />
-          <button class="theme-apply-btn" data-target="read">应用</button>
+          <button class="theme-apply-btn" data-target="read">${t('theme.apply')}</button>
         </div>
       </div>
     </div>
     <div class="theme-section">
-      <div class="theme-title">所见背景</div>
+      <div class="theme-title">${t('theme.wysiwygBg')}</div>
       <div class="theme-swatches" data-target="wysiwyg"></div>
       <div class="theme-options-row">
         <label class="theme-checkbox-label">
           <input type="checkbox" id="parchment-wysiwyg-toggle" class="theme-checkbox" />
-          <span>羊皮风格</span>
+          <span>${t('theme.parchment')}</span>
         </label>
         <div class="theme-custom-color-inline">
           <input type="text" id="custom-color-wysiwyg" class="theme-color-input" placeholder="#FFFFFF" maxlength="7" data-target="wysiwyg" />
-          <button class="theme-apply-btn" data-target="wysiwyg">应用</button>
+          <button class="theme-apply-btn" data-target="wysiwyg">${t('theme.apply')}</button>
         </div>
       </div>
     </div>
     <div class="theme-section">
-      <div class="theme-title">Markdown 风格</div>
+      <div class="theme-title">${t('theme.mdStyle')}</div>
       <div class="theme-md">
         <button class="md-btn" data-md="standard">标准</button>
         <button class="md-btn" data-md="github">GitHub</button>
@@ -620,50 +621,50 @@ function createPanel(): HTMLDivElement {
       </div>
     </div>
     <div class="theme-section theme-fonts-section">
-      <div class="theme-title">字体选择</div>
+      <div class="theme-title">${t('theme.fontSection')}</div>
       <div class="theme-fonts">
-        <label for="font-body-select">正文字体</label>
+        <label for="font-body-select">${t('theme.font.body')}</label>
         <select id="font-body-select"></select>
-        <label for="font-mono-select">等宽字体</label>
+        <label for="font-mono-select">${t('theme.font.mono')}</label>
         <select id="font-mono-select"></select>
       </div>
       <div class="theme-option">
         <label class="theme-checkbox-label">
           <input type="checkbox" id="font-body-global-toggle" class="theme-checkbox" />
-          <span>正文字体全局生效（包括菜单和插件）</span>
+          <span>${t('theme.font.bodyGlobal')}</span>
         </label>
       </div>
       <div class="font-list" id="font-list"></div>
     </div>
     <div class="theme-section theme-layout-section">
-      <div class="theme-title">排版设置</div>
+      <div class="theme-title">${t('theme.layoutSection')}</div>
       <div class="theme-layout-controls">
         <div class="theme-slider-row">
-          <label for="layout-line-height">行高</label>
+          <label for="layout-line-height">${t('theme.layout.lineHeight')}</label>
           <input type="range" id="layout-line-height" min="1.2" max="2.5" step="0.1" value="1.75" />
           <span class="theme-slider-value" id="layout-line-height-value">1.75</span>
         </div>
         <div class="theme-slider-row">
-          <label for="layout-paragraph-spacing">段落间距</label>
+          <label for="layout-paragraph-spacing">${t('theme.layout.paragraphSpacing')}</label>
           <input type="range" id="layout-paragraph-spacing" min="0" max="2" step="0.1" value="1" />
           <span class="theme-slider-value" id="layout-paragraph-spacing-value">1em</span>
         </div>
         <div class="theme-slider-row">
-          <label for="layout-content-width">内容宽度</label>
+          <label for="layout-content-width">${t('theme.layout.contentWidth')}</label>
           <input type="range" id="layout-content-width" min="0" max="1200" step="50" value="860" />
           <span class="theme-slider-value" id="layout-content-width-value">860px</span>
         </div>
         <div class="theme-slider-row">
-          <label for="layout-text-indent">首行缩进</label>
+          <label for="layout-text-indent">${t('theme.layout.textIndent')}</label>
           <input type="range" id="layout-text-indent" min="0" max="4" step="0.5" value="0" />
           <span class="theme-slider-value" id="layout-text-indent-value">0em</span>
         </div>
         <div class="theme-option">
           <label class="theme-checkbox-label">
             <input type="checkbox" id="layout-auto-width" class="theme-checkbox" />
-            <span>自适应宽度</span>
+            <span>${t('theme.layout.autoWidth')}</span>
           </label>
-          <button class="theme-reset-layout-btn" id="reset-layout-btn">重置排版</button>
+          <button class="theme-reset-layout-btn" id="reset-layout-btn">${t('theme.layout.reset')}</button>
         </div>
       </div>
     </div>

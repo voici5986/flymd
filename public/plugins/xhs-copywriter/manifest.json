@@ -4,6 +4,12 @@
   "version": "1.1.0",
   "author": "vita0519",
   "description": "接入AI，支持自定义提示词模版。内置小红书爆款风格，支持一键润色、扩写。",
+  "i18n": {
+    "en": {
+      "name": "AI Copywriting All-Rounder (Xiaohongshu / Custom)",
+      "description": "Integrates AI with built-in Xiaohongshu viral styles, supporting one-click polishing, expansion and fully customizable prompt templates."
+    }
+  },
   "main": "main.js",
   "homepage": "https://github.com/Vita0519/AI-Copywriting-All-Rounder",
   "repository": "https://github.com/Vita0519/AI-Copywriting-All-Rounder"

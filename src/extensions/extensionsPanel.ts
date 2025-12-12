@@ -108,12 +108,71 @@ const MARKET_OFFICIAL_I18N: Record<string, { name: string; author: string; desc:
     author: 'ext.todoPush.author',
     desc: 'ext.todoPush.desc',
   },
+  pdf2doc: {
+    name: 'ext.pdf2doc.name',
+    author: 'ext.pdf2doc.author',
+    desc: 'ext.pdf2doc.desc',
+  },
+  'whiteboard-view': {
+    name: 'ext.whiteboardView.name',
+    author: 'ext.whiteboardView.author',
+    desc: 'ext.whiteboardView.desc',
+  },
+  'note-templates': {
+    name: 'ext.noteTemplates.name',
+    author: 'ext.noteTemplates.author',
+    desc: 'ext.noteTemplates.desc',
+  },
+  'blinko-snap': {
+    name: 'ext.blinkoSnap.name',
+    author: 'ext.blinkoSnap.author',
+    desc: 'ext.blinkoSnap.desc',
+  },
+  'floating-toolbar': {
+    name: 'ext.floatingToolbar.name',
+    author: 'ext.floatingToolbar.author',
+    desc: 'ext.floatingToolbar.desc',
+  },
+  'property-view': {
+    name: 'ext.propertyView.name',
+    author: 'ext.propertyView.author',
+    desc: 'ext.propertyView.desc',
+  },
+  'xhs-copywriter': {
+    name: 'ext.xhsCopywriter.name',
+    author: 'ext.xhsCopywriter.author',
+    desc: 'ext.xhsCopywriter.desc',
+  },
+  'local-collab-os': {
+    name: 'ext.localCollab.name',
+    author: 'ext.localCollab.author',
+    desc: 'ext.localCollab.desc',
+  },
+}
+
+// 扩展分类多语言映射：索引中的中文分类 → i18n key
+const MARKET_CATEGORY_I18N: Record<string, string> = {
+  '发布/同步': 'ext.category.publishSync',
+  '编辑增强': 'ext.category.editing',
+  '文档工具': 'ext.category.docTools',
+  '协同/版本': 'ext.category.collab',
+  AI: 'ext.category.ai',
+  '图床上传': 'ext.category.imageHosting',
+  '知识管理': 'ext.category.knowledge',
+}
+
+function getCategoryLabel(raw: string): string {
+  try {
+    const key = MARKET_CATEGORY_I18N[raw]
+    if (key) return t(key as any)
+  } catch {}
+  return raw
 }
 
 // 内置扩展：只在扩展面板中展示，不走远程安装流程
 const builtinPlugins: InstalledPlugin[] = [
-  { id: 'uploader-s3', name: '图床 (S3/R2)', version: 'builtin', enabled: undefined, dir: '', main: '', builtin: true, description: '粘贴/拖拽图片自动上传，支持 S3/R2 直连，使用设置中的凭据。' },
-  { id: 'webdav-sync', name: 'WebDAV 同步', version: 'builtin', enabled: undefined, dir: '', main: '', builtin: true, description: 'F5/启动/关闭前同步，基于修改时间覆盖' }
+  { id: 'uploader-s3', name: '', version: 'builtin', enabled: undefined, dir: '', main: '', builtin: true, description: '' },
+  { id: 'webdav-sync', name: '', version: 'builtin', enabled: undefined, dir: '', main: '', builtin: true, description: '' }
 ]
 
 // 扩展管理面板内部状态
@@ -348,13 +407,15 @@ function renderInstalledExtensions(
     const meta = document.createElement('div'); meta.className = 'ext-meta'
     const name = document.createElement('div'); name.className = 'ext-name'
     const nameText = document.createElement('span')
-    const fullName = `${p.name || p.id} ${p.version ? '(' + p.version + ')' : ''}`
+    const official = MARKET_OFFICIAL_I18N[p.id]
+    const baseName = official ? t(official.name as any) : (p.name || p.id)
+    const fullName = `${baseName} ${p.version ? '(' + p.version + ')' : ''}`
     nameText.textContent = fullName
     nameText.title = fullName
     name.appendChild(nameText)
     const installedTag = document.createElement('span')
     installedTag.className = 'ext-tag'
-    installedTag.textContent = '已安装'
+    installedTag.textContent = t('ext.filter.installedChip')
     installedTag.style.marginLeft = 'auto'
     installedTag.style.color = '#22c55e'
     name.appendChild(installedTag)
@@ -363,7 +424,9 @@ function renderInstalledExtensions(
       const badge = document.createElement('span'); badge.className = 'ext-update-badge'; badge.textContent = 'UP'
       name.appendChild(badge)
     }
-    const desc = document.createElement('div'); desc.className = 'ext-desc'; desc.textContent = p.description || p.dir
+    const desc = document.createElement('div'); desc.className = 'ext-desc'
+    const descText = official ? t(official.desc as any) : (p.description || p.dir)
+    desc.textContent = descText
     meta.appendChild(name); meta.appendChild(desc)
     const actions = document.createElement('div'); actions.className = 'ext-actions'
 
@@ -385,13 +448,13 @@ function renderInstalledExtensions(
           await host.deactivatePlugin(p.id)
           await host.activatePlugin(p)
         }
-        host.pluginNotice(checked ? '已设置为独立显示' : '已收纳到插件菜单', 'ok', 1500)
+        host.pluginNotice(checked ? t('ext.filter.showStandalone.on') : t('ext.filter.showStandalone.off'), 'ok', 1500)
       } catch (err) {
-        host.showError('切换显示模式失败', err)
+        host.showError(t('ext.filter.showStandalone.fail'), err)
       }
     })
     const showToggleText = document.createElement('span')
-    showToggleText.textContent = '独立显示'
+    showToggleText.textContent = t('ext.filter.showStandalone')
     showToggleText.style.fontSize = '12px'
     showToggleLabel.appendChild(showToggleCheckbox)
     showToggleLabel.appendChild(showToggleText)
@@ -473,7 +536,7 @@ export async function refreshExtensionsUI(): Promise<void> {
   const hd = document.createElement('div')
   hd.className = 'ext-subtitle'
   const hdText = document.createElement('span')
-  hdText.textContent = '扩展管理'
+  hdText.textContent = t('ext.header.manage')
   hd.appendChild(hdText)
 
   const loadingSpinner = document.createElement('span')
@@ -494,7 +557,7 @@ export async function refreshExtensionsUI(): Promise<void> {
     void applyMarketFilter()
   })
   const installedOnlyLabel = document.createElement('span')
-  installedOnlyLabel.textContent = '已安装'
+  installedOnlyLabel.textContent = t('ext.filter.installedOnly')
   installedOnlyLabel.style.fontSize = '12px'
   installedOnlyWrap.appendChild(installedOnlyCheckbox)
   installedOnlyWrap.appendChild(installedOnlyLabel)
@@ -517,7 +580,7 @@ export async function refreshExtensionsUI(): Promise<void> {
     })()
   })
   const updatesOnlyLabel = document.createElement('span')
-  updatesOnlyLabel.textContent = '可更新'
+  updatesOnlyLabel.textContent = t('ext.filter.updatesOnly')
   updatesOnlyLabel.style.fontSize = '12px'
   updatesOnlyWrap.appendChild(updatesOnlyCheckbox)
   updatesOnlyWrap.appendChild(updatesOnlyLabel)
@@ -631,17 +694,28 @@ export async function refreshExtensionsUI(): Promise<void> {
         const meta = document.createElement('div'); meta.className = 'ext-meta'
         const name = document.createElement('div'); name.className = 'ext-name'
         const nameText = document.createElement('span')
-        const fullName = `${b.name} (${b.version})`
+        const fullName = b.id === 'uploader-s3'
+          ? `${t('ext.builtin.uploaderS3.name' as any)} (${b.version})`
+          : b.id === 'webdav-sync'
+            ? `${t('ext.builtin.webdav.name' as any)} (${b.version})`
+            : `${b.name || b.id} (${b.version})`
         nameText.textContent = fullName
         nameText.title = fullName
         name.appendChild(nameText)
         const builtinTag = document.createElement('span')
         builtinTag.className = 'ext-tag'
-        builtinTag.textContent = '内置'
+        builtinTag.textContent = t('ext.builtin')
         builtinTag.style.marginLeft = '8px'
         builtinTag.style.color = '#3b82f6'
         name.appendChild(builtinTag)
-        const desc = document.createElement('div'); desc.className = 'ext-desc'; desc.textContent = b.description || ''
+        const desc = document.createElement('div'); desc.className = 'ext-desc'
+        if (b.id === 'uploader-s3') {
+          desc.textContent = t('ext.builtin.uploaderS3.desc' as any)
+        } else if (b.id === 'webdav-sync') {
+          desc.textContent = t('ext.builtin.webdav.desc' as any)
+        } else {
+          desc.textContent = b.description || ''
+        }
         meta.appendChild(name); meta.appendChild(desc)
         const actions = document.createElement('div'); actions.className = 'ext-actions'
         if (b.id === 'uploader-s3') {
@@ -828,13 +902,13 @@ export async function refreshExtensionsUI(): Promise<void> {
                 await refreshInstalledExtensionsUI()
                 await applyMarketFilter()
               } catch {}
-              host.pluginNotice('安装成功', 'ok', 1500)
+              host.pluginNotice(t('ext.install.ok'), 'ok', 1500)
             } catch (e) {
-              try { btnInstall.textContent = '安装' } catch {}
+              try { btnInstall.textContent = t('ext.install.btn') } catch {}
               try { (btnInstall as HTMLButtonElement).disabled = false } catch {}
-              void appendLog('ERROR', '安装扩展失败', e)
+              void appendLog('ERROR', t('ext.install.fail'), e)
               const errMsg = (e instanceof Error) ? e.message : String(e)
-              host.pluginNotice('安装扩展失败' + (errMsg ? ': ' + errMsg : ''), 'err', 3000)
+              host.pluginNotice(t('ext.install.fail') + (errMsg ? ': ' + errMsg : ''), 'err', 3000)
             }
           })
           actions.appendChild(btnInstall)
@@ -888,9 +962,9 @@ export async function refreshExtensionsUI(): Promise<void> {
         categorySelectEl.appendChild(optAll)
         const sortedCats = Array.from(categories).sort((a, b) => a.localeCompare(b, 'zh-CN'))
         for (const c of sortedCats) {
-          const opt = document.createElement('option')
-          opt.value = c
-          opt.textContent = c
+        const opt = document.createElement('option')
+        opt.value = c
+        opt.textContent = getCategoryLabel(c)
           categorySelectEl.appendChild(opt)
         }
         if (_extMarketCategory && categories.has(_extMarketCategory)) {
@@ -964,7 +1038,7 @@ function ensureExtensionsOverlayMounted(): void {
           <div class="ext-subtitle">${t('ext.install.section')}</div>
           <div class="ext-install">
             <input type="text" id="ext-install-input" placeholder="${t('ext.install.placeholder')}">
-            <button id="ext-browse-local-btn">浏览...</button>
+            <button id="ext-browse-local-btn">${t('ext.install.browseLocal')}</button>
             <button class="primary" id="ext-install-btn">${t('ext.install.btn')}</button>
           </div>
         </div>
@@ -1010,7 +1084,7 @@ function ensureExtensionsOverlayMounted(): void {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: '选择扩展文件夹'
+        title: t('ext.chooseFolder.title')
       } as any)
       if (selected && typeof selected === 'string') {
         if (_extInstallInput) _extInstallInput.value = selected
