@@ -4,6 +4,29 @@
 // - 所有 UI 用 JS/DOM 绘制，不调用原生对话框
 // - 不触碰宿主逻辑，仅通过 context.invoke 与后端交互
 
+// 轻量多语言：跟随宿主（flymd.locale），默认用系统语言
+const S3G_LOCALE_LS_KEY = 'flymd.locale'
+function s3gDetectLocale() {
+  try {
+    const nav = typeof navigator !== 'undefined' ? navigator : null
+    const lang = (nav && (nav.language || nav.userLanguage)) || 'en'
+    const lower = String(lang || '').toLowerCase()
+    if (lower.startsWith('zh')) return 'zh'
+  } catch {}
+  return 'en'
+}
+function s3gGetLocale() {
+  try {
+    const ls = typeof localStorage !== 'undefined' ? localStorage : null
+    const v = ls && ls.getItem(S3G_LOCALE_LS_KEY)
+    if (v === 'zh' || v === 'en') return v
+  } catch {}
+  return s3gDetectLocale()
+}
+function s3gText(zh, en) {
+  return s3gGetLocale() === 'en' ? en : zh
+}
+
 let _panel = null
 let _listRoot = null
 let _loadingEl = null
@@ -40,7 +63,7 @@ function ensurePanel(context) {
   header.style.background = 'rgba(0,0,0,0.25)'
 
   const title = document.createElement('div')
-  title.textContent = 'S3 图床相册'
+  title.textContent = s3gText('S3 图床相册', 'S3 Image Gallery')
   title.style.fontWeight = '600'
 
   const rightBox = document.createElement('div')
@@ -49,7 +72,7 @@ function ensurePanel(context) {
   rightBox.style.gap = '8px'
 
   const refreshBtn = document.createElement('button')
-  refreshBtn.textContent = '刷新'
+  refreshBtn.textContent = s3gText('刷新', 'Refresh')
   refreshBtn.style.cursor = 'pointer'
   refreshBtn.style.border = 'none'
   refreshBtn.style.borderRadius = '4px'
@@ -92,13 +115,16 @@ function ensurePanel(context) {
   body.style.overflow = 'hidden'
 
   const hint = document.createElement('div')
-  hint.textContent = '仅展示通过内置 S3/R2 图床成功上传的图片。删除操作会尝试从云端删除对象，请谨慎使用。'
+  hint.textContent = s3gText(
+    '仅展示通过内置 S3/R2 图床成功上传的图片。删除操作会尝试从云端删除对象，请谨慎使用。',
+    'Only shows images successfully uploaded via the built-in S3/R2 image host. Deletion will attempt to remove objects from the cloud; use with caution.',
+  )
   hint.style.fontSize = '11px'
   hint.style.opacity = '0.75'
   hint.style.marginBottom = '6px'
 
   const loading = document.createElement('div')
-  loading.textContent = '加载中…'
+  loading.textContent = s3gText('加载中…', 'Loading…')
   loading.style.fontSize = '12px'
   loading.style.marginBottom = '6px'
   loading.style.display = 'none'
@@ -132,7 +158,7 @@ function renderList(records) {
 
   if (!_records.length) {
     const empty = document.createElement('div')
-    empty.textContent = '暂无上传记录'
+    empty.textContent = s3gText('暂无上传记录', 'No uploaded images found')
     empty.style.fontSize = '12px'
     empty.style.opacity = '0.7'
     empty.style.padding = '16px 4px'
@@ -281,10 +307,24 @@ async function copyUrl(url) {
       document.execCommand('copy')
       document.body.removeChild(ta)
     }
-    _ctx && _ctx.ui && _ctx.ui.notice && _ctx.ui.notice('链接已复制到剪贴板', 'ok', 1800)
+    _ctx &&
+      _ctx.ui &&
+      _ctx.ui.notice &&
+      _ctx.ui.notice(
+        s3gText('链接已复制到剪贴板', 'Link copied to clipboard'),
+        'ok',
+        1800,
+      )
   } catch (e) {
     console.warn('[s3-gallery] 复制链接失败', e)
-    _ctx && _ctx.ui && _ctx.ui.notice && _ctx.ui.notice('复制链接失败', 'err', 2200)
+    _ctx &&
+      _ctx.ui &&
+      _ctx.ui.notice &&
+      _ctx.ui.notice(
+        s3gText('复制链接失败', 'Failed to copy link'),
+        'err',
+        2200,
+      )
   }
 }
 
@@ -297,13 +337,26 @@ async function refreshList(context) {
       renderList(list)
     } else {
       renderList([])
-      context.ui && context.ui.notice && context.ui.notice('S3 图床相册：后端未返回列表', 'err', 2400)
+      context.ui &&
+        context.ui.notice &&
+        context.ui.notice(
+          s3gText('S3 图床相册：后端未返回列表', 'S3 gallery: backend did not return a list'),
+          'err',
+          2400,
+        )
     }
   } catch (e) {
     console.error('[s3-gallery] 拉取上传历史失败', e)
     renderList([])
     const msg = e && e.message ? String(e.message) : String(e || '未知错误')
-    context.ui && context.ui.notice && context.ui.notice('获取图床历史失败：' + msg, 'err', 2800)
+    context.ui &&
+      context.ui.notice &&
+      context.ui.notice(
+        s3gText('获取图床历史失败：', 'Failed to fetch upload history: ') +
+          msg,
+        'err',
+        2800,
+      )
   } finally {
     if (_loadingEl) _loadingEl.style.display = 'none'
   }
@@ -312,11 +365,25 @@ async function refreshList(context) {
 async function deleteRecord(context, rec) {
   if (!context || !rec) return
   try {
-    const ok = await context.ui.confirm('确定要删除这张图片吗？此操作会从 S3/R2 中删除对象，且可能导致已有文档中的链接失效。')
+    const ok = await context.ui.confirm(
+      s3gText(
+        '确定要删除这张图片吗？此操作会从 S3/R2 中删除对象，且可能导致已有文档中的链接失效。',
+        'Are you sure you want to delete this image? This will delete the object from S3/R2 and may break links in existing documents.',
+      ),
+    )
     if (!ok) return
   } catch {
     // confirm 不可用时，不做删除，避免误删
-    context.ui && context.ui.notice && context.ui.notice('当前环境不支持确认对话框，已取消删除操作', 'err', 2600)
+    context.ui &&
+      context.ui.notice &&
+      context.ui.notice(
+        s3gText(
+          '当前环境不支持确认对话框，已取消删除操作',
+          'Confirm dialog not supported in current environment, deletion cancelled',
+        ),
+        'err',
+        2600,
+      )
     return
   }
 
@@ -331,7 +398,16 @@ async function deleteRecord(context, rec) {
   }
 
   if (!cfg || !cfg.accessKeyId || !cfg.secretAccessKey || !cfg.bucket) {
-    context.ui && context.ui.notice && context.ui.notice('尚未在宿主中配置 S3/R2 图床，无法执行远端删除', 'err', 3200)
+    context.ui &&
+      context.ui.notice &&
+      context.ui.notice(
+        s3gText(
+          '尚未在宿主中配置 S3/R2 图床，无法执行远端删除',
+          'S3/R2 image host is not configured in the host, cannot delete remote images',
+        ),
+        'err',
+        3200,
+      )
     return
   }
 
@@ -353,7 +429,13 @@ async function deleteRecord(context, rec) {
         key: rec.key,
       },
     })
-    context.ui && context.ui.notice && context.ui.notice('已从 S3/R2 删除图片', 'ok', 2200)
+    context.ui &&
+      context.ui.notice &&
+      context.ui.notice(
+        s3gText('已从 S3/R2 删除图片', 'Image deleted from S3/R2'),
+        'ok',
+        2200,
+      )
     // 从当前列表中移除并重绘
     const key = rec.key
     const bucket = rec.bucket
@@ -362,7 +444,14 @@ async function deleteRecord(context, rec) {
   } catch (e) {
     console.error('[s3-gallery] 删除远端图片失败', e)
     const msg = e && e.message ? String(e.message) : String(e || '未知错误')
-    context.ui && context.ui.notice && context.ui.notice('删除远端图片失败：' + msg, 'err', 3200)
+    context.ui &&
+      context.ui.notice &&
+      context.ui.notice(
+        s3gText('删除远端图片失败：', 'Failed to delete remote image: ') +
+          msg,
+        'err',
+        3200,
+      )
   }
 }
 
@@ -370,8 +459,8 @@ export async function activate(context) {
   // 插件激活时只挂菜单，不做其他副作用
   _ctx = context
   context.addMenuItem({
-    label: 'S3 图床相册',
-    title: '查看并管理内置图床上传的图片',
+    label: s3gText('S3 图床相册', 'S3 Image Gallery'),
+    title: s3gText('查看并管理内置图床上传的图片', 'Browse and manage images uploaded via the built-in image host'),
     onClick: async () => {
       const panel = ensurePanel(context)
       panel.style.display = 'flex'
@@ -392,4 +481,3 @@ export function deactivate() {
   _loadingEl = null
   _records = []
 }
-
