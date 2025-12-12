@@ -1,5 +1,28 @@
 // Markdown 表格插入插件
 
+// 轻量多语言：跟随宿主（flymd.locale），默认用系统语言
+const MT_LOCALE_LS_KEY = 'flymd.locale';
+function mtDetectLocale() {
+  try {
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    const lang = (nav && (nav.language || nav.userLanguage)) || 'en';
+    const lower = String(lang || '').toLowerCase();
+    if (lower.startsWith('zh')) return 'zh';
+  } catch {}
+  return 'en';
+}
+function mtGetLocale() {
+  try {
+    const ls = typeof localStorage !== 'undefined' ? localStorage : null;
+    const v = ls && ls.getItem(MT_LOCALE_LS_KEY);
+    if (v === 'zh' || v === 'en') return v;
+  } catch {}
+  return mtDetectLocale();
+}
+function mtText(zh, en) {
+  return mtGetLocale() === 'en' ? en : zh;
+}
+
 // 生成 Markdown 表格字符串
 function buildTable(colCount, rowCount) {
   const cols = Math.max(1, Math.min(10, colCount | 0));
@@ -9,7 +32,7 @@ function buildTable(colCount, rowCount) {
   const alignCells = [];
 
   for (let i = 1; i <= cols; i++) {
-    headerCells.push('列' + i);
+    headerCells.push(mtText('列', 'Col ') + i);
     alignCells.push('---');
   }
 
@@ -42,7 +65,11 @@ function insertTable(context, cols, rows) {
     context.setEditorValue(next);
   }
 
-  context.ui.notice('已插入 ' + cols + '×' + rows + ' 表格', 'ok', 2000);
+  context.ui.notice(
+    mtText('已插入 ', 'Inserted ') + cols + '×' + rows + mtText(' 表格', ' table'),
+    'ok',
+    2000,
+  );
 }
 
 // 解析用户输入的行列数
@@ -56,10 +83,10 @@ function parseSize(input, fallback, min, max) {
 
 // 使用输入框方式选择表格大小（降级方案）
 function openTablePickerWithPrompt(context) {
-  const colInput = prompt('请输入列数（1-10）', '3');
+  const colInput = prompt(mtText('请输入列数（1-10）', 'Enter number of columns (1-10)'), '3');
   if (colInput === null) return;
 
-  const rowInput = prompt('请输入数据行数（1-20）', '3');
+  const rowInput = prompt(mtText('请输入数据行数（1-20）', 'Enter number of data rows (1-20)'), '3');
   if (rowInput === null) return;
 
   const cols = parseSize(colInput, 3, 1, 10);
@@ -110,7 +137,7 @@ function openTablePicker(context) {
   panel.style.fontFamily = 'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
 
   const label = document.createElement('div');
-  label.textContent = '选择表格大小：1 × 1';
+  label.textContent = mtText('选择表格大小：1 × 1', 'Table size: 1 × 1');
   label.style.marginBottom = '8px';
 
   const grid = document.createElement('div');
@@ -142,7 +169,8 @@ function openTablePicker(context) {
   const updateHighlight = (rows, cols) => {
     currentRows = rows;
     currentCols = cols;
-    label.textContent = '选择表格大小：' + cols + ' × ' + rows;
+    label.textContent =
+      mtText('选择表格大小：', 'Table size: ') + cols + ' × ' + rows;
     for (const cell of cells) {
       const r = parseInt(cell.dataset.row, 10);
       const c = parseInt(cell.dataset.col, 10);
@@ -207,8 +235,8 @@ function openTablePicker(context) {
 
 export function activate(context) {
   context.addMenuItem({
-    label: '表格',
-    title: '插入 Markdown 表格',
+    label: mtText('表格', 'Table'),
+    title: mtText('插入 Markdown 表格', 'Insert Markdown table'),
     onClick: () => {
       openTablePicker(context);
     }
@@ -216,7 +244,7 @@ export function activate(context) {
 
   // 右键菜单：在当前光标处插入表格
   context.addContextMenuItem({
-    label: '插入表格…',
+    label: mtText('插入表格…', 'Insert table…'),
     icon: '📊',
     condition: (ctx) => ctx.mode === 'edit' || ctx.mode === 'wysiwyg',
     onClick: () => {
@@ -224,7 +252,11 @@ export function activate(context) {
     }
   });
 
-  context.ui.notice('Markdown 表格助手已激活', 'ok', 1600);
+  context.ui.notice(
+    mtText('Markdown 表格助手已激活', 'Markdown Table Helper activated'),
+    'ok',
+    1600,
+  );
 }
 
 export function deactivate() {

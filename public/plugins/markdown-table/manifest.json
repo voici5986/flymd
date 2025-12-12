@@ -1,7 +1,7 @@
 {
   "id": "markdown-table",
   "name": "Markdown 表格助手",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "flyMD",
   "description": "在光标处快速插入 Markdown 表格",
   "i18n": {
