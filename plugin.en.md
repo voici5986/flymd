@@ -613,6 +613,66 @@ The `condition` and `onClick` callback functions receive a context object:
 - Context menu only overrides browser default menu when extensions are registered
 - **Access native context menu**: Hold `Shift` key while right-clicking to show browser native menu
 - Submenus support hover expansion, mouse over menu items with arrows to expand submenus
+- **Language switching**: flyMD can switch UI language at runtime; built-in menus refresh automatically, but plugin-registered context menu items do not (the `label` text is fixed when you call `addContextMenuItem`). To make your menu text follow language changes immediately, listen for the language change event and re-register menus.
+
+#### Language Switching & Menu Refresh
+
+When the user changes language via the menu, the host dispatches a global event:
+
+```javascript
+window.addEventListener('flymd:localeChanged', (ev) => {
+  // ev.detail.pref is 'auto' | 'zh' | 'en'
+});
+```
+
+If your context menu needs to switch language immediately (instead of waiting for an app restart), you can:
+
+1. In `activate`, wrap “register menu” into a helper function;
+2. Store the disposer returned by `context.addContextMenuItem`;
+3. On `flymd:localeChanged`, remove the old menu and re-register with the new language;
+4. Clean up the event listener and menu items in `deactivate` (or your own cleanup hook).
+
+Example (simplified):
+
+```javascript
+let disposeMenu = null;
+
+function getLabel(pref) {
+  if (pref === 'en') return 'Format Code';
+  return '格式化代码';
+}
+
+export function activate(context) {
+  function registerMenu(pref) {
+    if (disposeMenu) { disposeMenu(); disposeMenu = null; }
+    disposeMenu = context.addContextMenuItem({
+      label: getLabel(pref),
+      icon: '🎨',
+      condition: (ctx) => ctx.mode === 'edit' && ctx.selectedText.length > 0,
+      onClick: (ctx) => { /* ... */ }
+    });
+  }
+
+  // Read current preference (localStorage: flymd.locale), default to 'auto' when not set
+  const pref = localStorage.getItem('flymd.locale') || 'auto';
+  registerMenu(pref);
+
+  const onLocaleChanged = (ev) => {
+    const nextPref = ev.detail?.pref || 'auto';
+    registerMenu(nextPref);
+  };
+
+  window.addEventListener('flymd:localeChanged', onLocaleChanged);
+
+  // Simple cleanup: remove listener and menu on deactivate
+  context.onDeactivate = () => {
+    window.removeEventListener('flymd:localeChanged', onLocaleChanged);
+    if (disposeMenu) disposeMenu();
+  };
+}
+```
+
+> Note: `flymd:localeChanged` only fires when the user explicitly changes language from the menu. `detail.pref` is the preference (`auto` / force Chinese / force English); the actual UI language is resolved by the host.
 
 #### Practical Application Example
 

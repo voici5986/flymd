@@ -673,6 +673,67 @@ context.addContextMenuItem({
 - 右键菜单仅在有扩展注册时才会覆盖浏览器默认菜单
 - **访问原生右键菜单**：按住 `Shift` 键再右键点击，可显示浏览器原生菜单
 - 子菜单支持悬停展开，鼠标移动到带箭头的菜单项上即可展开子菜单
+- **语言切换**：flyMD 支持运行时切换中/英文，内置菜单会自动刷新，但插件自己注册的右键菜单项不会自动更新文案（因为 label 在激活时就已固定）。如果希望菜单文本在切换语言后即时更新，需要监听语言变化事件并重新注册菜单，见下节。
+
+#### 语言切换与菜单刷新
+
+当用户通过菜单切换语言时，宿主会触发一个全局事件：
+
+```javascript
+window.addEventListener('flymd:localeChanged', (ev) => {
+  // ev.detail.pref 为 'auto' | 'zh' | 'en'
+});
+```
+
+如果插件的右键菜单需要随语言即时切换，而不是依赖重启应用，可以：
+
+1. 在 `activate` 中封装一个“注册菜单”的函数；
+2. 把 `context.addContextMenuItem` 返回的移除函数保存下来；
+3. 在 `flymd:localeChanged` 事件里先移除旧菜单，再重新调用“注册菜单”；
+4. 在 `deactivate` 中清理事件监听和菜单项。
+
+示例（简化版）：
+
+```javascript
+let disposeMenu = null;
+
+function getLabel(pref) {
+  if (pref === 'en') return 'Format Code';
+  return '格式化代码';
+}
+
+export function activate(context) {
+  function registerMenu(pref) {
+    if (disposeMenu) { disposeMenu(); disposeMenu = null; }
+    disposeMenu = context.addContextMenuItem({
+      label: getLabel(pref),
+      icon: '🎨',
+      condition: (ctx) => ctx.mode === 'edit' && ctx.selectedText.length > 0,
+      onClick: (ctx) => { /* ... */ }
+    });
+  }
+
+  // 读取当前偏好（localStorage: flymd.locale），未设置时视为 auto
+  const pref = localStorage.getItem('flymd.locale') || 'auto';
+  registerMenu(pref);
+
+  const onLocaleChanged = (ev) => {
+    const nextPref = ev.detail?.pref || 'auto';
+    registerMenu(nextPref);
+  };
+
+  window.addEventListener('flymd:localeChanged', onLocaleChanged);
+
+  // 简单清理：在插件停用时移除监听和菜单
+  // 如果你有自己的清理逻辑，也可以在那里调用这段
+  context.onDeactivate = () => {
+    window.removeEventListener('flymd:localeChanged', onLocaleChanged);
+    if (disposeMenu) disposeMenu();
+  };
+}
+```
+
+> 说明：`flymd:localeChanged` 只在用户显式通过语言菜单切换时触发；`detail.pref` 是语言偏好（自动 / 强制中文 / 强制英文），实际 UI 语言由宿主自行解析。
 
 #### 实际应用示例
 

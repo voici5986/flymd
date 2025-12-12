@@ -855,7 +855,7 @@ export async function refreshExtensionsUI(): Promise<void> {
           if ((it as any).featured === true) {
             const badge = document.createElement('span')
             badge.className = 'ext-tag'
-            badge.textContent = '推荐'
+            badge.textContent = t('ext.tag.featured' as any)
             badge.style.marginLeft = '8px'
             badge.style.color = '#f97316'
             name.appendChild(badge)
