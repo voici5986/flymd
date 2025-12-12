@@ -586,9 +586,71 @@ async function openAutoYamlSettingsDialog(context, cfg) {
     rowMax.appendChild(labelMax)
     rowMax.appendChild(tipMax)
 
+    // 属性视图快捷入口
+    const rowPv = document.createElement('div')
+    rowPv.className = 'autoyaml-row'
+    const btnPv = document.createElement('button')
+    btnPv.className = 'autoyaml-btn'
+    btnPv.textContent = autoyamlText('打开属性视图', 'Open Property View')
+    btnPv.onclick = async () => {
+      try {
+        if (!context || typeof context.getPluginAPI !== 'function') {
+          if (context && context.ui && context.ui.notice) {
+            context.ui.notice(
+              autoyamlText(
+                '当前环境不支持插件 API，无法打开属性视图。',
+                'Plugin API is not available, cannot open Property View.',
+              ),
+              'err',
+              2200,
+            )
+          }
+          return
+        }
+        const api = context.getPluginAPI('property-view')
+        if (!api || typeof api.openView !== 'function') {
+          if (context && context.ui && context.ui.notice) {
+            context.ui.notice(
+              autoyamlText(
+                '未找到“属性视图”扩展，请在扩展市场中安装并启用。',
+                'Property View extension not found; please install and enable it in the extensions market.',
+              ),
+              'err',
+              2600,
+            )
+          }
+          return
+        }
+        await api.openView()
+      } catch (e) {
+        try {
+          console.error('[autoyaml] 打开属性视图失败', e)
+        } catch {}
+        if (context && context.ui && context.ui.notice) {
+          context.ui.notice(
+            autoyamlText(
+              '打开属性视图失败，请检查控制台日志。',
+              'Failed to open Property View; please check console for details.',
+            ),
+            'err',
+            2600,
+          )
+        }
+      }
+    }
+    const tipPv = document.createElement('div')
+    tipPv.className = 'autoyaml-tip'
+    tipPv.textContent = autoyamlText(
+      '需要安装并启用“属性视图”扩展，用于基于 YAML 元数据浏览文档列表。',
+      'Requires the Property View extension to be installed and enabled to browse files by YAML metadata.',
+    )
+    rowPv.appendChild(btnPv)
+    rowPv.appendChild(tipPv)
+
     body.appendChild(rowAi)
     body.appendChild(rowCtx)
     body.appendChild(rowMax)
+    body.appendChild(rowPv)
 
     const footer = document.createElement('div')
     footer.className = 'autoyaml-footer'

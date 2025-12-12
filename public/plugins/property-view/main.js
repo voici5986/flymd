@@ -909,6 +909,21 @@ async function pvOpenSettingsDialog(context) {
 // 插件主入口
 export async function activate(context) {
   PV_RUNTIME_CTX = context
+
+  // 对外暴露 API，方便其他插件跳转到属性视图
+  if (typeof context.registerAPI === 'function') {
+    try {
+      context.registerAPI('property-view', {
+        // 打开属性视图主窗口
+        openView: () => pvOpenViewDialog(context),
+      })
+    } catch (e) {
+      try {
+        console.error('[property-view] registerAPI 失败', e)
+      } catch {}
+    }
+  }
+
   // 在“插件”菜单中添加入口
   if (typeof context.addMenuItem === 'function') {
     context.addMenuItem({
@@ -940,4 +955,3 @@ export async function openSettings(context) {
 export function deactivate() {
   PV_RUNTIME_CTX = null
 }
-
