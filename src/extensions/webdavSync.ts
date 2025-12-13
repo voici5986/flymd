@@ -2256,31 +2256,31 @@ export async function openWebdavSyncDialog(): Promise<void> {
                 <option value="ask">${t('sync.conflict.ask')}</option>
                 <option value="last-wins">${t('sync.conflict.remote')}</option>
               </select>
-              <div class="upl-hint">当本地和远程文件都被修改时的处理策略</div>
+              <div class="upl-hint">${t('sync.conflict.hint')}</div>
             </div>
 
-            <label for="sync-local-delete-strategy">本地文件删除策略</label>
+            <label for="sync-local-delete-strategy">${t('sync.localDelete')}</label>
             <div class="upl-field">
               <select id="sync-local-delete-strategy" style="width: 100%; padding: 8px; border: 1px solid var(--border-color, #ccc); border-radius: 4px; background: var(--input-bg, #fff); color: var(--text-color, #333); font-size: 14px;">
-                <option value="auto">自动删除（远程已删除且本地未修改）</option>
-                <option value="ask">询问用户</option>
-                <option value="keep">始终保留本地文件</option>
+                <option value="auto">${t('sync.localDelete.auto')}</option>
+                <option value="ask">${t('sync.localDelete.ask')}</option>
+                <option value="keep">${t('sync.localDelete.keep')}</option>
               </select>
-              <div class="upl-hint">当远程文件被删除时，如何处理本地文件</div>
+              <div class="upl-hint">${t('sync.localDelete.hint')}</div>
             </div>
 
-            <label for="sync-confirm-delete-remote">删除远程文件确认</label>
+            <label for="sync-confirm-delete-remote">${t('sync.confirmDeleteRemote')}</label>
             <div class="upl-field">
               <div class="sync-toggles" style="margin: 0;">
                 <div class="item">
-                  <span class="lbl">删除远程文件时需要用户确认</span>
+                  <span class="lbl">${t('sync.confirmDeleteRemote.toggle')}</span>
                   <label class="switch" for="sync-confirm-delete-remote">
                     <input id="sync-confirm-delete-remote" type="checkbox"/>
                     <span class="trk"></span><span class="kn"></span>
                   </label>
                 </div>
               </div>
-              <div class="upl-hint">关闭后，删除操作将自动执行</div>
+              <div class="upl-hint">${t('sync.confirmDeleteRemote.hint')}</div>
             </div>
 
             <label for="sync-skip-minutes">${t('sync.smartSkip')}</label>
@@ -2567,5 +2567,4 @@ async function ensureRemoteDir(baseUrl: string, auth: { username: string; passwo
     for (const p of parts) { cur += '/' + p; try { await mkcol(baseUrl, auth, cur) } catch {} }
   } catch {}
 }
-
 
