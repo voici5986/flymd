@@ -113,7 +113,7 @@ FlyMD 是一款轻量级、高性能的本地 Markdown 编辑器,支持 PDF 高�
 | 平台 | 安装方式 |
 |------|----------|
 | **Windows** | `winget install flyhunterl.FlyMD` 或下载安装包 |
-| **Linux** | 支持主流桌面环境 |
+| **Linux** | 支持主流桌面环境,Arch 系发行版推荐通过 AUR 安装:`yay -S flymd` 或 `paru -S flymd` |
 | **macOS** | 支持 Intel 和 Apple Silicon |
 
 <details>

@@ -27,7 +27,15 @@
 
 ## Feature Demonstrations
 
+### Date-Based Todo Summary
+
+**Generate todos from meeting notes / travel plans / personal notes, push reminders by time and assignee (WeChat/SMS/DingTalk/Feishu, etc.), and summarize todos by day/week/month with built-in templates for diaries and meeting minutes.**
+
+<img width="1065" height="726" alt="Date-based todo summary and reminders" src="https://github.com/user-attachments/assets/dd82577d-eebf-415b-bcd3-96dc3e23ac7e" />
+
 ### High-Precision PDF Parsing + Translation
+
+**Example of the High-Precision Parsing plugin; a MinerU-based parsing plugin is also available depending on your needs.**
 
 <img src="https://github.com/user-attachments/assets/5e711375-4c58-4432-9acd-27de92cef81a" alt="PDF High-Precision Parsing and Translation" width="800">
 
@@ -101,7 +109,7 @@ Download from [Releases](https://github.com/flyhunterl/flymd/releases):
 | Platform | Installation |
 |----------|--------------|
 | **Windows** | `winget install flyhunterl.FlyMD` or download installer |
-| **Linux** | Supports mainstream desktop environments |
+| **Linux** | Supports mainstream desktop environments; on Arch-based distributions, we recommend installing via the AUR package `flymd` (for example: `yay -S flymd` or `paru -S flymd`). |
 | **macOS** | Supports Intel and Apple Silicon |
 
 <details>
@@ -261,7 +269,7 @@ Issues and Pull Requests are welcome!
 
 ### Roadmap
 
-See: [ROADMAP.md](ROADMAP.md)
+See: [ROADMAP (English)](ROADMAP.en.md)
 
 ### Star History
 
