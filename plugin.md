@@ -1310,6 +1310,14 @@ await context.writeFileBinary('C:/tmp/data.bin', bytes);
 - 仅在桌面版（Tauri 应用）可用；
 - 若目录不存在，需要你先创建目录（或使用 `context.getPluginDataDir()` 获取已创建的插件数据目录）。
 
+### context.appendTextFile
+
+将文本内容**追加**写入到指定的本地文件末尾（不会覆盖原有内容）。适合写“历史日志”（例如增量索引日志）。
+
+```javascript
+await context.appendTextFile('C:/tmp/my.log', '一行日志\\n');
+```
+
 ### context.saveMarkdownToCurrentFolder
 
 将一段 Markdown 内容直接保存为文件，默认写入“当前侧栏文件所在的文件夹”；如果当前没有打开任何文件，则写入当前库根目录。适合解析/翻译 PDF 后自动在库中生成对应的 `.md` 文件。

@@ -633,6 +633,14 @@ function isVisionEnabledForConfig(cfg){
   return !!cfg.visionEnabled
 }
 
+function isRagEnabledForConfig(cfg){
+  try {
+    return !!normalizeKbCfgForAi(cfg).enabled
+  } catch {
+    return false
+  }
+}
+
 // 更新视觉按钮上的图片计数标记
 function updateVisionAttachmentIndicator(){
   try {
@@ -1032,6 +1040,12 @@ function ensureCss() {
     '.ai-vision-toggle.active{border-color:#2563eb;background:#dbeafe;color:#1d4ed8;box-shadow:0 0 0 1px rgba(37,99,235,.15)}',
     '.ai-vision-toggle.disabled{opacity:.45;cursor:not-allowed;box-shadow:none}',
     '.ai-vision-toggle[data-count]:after{content:attr(data-count);position:absolute;right:-2px;top:-2px;min-width:14px;height:14px;padding:0 3px;border-radius:999px;background:#ef4444;color:#fff;font-size:10px;line-height:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px #fff;}',
+    '.ai-rag-toggle{min-width:26px;height:24px;padding:0 8px;border-radius:999px;border:1px solid #d1d5db;background:rgba(255,255,255,.95);color:#6b7280;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}',
+    '.ai-rag-toggle.active{border-color:#16a34a;background:#dcfce7;color:#166534;box-shadow:0 0 0 1px rgba(22,163,74,.15)}',
+    '#ai-assist-win.dark .ai-rag-toggle{background:#2a2b2f;border-color:#4b5563;color:#9ca3af}',
+    '#ai-assist-win.dark .ai-rag-toggle:not(.disabled):hover{background:#34353a;border-color:#6b7280}',
+    '#ai-assist-win.dark .ai-rag-toggle.active{background:#166534;border-color:#22c55e;color:#ffffff;box-shadow:0 0 0 2px rgba(34,197,94,0.20)}',
+    '#ai-assist-win.dark .ai-rag-toggle.active:not(.disabled):hover{background:#16a34a}',
     '#ai-assist-win.dark .ai-input-wrap{background:#1a1b1e;border-color:#1f2937}',
     '#ai-assist-win.dark .ai-input-wrap textarea{color:#e5e7eb}',
     '#ai-assist-win.dark .ai-input-wrap:focus-within{border-color:#3b82f6}',
@@ -1746,6 +1760,18 @@ async function refreshHeader(context){
       updateVisionAttachmentIndicator()
     }
   } catch {}
+
+  // 更新 RAG 开关
+  try {
+    const ragBtn = el('ai-rag-toggle')
+    if (ragBtn) {
+      const active = isRagEnabledForConfig(cfg)
+      ragBtn.classList.toggle('active', active)
+      ragBtn.title = active
+        ? 'RAG 已开启：发送前会追加知识库引用'
+        : '知识库检索：点击开启/关闭（与设置联动）'
+    }
+  } catch {}
 }
 
 // 收集文档中的图片并构造视觉模型可用的 content 片段
@@ -2210,6 +2236,7 @@ async function mountWindow(context){
      '     <option value="提醒">' + aiText('提醒', 'Reminder') + '</option>',
      '    </select>',
      '    <button id="ai-vision-toggle" class="ai-vision-toggle" title="' + aiText('视觉模式：点击开启，让 AI 读取文档中的图片', 'Vision mode: let AI read images from the document') + '">Vision</button>',
+     '    <button id="ai-rag-toggle" class="ai-rag-toggle" title="' + aiText('知识库检索：点击开启/关闭（与设置联动）', 'RAG: toggle knowledge search (sync with settings)') + '">RAG</button>',
      '   </div>',
      '   <button id="ai-send" title="' + aiText('发送消息', 'Send message') + '">↵</button>',
      '  </div>',
@@ -2352,6 +2379,43 @@ async function mountWindow(context){
           } catch {}
         } catch (e) {
           console.error('切换视觉模式失败：', e)
+        }
+      })
+    }
+  } catch {}
+  // RAG 开关（与设置联动）
+  try {
+    const ragBtn = el.querySelector('#ai-rag-toggle')
+    if (ragBtn) {
+      ragBtn.addEventListener('click', async () => {
+        try {
+          const cfg = await loadCfg(context)
+          if (!cfg.kb || typeof cfg.kb !== 'object') cfg.kb = {}
+          cfg.kb.enabled = !cfg.kb.enabled
+          await saveCfg(context, cfg)
+          await refreshHeader(context)
+          try {
+            const elKb = DOC().querySelector('#set-kb-enabled')
+            if (elKb) elKb.checked = !!cfg.kb.enabled
+          } catch {}
+          if (cfg.kb.enabled) {
+            try {
+              const api = context && typeof context.getPluginAPI === 'function'
+                ? context.getPluginAPI('flymdRAG')
+                : null
+              if (!api || typeof api.search !== 'function') {
+                context.ui.notice('RAG 已开启，但未检测到 flymd-RAG 插件（或未启用），检索不会生效。', 'warn', 2600)
+              } else {
+                context.ui.notice('RAG 已开启：发送前会追加知识库引用。', 'ok', 1800)
+              }
+            } catch {
+              try { context.ui.notice('RAG 已开启：发送前会追加知识库引用。', 'ok', 1800) } catch {}
+            }
+          } else {
+            try { context.ui.notice('RAG 已关闭：仅使用文档上下文与对话历史。', 'ok', 1800) } catch {}
+          }
+        } catch (e) {
+          console.error('切换 RAG 失败：', e)
         }
       })
     }
@@ -3394,7 +3458,13 @@ async function sendFromInputWithAction(context){
     try {
       await ensureSessionForDoc(context)
       const doc = String(context.getEditorValue() || '')
-      const docCtx = clampCtx(doc, Number(cfg.limits?.maxCtxChars || 6000))
+      const kbCfg = normalizeKbCfgForAi(cfg)
+      const baseLimit = Number(cfg.limits?.maxCtxChars || 6000)
+      // RAG 开启时给“知识库引用”留出空间，避免把上下文窗口撑爆
+      const docLimit = kbCfg.enabled
+        ? Math.max(1200, baseLimit - Math.min(4000, Number(kbCfg.maxChars || 2000)) - 600)
+        : baseLimit
+      const docCtx = clampCtx(doc, docLimit)
 
       // 添加当前时间上下文
       const now = new Date()

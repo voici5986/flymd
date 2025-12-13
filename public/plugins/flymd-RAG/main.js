@@ -18,14 +18,15 @@ const DEFAULT_CFG = {
   includeDirs: [],
   excludeDirs: [],
   maxDepth: 32,
-  chunk: { maxChars: 1200, overlapChars: 200, byHeading: true },
+  // 分块：优先按 Markdown 标题段落切分（更贴近语义），再做长度上限
+  chunk: { maxChars: 512, overlapChars: 0, byHeading: true },
   embedding: {
     provider: 'reuse-ai-assistant', // 'reuse-ai-assistant' | 'custom'
     baseUrl: '',
     apiKey: '',
     model: 'text-embedding-3-small',
   },
-  search: { topK: 8, minScore: 0 },
+  search: { topK: 8, minScore: 0, contextMaxChars: 1024 },
 }
 
 let FLYSMART_CTX = null
@@ -64,6 +65,12 @@ let FLYSMART_LOG = {
   maxLines: 240,
   flushTimer: 0,
 }
+
+let FLYSMART_WATCH_DISPOSERS = [] // (()=>void)[]
+let FLYSMART_INCR_QUEUE = [] // string[]
+let FLYSMART_INCR_SET = new Set() // Set<string>
+let FLYSMART_INCR_TIMER = 0
+let FLYSMART_INCR_RUNNING = false
 
 function nowMs() {
   try { return Date.now() } catch { return 0 }
@@ -112,6 +119,9 @@ function pushLogLine(line) {
       } catch {}
     }
   } catch {}
+
+  // 增量索引：根据 enabled/includeDirs 自动启用监听
+  try { void refreshIncrementalWatch(context) } catch {}
 }
 
 async function flushLogNow(ctx) {
@@ -429,6 +439,152 @@ function normalizeExtensions(list) {
   return out.length ? out : [...DEFAULT_CFG.includeExtensions]
 }
 
+function normalizeRelativePath(p) {
+  return String(p || '')
+    .replace(/[\\]+/g, '/')
+    .replace(/^\/+/, '')
+}
+
+function shouldIndexRel(rel, cfg, caseInsensitive) {
+  const r = normalizeRelativePath(rel)
+  if (!r) return false
+  const extList = normalizeExtensions(
+    cfg && cfg.includeExtensions ? cfg.includeExtensions : [],
+  )
+  const allow = new Set(extList.map((x) => String(x || '').toLowerCase()))
+  const nm = r.split('/').pop() || ''
+  const ext = (nm.split('.').pop() || '').toLowerCase()
+  if (allow.size > 0 && !allow.has(ext)) return false
+  const includeDirs = normalizeDirPrefixes(cfg && cfg.includeDirs ? cfg.includeDirs : [])
+  const excludeDirs = normalizeDirPrefixes(cfg && cfg.excludeDirs ? cfg.excludeDirs : [])
+  if (matchDirPrefix(r, excludeDirs, caseInsensitive)) return false
+  if (includeDirs.length > 0 && !matchDirPrefix(r, includeDirs, caseInsensitive)) return false
+  return true
+}
+
+function stopIncrementalWatch() {
+  try {
+    for (const fn of FLYSMART_WATCH_DISPOSERS || []) {
+      try { fn && fn() } catch {}
+    }
+  } catch {}
+  FLYSMART_WATCH_DISPOSERS = []
+}
+
+async function refreshIncrementalWatch(ctx, cfgOverride) {
+  stopIncrementalWatch()
+  try {
+    if (!ctx) return
+    const cfg = cfgOverride || (await loadConfig(ctx))
+    if (!cfg || !cfg.enabled) return
+    if (typeof ctx.getLibraryRoot !== 'function') return
+    const root = await ctx.getLibraryRoot()
+    if (!root) return
+    const caseInsensitive = isWindowsPath(root)
+    const includeDirs = normalizeDirPrefixes(cfg.includeDirs || [])
+
+    const onEvent = async (ev) => {
+      try {
+        const e = ev || {}
+        const type = String(e.type || '')
+        // 有些平台 create 不可靠：对“未索引过的文件”允许 modify 触发一次补偿
+        const allowed = type === 'create' || type === 'modify' || type === 'any'
+        if (!allowed) return
+        const rels = Array.isArray(e.relatives) ? e.relatives : []
+        for (const rawRel of rels) {
+          const rel = normalizeRelativePath(rawRel)
+          if (!rel) continue
+          if (!shouldIndexRel(rel, cfg, caseInsensitive)) continue
+          enqueueIncremental(rel)
+        }
+      } catch {}
+    }
+
+    // includeDirs 为空：监听整个库
+    if (!includeDirs.length) {
+      if (typeof ctx.watchLibrary === 'function') {
+        const unwatch = await ctx.watchLibrary(onEvent, { recursive: true, immediate: true })
+        if (typeof unwatch === 'function') FLYSMART_WATCH_DISPOSERS.push(unwatch)
+      }
+      return
+    }
+
+    // includeDirs 非空：尽量只监听这些目录，避免全库噪音
+    if (typeof ctx.watchPaths !== 'function') return
+    for (const d of includeDirs) {
+      try {
+        const abs = joinAbs(root, d)
+        if (typeof ctx.exists === 'function') {
+          const ok = await ctx.exists(abs)
+          if (!ok) continue
+        }
+        const unwatch = await ctx.watchPaths(abs, onEvent, {
+          base: 'absolute',
+          recursive: true,
+          immediate: true,
+        })
+        if (typeof unwatch === 'function') FLYSMART_WATCH_DISPOSERS.push(unwatch)
+      } catch {}
+    }
+  } catch {}
+}
+
+function enqueueIncremental(rel) {
+  try {
+    const r = normalizeRelativePath(rel)
+    if (!r) return
+    if (FLYSMART_INCR_SET.has(r)) return
+    FLYSMART_INCR_SET.add(r)
+    FLYSMART_INCR_QUEUE.push(r)
+    if (FLYSMART_INCR_TIMER) return
+    FLYSMART_INCR_TIMER = setTimeout(() => {
+      FLYSMART_INCR_TIMER = 0
+      void runIncrementalQueue()
+    }, 420)
+  } catch {}
+}
+
+async function runIncrementalQueue() {
+  if (FLYSMART_INCR_RUNNING) return
+  if (FLYSMART_BUSY) {
+    try {
+      if (!FLYSMART_INCR_TIMER) {
+        FLYSMART_INCR_TIMER = setTimeout(() => {
+          FLYSMART_INCR_TIMER = 0
+          void runIncrementalQueue()
+        }, 800)
+      }
+    } catch {}
+    return
+  }
+  const ctx = FLYSMART_CTX
+  if (!ctx) return
+  if (!FLYSMART_INCR_QUEUE.length) return
+  FLYSMART_INCR_RUNNING = true
+  try {
+    while (FLYSMART_INCR_QUEUE.length) {
+      const rel = FLYSMART_INCR_QUEUE.shift()
+      try { FLYSMART_INCR_SET.delete(rel) } catch {}
+      if (!rel) continue
+      try {
+        await incrementalIndexOne(ctx, rel)
+      } catch (e) {
+        try {
+          await dbg(
+            ctx,
+            '增量索引失败',
+            { rel, error: e && e.message ? String(e.message) : String(e) },
+            true,
+          )
+        } catch {}
+      }
+      await yieldToUi()
+    }
+  } finally {
+    FLYSMART_INCR_RUNNING = false
+  }
+}
+
 function normalizeConfig(cfg) {
   const c = cfg && typeof cfg === 'object' ? cfg : {}
   const out = {
@@ -483,6 +639,10 @@ function normalizeConfig(cfg) {
     typeof out.search.minScore === 'number' && Number.isFinite(out.search.minScore)
       ? Math.max(-1, Math.min(1, Number(out.search.minScore)))
       : DEFAULT_CFG.search.minScore
+  out.search.contextMaxChars =
+    typeof out.search.contextMaxChars === 'number' && Number.isFinite(out.search.contextMaxChars)
+      ? Math.max(200, Math.min(20000, Math.floor(out.search.contextMaxChars)))
+      : DEFAULT_CFG.search.contextMaxChars
   return out
 }
 
@@ -567,10 +727,14 @@ async function getEmbeddingConnFromAiAssistant(ctx) {
 }
 
 async function getEmbeddingConn(ctx, vecCfg) {
-  const emb =
-    vecCfg && typeof vecCfg === 'object' && vecCfg.embedding && typeof vecCfg.embedding === 'object'
-      ? vecCfg.embedding
-      : {}
+  // 兼容两种入参：
+  // 1) 传入完整 cfg（包含 cfg.embedding）
+  // 2) 直接传入 embedding 配置对象（cfg.embedding）
+  let emb = {}
+  if (vecCfg && typeof vecCfg === 'object') {
+    if (vecCfg.embedding && typeof vecCfg.embedding === 'object') emb = vecCfg.embedding
+    else emb = vecCfg
+  }
   const provider = String(emb.provider || 'reuse-ai-assistant').trim()
   if (provider === 'custom') {
     const baseUrl = String(emb.baseUrl || '').trim()
@@ -659,61 +823,186 @@ async function fetchEmbeddings(conn, model, inputs, opt) {
   return out
 }
 
-function buildHeadingMap(lines) {
-  const map = new Array(lines.length)
-  let cur = ''
-  for (let i = 0; i < lines.length; i++) {
-    const ln = lines[i]
-    const m = String(ln || '').match(/^\s{0,3}(#{1,6})\s+(.+?)\s*$/)
-    if (m) cur = String(m[2] || '').trim()
-    map[i] = cur
-  }
-  return map
+function isFenceToggleLine(line) {
+  return /^\s{0,3}(```|~~~)/.test(String(line || ''))
 }
 
-function chunkByLines(lines, opt) {
-  const maxChars = opt && opt.maxChars ? Math.max(200, opt.maxChars | 0) : 1200
-  const overlap =
-    opt && opt.overlapChars ? Math.max(0, opt.overlapChars | 0) : 0
-  const byHeading = !!(opt && opt.byHeading)
-  const headingAt = byHeading ? buildHeadingMap(lines) : null
+function parseAtxHeadingLine(line) {
+  const m = String(line || '').match(/^\s{0,3}(#{1,6})\s+(.+?)\s*$/)
+  if (!m) return null
+  const level = (m[1] || '').length | 0
+  let text = String(m[2] || '').trim()
+  // 兼容 "## Title ###" 这种尾部收尾
+  text = text.replace(/\s+#+\s*$/, '').trim()
+  if (!text) return null
+  return { level, text }
+}
 
-  const chunks = []
+function splitMarkdownBlocks(lines, minLevel) {
+  const out = []
+  const len = Array.isArray(lines) ? lines.length : 0
+  if (!len) return out
+
+  const heads = []
+  let inFence = false
+  for (let i = 0; i < len; i++) {
+    const ln = String(lines[i] || '')
+    if (isFenceToggleLine(ln)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const h = parseAtxHeadingLine(ln)
+    if (!h) continue
+    if (h.level >= (minLevel | 0)) {
+      heads.push({ i, level: h.level, text: h.text })
+    }
+  }
+
+  // 没有二级及以下标题：整个文档当作一个块
+  if (!heads.length) {
+    out.push({ start: 0, end: len - 1, heading: '', level: 0 })
+    return out
+  }
+
   let start = 0
-  while (start < lines.length) {
+  let heading = ''
+  let level = 0
+  for (const h of heads) {
+    if (h.i > start) {
+      out.push({ start, end: h.i - 1, heading, level })
+    }
+    start = h.i
+    heading = String(h.text || '')
+    level = h.level | 0
+  }
+  out.push({ start, end: len - 1, heading, level })
+  return out
+}
+
+function chunkLineRange(lines, startIdx, endIdx, maxChars, overlap) {
+  const chunks = []
+  const len = Array.isArray(lines) ? lines.length : 0
+  if (!len) return chunks
+  const max = Math.max(200, maxChars | 0)
+  const ov = Math.max(0, overlap | 0)
+
+  let start = Math.max(0, startIdx | 0)
+  const endLimit = Math.min(len - 1, endIdx | 0)
+  while (start <= endLimit) {
     let end = start
-    let len = 0
-    while (end < lines.length) {
+    let cur = 0
+    while (end <= endLimit) {
       const add = String(lines[end] || '').length + 1
-      if (len > 0 && len + add > maxChars) break
-      len += add
+      if (cur > 0 && cur + add > max) break
+      cur += add
       end++
     }
-    if (end <= start) end = Math.min(lines.length, start + 1)
-    const raw = lines.slice(start, end).join('\n')
-    const text = raw.trim()
-    if (text) {
-      chunks.push({
-        startLine: start + 1,
-        endLine: end,
-        heading: headingAt ? String(headingAt[start] || '') : '',
-        text,
-      })
-    }
-    if (end >= lines.length) break
-    if (!overlap) {
+    if (end <= start) end = Math.min(endLimit + 1, start + 1)
+    const text = lines.slice(start, end).join('\n').trim()
+    if (text) chunks.push({ startIdx: start, endIdx: end - 1, text })
+    if (end > endLimit) break
+    if (!ov) {
       start = end
       continue
     }
     let back = end
     let backLen = 0
-    while (back > start && backLen < overlap) {
+    while (back > start && backLen < ov) {
       back--
       backLen += String(lines[back] || '').length + 1
     }
-    // 关键：必须保证 start 前进，否则“单行超长 + overlap>0”会死循环卡死 UI
-    const nextStart = Math.max(0, back)
+    // 关键：必须保证 start 前进，否则会死循环卡死 UI
+    const nextStart = Math.max(startIdx | 0, back)
     start = nextStart > start ? nextStart : end
+  }
+  return chunks
+}
+
+function splitParagraphRanges(lines, startIdx, endIdx) {
+  const out = []
+  const len = Array.isArray(lines) ? lines.length : 0
+  if (!len) return out
+  let s = -1
+  const a = Math.max(0, startIdx | 0)
+  const b = Math.min(len - 1, endIdx | 0)
+  for (let i = a; i <= b; i++) {
+    const blank = !String(lines[i] || '').trim()
+    if (blank) {
+      if (s >= 0) out.push([s, i - 1])
+      s = -1
+      continue
+    }
+    if (s < 0) s = i
+  }
+  if (s >= 0) out.push([s, b])
+  return out
+}
+
+function chunkMarkdownRange(lines, startIdx, endIdx, maxChars, overlap) {
+  const chunks = []
+  const paras = splitParagraphRanges(lines, startIdx, endIdx)
+  if (!paras.length) return chunks
+  const max = Math.max(200, maxChars | 0)
+
+  let curStart = -1
+  let curEnd = -1
+  let curLen = 0
+
+  const push = () => {
+    if (curStart < 0 || curEnd < curStart) return
+    const text = lines.slice(curStart, curEnd + 1).join('\n').trim()
+    if (text) chunks.push({ startIdx: curStart, endIdx: curEnd, text })
+    curStart = -1
+    curEnd = -1
+    curLen = 0
+  }
+
+  for (const pr of paras) {
+    const ps = pr[0] | 0
+    const pe = pr[1] | 0
+    const pText = lines.slice(ps, pe + 1).join('\n').trim()
+    if (!pText) continue
+    if (pText.length > max) {
+      push()
+      const parts = chunkLineRange(lines, ps, pe, max, overlap)
+      for (const it of parts) {
+        if (it && it.text) chunks.push(it)
+      }
+      continue
+    }
+    const add = pText.length + (curLen > 0 ? 2 : 0)
+    if (curLen > 0 && curLen + add > max) {
+      push()
+    }
+    if (curLen === 0) curStart = ps
+    curEnd = pe
+    curLen += add
+  }
+  push()
+  return chunks
+}
+
+function chunkByLines(lines, opt) {
+  const maxChars = opt && opt.maxChars ? Math.max(200, opt.maxChars | 0) : 512
+  const overlap =
+    opt && opt.overlapChars ? Math.max(0, opt.overlapChars | 0) : 0
+  const byHeading = !!(opt && opt.byHeading)
+
+  const chunks = []
+  const blocks = byHeading ? splitMarkdownBlocks(lines, 2) : [{ start: 0, end: (lines || []).length - 1, heading: '', level: 0 }]
+  for (const b of blocks) {
+    if (!b || b.end < b.start) continue
+    const parts = chunkMarkdownRange(lines, b.start, b.end, maxChars, overlap)
+    for (const it of parts) {
+      if (!it || !it.text) continue
+      chunks.push({
+        startLine: (it.startIdx | 0) + 1,
+        endLine: (it.endIdx | 0) + 1,
+        heading: String(b.heading || ''),
+        text: String(it.text || ''),
+      })
+    }
   }
   return chunks
 }
@@ -1158,6 +1447,234 @@ async function buildIndex(ctx) {
   }
 }
 
+async function incrementalIndexOne(ctx, relativePath) {
+  if (!ctx) return
+  if (FLYSMART_BUSY) return
+  FLYSMART_BUSY = true
+  try {
+    const cfg = await loadConfig(ctx)
+    if (!cfg || !cfg.enabled) return
+    const libraryRoot = await getLibraryRootRequired(ctx)
+    const caseInsensitive = isWindowsPath(libraryRoot)
+    const rel = normalizeRelativePath(relativePath)
+    if (!shouldIndexRel(rel, cfg, caseInsensitive)) return
+
+    if (typeof ctx.getPluginDataDir !== 'function') {
+      throw new Error('宿主版本过老：缺少 getPluginDataDir')
+    }
+    if (typeof ctx.writeFileBinary !== 'function') {
+      throw new Error('宿主版本过老：缺少 writeFileBinary')
+    }
+    if (typeof ctx.writeTextFile !== 'function') {
+      throw new Error('宿主版本过老：缺少 writeTextFile')
+    }
+
+    const cfgKey =
+      cfg.libraryKey || (await sha1Hex(normalizePathForKey(libraryRoot)))
+    const dataDir = await ctx.getPluginDataDir()
+    const metaPath = joinFs(dataDir, META_FILE)
+    const vecPath = joinFs(dataDir, VEC_FILE)
+
+    // 增量日志：历史追加
+    FLYSMART_LOG.filePath = joinFs(dataDir, INDEX_LOG_FILE)
+    FLYSMART_LOG.writeMode = 'append'
+    FLYSMART_LOG.pending = []
+
+    setStatus({
+      state: 'indexing',
+      phase: 'incremental',
+      lastError: '',
+      lastProgressAt: nowMs(),
+      currentFile: rel,
+    })
+
+    // 读取现有 meta，决定能否增量
+    let meta = null
+    try {
+      if (typeof ctx.exists === 'function') {
+        const ok = await ctx.exists(metaPath)
+        if (ok) meta = await readJsonMaybe(ctx, metaPath)
+      } else {
+        meta = await readJsonMaybe(ctx, metaPath)
+      }
+    } catch {
+      meta = null
+    }
+
+    if (meta && meta.schemaVersion !== SCHEMA_VERSION) {
+      throw new Error('索引版本不兼容，请点击“重建索引”')
+    }
+    if (meta && meta.embeddingModel && meta.embeddingModel !== cfg.embedding.model) {
+      throw new Error('Embedding 模型已变化，请点击“重建索引”')
+    }
+
+    let vectors = null
+    if (meta) {
+      let loaded = null
+      try {
+        loaded = await ensureIndexLoaded(ctx, cfg)
+      } catch {
+        loaded = null
+      }
+      if (!loaded || !loaded.meta || !loaded.vectors) {
+        throw new Error('读取索引失败，请点击“重建索引”')
+      }
+      meta = loaded.meta
+      vectors = loaded.vectors
+    } else {
+      meta = {
+        schemaVersion: SCHEMA_VERSION,
+        libraryKey: cfgKey,
+        embeddingModel: cfg.embedding.model,
+        dims: 0,
+        builtAt: 0,
+        updatedAt: Date.now(),
+        files: {},
+        chunks: {},
+      }
+      vectors = new Float32Array()
+    }
+
+    if (!meta.files || typeof meta.files !== 'object') meta.files = {}
+    if (!meta.chunks || typeof meta.chunks !== 'object') meta.chunks = {}
+
+    if (Object.prototype.hasOwnProperty.call(meta.files, rel)) {
+      await dbg(ctx, '增量索引：已存在，跳过', { rel }, true)
+      return
+    }
+
+    const absPath = joinAbs(libraryRoot, rel)
+    const text = await readTextBestEffort(ctx, absPath, 15000)
+    const maxFileChars = 5_000_000
+    if (String(text || '').length > maxFileChars) {
+      await dbg(
+        ctx,
+        '增量索引：跳过超大文件',
+        { rel, chars: String(text || '').length },
+        true,
+      )
+      return
+    }
+
+    const lines = String(text || '').split(/\r?\n/)
+    const parts = chunkByLines(lines, cfg.chunk)
+    if (!parts.length) {
+      await dbg(ctx, '增量索引：无可索引内容，跳过', { rel }, true)
+      meta.files[rel] = { mtimeMs: 0, chunkIds: [] }
+      meta.updatedAt = Date.now()
+      await ctx.writeTextFile(metaPath, JSON.stringify(meta, null, 2))
+      FLYSMART_CACHE = { libraryKey: cfgKey, meta, vectors }
+      return
+    }
+
+    const conn = await getEmbeddingConn(ctx, cfg)
+    const texts = parts.map((c) => c.text)
+    const batchSize = 16
+    const batchesTotal = Math.ceil(texts.length / batchSize)
+    let batchesDone = 0
+    let dims = meta.dims | 0
+
+    await dbg(
+      ctx,
+      '增量索引：开始',
+      { rel, chunks: parts.length, model: cfg.embedding.model },
+      true,
+    )
+
+    const embsAll = []
+    for (let i = 0; i < texts.length; i += batchSize) {
+      const slice = texts.slice(i, i + batchSize)
+      const tEmb0 = nowMs()
+      const embs = await fetchEmbeddings(conn, cfg.embedding.model, slice, {
+        inputType: 'document',
+        timeoutMs: 60000,
+      })
+      if (embs.length !== slice.length) {
+        throw new Error('Embedding 返回数量不匹配')
+      }
+      for (const e of embs) {
+        if (!Array.isArray(e) || !e.length) throw new Error('Embedding 返回格式异常')
+        if (!dims) dims = e.length
+        if (e.length !== dims) throw new Error('Embedding 维度不一致')
+      }
+      for (const e of embs) embsAll.push(e)
+      batchesDone++
+      setStatus({
+        phase: 'incremental/embed',
+        batchesDone,
+        batchesTotal,
+        processedChunks: Math.min(i + slice.length, texts.length),
+        totalChunks: texts.length,
+        lastProgressAt: nowMs(),
+        currentFile: rel,
+      })
+      await dbg(
+        ctx,
+        '增量索引：Embedding 批次完成',
+        { rel, batch: batchesDone, batchesTotal, ms: Math.max(0, nowMs() - tEmb0) },
+        false,
+      )
+      await yieldToUi()
+    }
+
+    if (!dims) throw new Error('Embedding 维度为空')
+    if (meta.dims && (meta.dims | 0) !== dims) {
+      throw new Error('索引维度与当前 Embedding 不一致，请点击“重建索引”')
+    }
+
+    const oldVectors = vectors instanceof Float32Array ? vectors : new Float32Array()
+    const oldDims = meta.dims | 0
+    const useDims = oldDims || dims
+    if (oldVectors.length && !useDims) throw new Error('索引维度异常')
+    if (useDims && oldVectors.length % useDims !== 0) throw new Error('向量文件与 meta 不匹配')
+
+    const oldLen = oldVectors.length
+    const newFlat = new Float32Array(oldLen + embsAll.length * useDims)
+    if (oldLen) newFlat.set(oldVectors, 0)
+    for (let i = 0; i < embsAll.length; i++) {
+      newFlat.set(embsAll[i], oldLen + i * useDims)
+    }
+
+    meta.dims = useDims
+    meta.updatedAt = Date.now()
+
+    const chunkIds = []
+    for (let i = 0; i < parts.length; i++) {
+      const c = parts[i]
+      let id = buildChunkId(rel, c.startLine, c.endLine, c.text)
+      if (Object.prototype.hasOwnProperty.call(meta.chunks, id)) {
+        let k = 1
+        while (Object.prototype.hasOwnProperty.call(meta.chunks, id + ':dup' + k)) k++
+        id = id + ':dup' + k
+      }
+      chunkIds.push(id)
+      meta.chunks[id] = {
+        relativePath: rel,
+        heading: c.heading || '',
+        startLine: c.startLine,
+        endLine: c.endLine,
+        vectorOffset: oldLen + i * useDims,
+      }
+    }
+    meta.files[rel] = { mtimeMs: 0, chunkIds }
+
+    await ctx.writeFileBinary(vecPath, new Uint8Array(newFlat.buffer))
+    await ctx.writeTextFile(metaPath, JSON.stringify(meta, null, 2))
+
+    FLYSMART_CACHE = { libraryKey: cfgKey, meta, vectors: newFlat }
+    await dbg(
+      ctx,
+      '增量索引：完成',
+      { rel, chunks: parts.length, dims: useDims, totalVectors: newFlat.length },
+      true,
+    )
+    uiNotice(ctx, `增量索引完成：${rel}`, 'ok', 1400)
+  } finally {
+    FLYSMART_BUSY = false
+    setStatus({ state: 'idle', phase: '', currentFile: '', lastProgressAt: nowMs() })
+  }
+}
+
 async function clearIndex(ctx) {
   if (FLYSMART_BUSY) throw new Error('正在索引，稍后再试')
   if (!ctx) throw new Error('插件未激活')
@@ -1218,14 +1735,116 @@ async function clearIndex(ctx) {
   uiNotice(ctx, 'flymd-RAG：索引已删除', 'ok', 1600)
 }
 
-async function extractSnippet(ctx, absPath, startLine, endLine) {
+function spanLenByLines(lines, startIdx, endIdx) {
+  let n = 0
+  for (let i = startIdx; i <= endIdx; i++) {
+    n += String(lines[i] || '').length + 1
+  }
+  return n
+}
+
+function findBlockByLine(blocks, lineIdx) {
+  const arr = Array.isArray(blocks) ? blocks : []
+  for (const b of arr) {
+    if (!b) continue
+    const s = b.start | 0
+    const e = b.end | 0
+    if (lineIdx >= s && lineIdx <= e) return b
+  }
+  return arr.length ? arr[0] : { start: 0, end: Math.max(0, lineIdx | 0), heading: '', level: 0 }
+}
+
+function fitRangeWithinMaxChars(lines, blockStartIdx, blockEndIdx, startIdx, endIdx, maxChars) {
+  const max = Math.max(200, maxChars | 0)
+  let s = Math.max(blockStartIdx | 0, startIdx | 0)
+  let e = Math.min(blockEndIdx | 0, endIdx | 0)
+  if (e < s) e = s
+
+  let len = spanLenByLines(lines, s, e)
+  // 极端情况：命中范围本身就超长，先收缩到可用
+  while (len > max && s < e) {
+    const left = String(lines[s] || '').length + 1
+    const right = String(lines[e] || '').length + 1
+    if (right >= left) {
+      len -= right
+      e--
+    } else {
+      len -= left
+      s++
+    }
+  }
+
+  // 再向两侧扩展（优先吃“更短的一侧”以塞入更多信息）
+  while (len < max && (s > blockStartIdx || e < blockEndIdx)) {
+    const canL = s > blockStartIdx ? String(lines[s - 1] || '').length + 1 : 1e18
+    const canR = e < blockEndIdx ? String(lines[e + 1] || '').length + 1 : 1e18
+    if (canL === 1e18 && canR === 1e18) break
+
+    const chooseLeft = canL <= canR
+    if (chooseLeft && len + canL <= max) {
+      s--
+      len += canL
+      continue
+    }
+    if (!chooseLeft && len + canR <= max) {
+      e++
+      len += canR
+      continue
+    }
+    // 选中的一侧放不下，尝试另一侧
+    if (chooseLeft && canR < 1e18 && len + canR <= max) {
+      e++
+      len += canR
+      continue
+    }
+    if (!chooseLeft && canL < 1e18 && len + canL <= max) {
+      s--
+      len += canL
+      continue
+    }
+    break
+  }
+
+  return { startIdx: s, endIdx: e }
+}
+
+function buildSnippetInfoFromLines(lines, blocks, focusStartLine, focusEndLine, maxChars) {
+  const arr = Array.isArray(lines) ? lines : []
+  if (!arr.length) {
+    return { snippet: '', startLine: 1, endLine: 1, blockStartLine: 1, blockEndLine: 1, heading: '' }
+  }
+  const a = Math.max(1, Math.floor(focusStartLine || 1))
+  const b = Math.max(a, Math.floor(focusEndLine || a))
+  const s0 = Math.min(arr.length, a) - 1
+  const e0 = Math.min(arr.length, b) - 1
+
+  const block = findBlockByLine(blocks, s0)
+  const bs = Math.max(0, block.start | 0)
+  const be = Math.min(arr.length - 1, block.end | 0)
+
+  const r = fitRangeWithinMaxChars(arr, bs, be, s0, e0, maxChars)
+  let snippet = arr.slice(r.startIdx, r.endIdx + 1).join('\n').trim()
+  if (snippet) {
+    if (r.startIdx > bs) snippet = '…\n' + snippet
+    if (r.endIdx < be) snippet = snippet + '\n…'
+  }
+
+  return {
+    snippet,
+    startLine: r.startIdx + 1,
+    endLine: r.endIdx + 1,
+    blockStartLine: bs + 1,
+    blockEndLine: be + 1,
+    heading: String(block && block.heading ? block.heading : ''),
+  }
+}
+
+async function extractSnippet(ctx, absPath, startLine, endLine, maxChars) {
   const text = await readTextBestEffort(ctx, absPath, 12000)
   const lines = String(text || '').split(/\r?\n/)
-  const s = Math.max(1, Math.floor(startLine || 1)) - 1
-  const e = Math.min(lines.length, Math.max(s + 1, Math.floor(endLine || s + 1)))
-  const raw = lines.slice(s, e).join('\n').trim()
-  const max = 360
-  return raw.length > max ? raw.slice(0, max) + '…' : raw
+  const blocks = splitMarkdownBlocks(lines, 2)
+  const info = buildSnippetInfoFromLines(lines, blocks, startLine, endLine, maxChars || 1024)
+  return info.snippet
 }
 
 async function searchIndex(ctx, query, opt) {
@@ -1284,25 +1903,56 @@ async function searchIndex(ctx, query, opt) {
   }
 
   items.sort((a, b) => b.score - a.score)
-  const sliced = items.slice(0, topK)
 
   const root = await getLibraryRootRequired(ctx)
   const out = []
-  for (const it of sliced) {
+  const ctxMaxChars =
+    opt && typeof opt.contextMaxChars === 'number' && Number.isFinite(opt.contextMaxChars)
+      ? Math.max(200, Math.min(20000, Math.floor(opt.contextMaxChars)))
+      : cfg.search.contextMaxChars
+  const fileCache = new Map() // absPath -> { lines, blocks }
+  const seenBlocks = new Set()
+
+  for (const it of items) {
+    if (out.length >= topK) break
     const absPath = joinAbs(root, it.relativePath)
-    let snippet = ''
-    try {
-      snippet = await extractSnippet(ctx, absPath, it.startLine, it.endLine)
-    } catch {}
+    if (!absPath) continue
+
+    let cached = fileCache.get(absPath)
+    if (!cached) {
+      try {
+        const text = await readTextBestEffort(ctx, absPath, 12000)
+        const lines = String(text || '').split(/\r?\n/)
+        const blocks = splitMarkdownBlocks(lines, 2)
+        cached = { lines, blocks }
+        fileCache.set(absPath, cached)
+      } catch {
+        cached = { lines: [], blocks: [] }
+        fileCache.set(absPath, cached)
+      }
+    }
+    if (!cached.lines || !cached.lines.length) continue
+
+    const info = buildSnippetInfoFromLines(
+      cached.lines,
+      cached.blocks,
+      it.startLine,
+      it.endLine,
+      ctxMaxChars,
+    )
+    const key = `${it.relativePath}:${info.blockStartLine}-${info.blockEndLine}`
+    if (seenBlocks.has(key)) continue
+    seenBlocks.add(key)
+
     out.push({
       id: it.id,
       score: it.score,
       filePath: absPath,
       relative: it.relativePath,
-      heading: it.heading,
-      startLine: it.startLine,
-      endLine: it.endLine,
-      snippet,
+      heading: info.heading || it.heading,
+      startLine: info.startLine,
+      endLine: info.endLine,
+      snippet: info.snippet,
     })
   }
   return out
@@ -1317,14 +1967,23 @@ async function explainHit(ctx, hitId) {
   if (!c) throw new Error('未找到命中记录')
   const root = await getLibraryRootRequired(ctx)
   const absPath = joinAbs(root, String(c.relativePath || ''))
-  const snippet = await extractSnippet(ctx, absPath, c.startLine, c.endLine)
+  const text = await readTextBestEffort(ctx, absPath, 12000)
+  const lines = String(text || '').split(/\r?\n/)
+  const blocks = splitMarkdownBlocks(lines, 2)
+  const info = buildSnippetInfoFromLines(
+    lines,
+    blocks,
+    c.startLine,
+    c.endLine,
+    (cfg && cfg.search ? cfg.search.contextMaxChars : 1024) || 1024,
+  )
   return {
     filePath: absPath,
     relative: String(c.relativePath || ''),
-    heading: String(c.heading || ''),
-    startLine: c.startLine | 0,
-    endLine: c.endLine | 0,
-    snippet,
+    heading: info.heading || String(c.heading || ''),
+    startLine: info.startLine | 0,
+    endLine: info.endLine | 0,
+    snippet: info.snippet,
   }
 }
 
@@ -1693,6 +2352,8 @@ async function openSettingsDialog(settingsCtx) {
         embedding: embPatch,
       })
       cfg = next
+      // 设置变更后，立刻刷新增量监听（includeDirs/enabled 会影响监控范围）
+      try { void refreshIncrementalWatch(runtime, cfg) } catch {}
       uiNotice(settingsCtx, 'flymd-RAG 设置已保存', 'ok', 1400)
     } catch (e) {
       uiNotice(settingsCtx, e && e.message ? e.message : '保存失败', 'err', 2400)
@@ -1995,6 +2656,16 @@ export async function openSettings(context) {
 
 export function deactivate() {
   closeDialog()
+  stopIncrementalWatch()
+  try {
+    FLYSMART_INCR_QUEUE = []
+    FLYSMART_INCR_SET = new Set()
+    if (FLYSMART_INCR_TIMER) {
+      try { clearTimeout(FLYSMART_INCR_TIMER) } catch {}
+      FLYSMART_INCR_TIMER = 0
+    }
+    FLYSMART_INCR_RUNNING = false
+  } catch {}
   FLYSMART_CTX = null
   FLYSMART_BUSY = false
   FLYSMART_CACHE = { libraryKey: '', meta: null, vectors: null }

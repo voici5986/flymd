@@ -878,6 +878,14 @@ context.ui.notice('Read bytes: ' + bytes.length, 'ok');
 - Argument must be an absolute path; passing an empty or invalid path will throw an error;
 - Return value is always a `Uint8Array`, convenient for passing to `FormData`, `fetch` and similar APIs.
 
+### context.appendTextFile
+
+Append text to the end of a local file (does not overwrite existing content). Useful for “history logs” (e.g. incremental indexing logs).
+
+```javascript
+await context.appendTextFile('C:/tmp/my.log', 'one log line\\n');
+```
+
 ### context.saveMarkdownToCurrentFolder
 
 Save a piece of Markdown content directly as a file in the library, by default using the folder of the “current document” in the sidebar. If there is no current document, it falls back to the library root. This is useful for automatically generating `.md` files after parsing/translating PDFs.
