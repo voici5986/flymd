@@ -2885,32 +2885,97 @@ function buildPromptPrefix(kind){
     case '纠错': return '基于文档上下文，找出并修正错别字、语法问题，仅输出修订后的结果。'
     case '提纲': return '阅读文档上下文，输出一份结构化提纲（分级列表）。'
     case '翻译': return '将以下内容翻译成中文，保持原文格式和结构，译文要自然流畅、符合中文表达习惯。只输出翻译结果，不要添加任何解释。'
+    case '解疑': return aiText(
+      '你是严谨的助手。请对用户选中的内容进行“解疑”：解释它在说什么、关键概念/结论/前提；如果存在歧义，列出并给出可能解释；必要时给出简短例子帮助理解。用中文回答，使用 Markdown 排版。',
+      'You are a rigorous assistant. Please answer questions about the selected text: explain what it says, key concepts/conclusions/assumptions; list ambiguities and possible interpretations; add short examples if helpful. Reply in English and format with Markdown.'
+    )
     default: return ''
   }
 }
 
-async function quick(context, kind){
+function getDomSelectionText(){
+  try {
+    const doc = DOC()
+    const win = WIN()
+
+    // 优先：如果焦点在 iframe（例如 PDF/嵌入预览），尝试从 iframe 拿选区
+    const ae = doc && doc.activeElement
+    if (ae && String(ae.tagName || '').toUpperCase() === 'IFRAME') {
+      try {
+        const ifr = ae
+        const cw = ifr && ifr.contentWindow
+        const sel = cw && cw.getSelection ? cw.getSelection() : null
+        const t = sel ? String(sel.toString() || '') : ''
+        const s = String(t || '').trim()
+        if (s) return s
+      } catch {}
+    }
+
+    const sel = win && win.getSelection ? win.getSelection() : null
+    const t = sel ? String(sel.toString() || '') : ''
+    return String(t || '').trim()
+  } catch {}
+  return ''
+}
+
+function snapshotSelectedTextFromCtx(ctx){
+  try {
+    const mode = ctx && typeof ctx === 'object' ? String(ctx.mode || '') : ''
+    const fromCtx = String(ctx && ctx.selectedText ? ctx.selectedText : '').trim()
+    const dom = getDomSelectionText()
+
+    // 阅读/预览模式：ctx.selectedText 可能来自源码编辑器，优先用 DOM 选区
+    if (mode === 'preview') return dom || fromCtx
+    return fromCtx || dom
+  } catch {}
+  return ''
+}
+
+async function getSelectedTextSmart(context, ctx, presetText){
+  const preset = String(presetText || '').trim()
+  if (preset) return preset
+  const snap = snapshotSelectedTextFromCtx(ctx)
+  if (snap) return snap
+  try {
+    const sel = await context.getSelection?.()
+    const t = String(sel?.text || '').trim()
+    if (t) return t
+  } catch {}
+  return ''
+}
+
+async function quick(context, kind, options = {}){
   const inp = el('ai-text')
   const prefix = buildPromptPrefix(kind)
   let finalPrompt = prefix
 
-  // 对续写 / 润色 / 纠错：如果有选中文本，则优先基于选中内容进行处理
-  if (['续写', '润色', '纠错'].includes(kind)) {
-    try {
-      const sel = await context.getSelection?.()
-      if (sel && sel.text && sel.text.trim()) {
-        const selected = sel.text.trim()
-        finalPrompt = [
-          prefix,
-          '',
-          '当前选中内容：',
-          '',
-          selected,
-          '',
-          `请仅针对这段选中内容进行${kind}，不要处理文档中未选中的部分。`
-        ].join('\n')
-      }
-    } catch {}
+  // 选区策略：解疑必须有选区；续写/润色/纠错优先选区；其它不关心选区
+  const selectionPolicy = (kind === '解疑')
+    ? 'required'
+    : (['续写', '润色', '纠错'].includes(kind) ? 'prefer' : 'none')
+
+  const ctx = options && typeof options === 'object' ? options.ctx : null
+  const selected = await getSelectedTextSmart(context, ctx, options.selectedText)
+
+  if (selectionPolicy === 'required' && !selected) {
+    context.ui.notice(aiText('请先选中一段文本再使用“解疑”', 'Please select some text before using “Explain”'), 'err', 2200)
+    return
+  }
+
+  if (selected && selectionPolicy !== 'none') {
+    const tail = (kind === '解疑')
+      ? aiText('请仅围绕这段选中内容进行解疑，不要扩展到文档里未选中的其它内容。', 'Please focus only on the selected text; do not expand to other parts of the document.')
+      : `请仅针对这段选中内容进行${kind}，不要处理文档中未选中的部分。`
+
+    finalPrompt = [
+      prefix,
+      '',
+      aiText('当前选中内容：', 'Selected text:'),
+      '',
+      selected,
+      '',
+      tail
+    ].join('\n')
   }
 
   inp.value = finalPrompt
@@ -4053,41 +4118,55 @@ export async function activate(context) {
           {
             label: aiText('续写', 'Continue writing'),
             icon: '✍️',
-            onClick: async () => {
+            onClick: async (ctx) => {
+              const selectedText = snapshotSelectedTextFromCtx(ctx)
               await ensureWindow(context)
               el('ai-assist-win').style.display = 'block'
               setDockPush(true)
-              await quick(context, '续写')
+              await quick(context, '续写', { ctx, selectedText })
             }
           },
           {
             label: aiText('润色', 'Polish'),
             icon: '✨',
-            onClick: async () => {
+            onClick: async (ctx) => {
+              const selectedText = snapshotSelectedTextFromCtx(ctx)
               await ensureWindow(context)
               el('ai-assist-win').style.display = 'block'
               setDockPush(true)
-              await quick(context, '润色')
+              await quick(context, '润色', { ctx, selectedText })
             }
           },
           {
             label: aiText('纠错', 'Correct'),
             icon: '✅',
-            onClick: async () => {
+            onClick: async (ctx) => {
+              const selectedText = snapshotSelectedTextFromCtx(ctx)
               await ensureWindow(context)
               el('ai-assist-win').style.display = 'block'
               setDockPush(true)
-              await quick(context, '纠错')
+              await quick(context, '纠错', { ctx, selectedText })
             }
           },
           {
             label: aiText('提纲', 'Outline'),
             icon: '📋',
-            onClick: async () => {
+            onClick: async (ctx) => {
               await ensureWindow(context)
               el('ai-assist-win').style.display = 'block'
               setDockPush(true)
-              await quick(context, '提纲')
+              await quick(context, '提纲', { ctx })
+            }
+          },
+          {
+            label: aiText('解疑', 'Explain'),
+            icon: '❓',
+            onClick: async (ctx) => {
+              const selectedText = snapshotSelectedTextFromCtx(ctx)
+              await ensureWindow(context)
+              el('ai-assist-win').style.display = 'block'
+              setDockPush(true)
+              await quick(context, '解疑', { ctx, selectedText })
             }
           },
           {

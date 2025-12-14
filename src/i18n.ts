@@ -353,7 +353,7 @@ const dict = {
     'ext.vendor.thirdParty': '第三方',
     'ext.thirdParty.notice': '所有第三方插件均已审核，但仍可能带来数据与隐私风险。',
     // 扩展市场官方插件多语言文案（桌面端与官网共用语义）
-    'ext.ai.name': 'AI 写作助手',
+    'ext.ai.name': 'AI 助手',
     'ext.ai.author': '作者：飞速MarkDown',
     'ext.ai.desc': '智能写作助手，支持 AI 辅助写作、内容润色、语法检查和文本改错。让 AI 成为你的写作伙伴，显著提升写作效率和质量。支持多种 AI 模型，可自定义提示词。',
     'ext.pdf.name': '批量导出 PDF',
@@ -740,7 +740,7 @@ const dict = {
     'ext.vendor.thirdParty': 'Third-party',
     'ext.thirdParty.notice': 'All third-party extensions are reviewed, but they may still pose data and privacy risks.',
     // Official extensions (shared semantics with website)
-    'ext.ai.name': 'AI Writing Assistant',
+    'ext.ai.name': 'AI  Assistant',
     'ext.ai.author': 'By: FlyMD',
     'ext.ai.desc': 'Intelligent writing assistant with AI-assisted writing, content polishing, grammar checking and error correction. Let AI be your writing partner to significantly improve efficiency and quality. Supports multiple AI models with customizable prompts.',
     'ext.pdf.name': 'Batch Export PDF',
