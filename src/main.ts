@@ -8493,7 +8493,7 @@ function bindEvents() {
         openUploaderDialog,
         openWebdavSyncDialog,
         getWebdavSyncConfig,
-        openInBrowser: (url: string) => openUrl(url),
+        openInBrowser,
         installPluginFromGit,
         installPluginFromLocal,
         activatePlugin,
