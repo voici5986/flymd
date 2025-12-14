@@ -3,6 +3,13 @@
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
 
+## Update v0.7.7
+- Fixed: WebDAV sync scanning no longer skips required hidden paths; `.flymd/library-id.json` and extension-registered extra prefixes (e.g. flymd-RAG `.flymd/rag-index/<libraryId>`) can now be uploaded/synced correctly.
+- Improved: Built-in flymd-RAG upgraded to v0.1.1; toggling “Cloud Sync” in settings now refreshes WebDAV extra sync paths immediately to avoid stale index sync state.
+- Fixed: In the extension marketplace, third-party homepage links may fail to open for certain URL formats; URLs are now normalized .
+- Improved: Extension marketplace dialog layout and scroll area styling (wider/taller/denser spacing).
+- Improved: Built-in AI Assistant upgraded to v0.3.4; adds a new “Explain” quick action, and Continue/Polish/Correct now prefer selected text when available; marketplace copy renamed to “AI Assistant”.
+
 ## Update v0.7.6
 - Added: The Extensions panel now shows plugin provenance (Official / Third-party) and a safety notice for third-party extensions.
 - Added: Published a third-party extension “EasyImage2.0 Uploader”, which can upload images to a custom Web API by configuring URL, field names, and JsonPath.
