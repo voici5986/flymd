@@ -1260,6 +1260,18 @@ function ensureCss() {
     '.msg-actions{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap}',
     '.msg-action-btn{padding:0;border:none;background:none;color:#64748b;font-size:12px;cursor:pointer;text-decoration:none;transition:color .2s}',
     '.msg-action-btn:hover{color:#0f172a;text-decoration:underline}',
+    // RAG 引用列表：展示“引用到的笔记标题”，点击打开对应笔记
+    '.ai-kb-refs{margin-top:8px;padding:10px 12px;border:1px dashed rgba(148,163,184,.75);border-radius:12px;background:rgba(248,250,252,.9)}',
+    '.ai-kb-refs-title{font-size:12px;color:#64748b;margin-bottom:6px}',
+    '.ai-kb-refs-list{display:flex;flex-direction:column;gap:6px}',
+    '.ai-kb-ref{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;border:1px solid rgba(226,232,240,.9);background:#fff;color:#1e40af;text-decoration:none;font-size:12px;cursor:pointer;max-width:100%}',
+    '.ai-kb-ref:hover{background:rgba(239,246,255,.9);border-color:rgba(147,197,253,.9);text-decoration:none}',
+    '.ai-kb-ref-meta{color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}',
+    '#ai-assist-win.dark .ai-kb-refs{border-color:rgba(71,85,105,.9);background:rgba(17,24,39,.35)}',
+    '#ai-assist-win.dark .ai-kb-refs-title{color:#9ca3af}',
+    '#ai-assist-win.dark .ai-kb-ref{background:#111827;border-color:rgba(55,65,81,.9);color:#93c5fd}',
+    '#ai-assist-win.dark .ai-kb-ref:hover{background:rgba(30,41,59,.9);border-color:rgba(59,130,246,.6)}',
+    '#ai-assist-win.dark .ai-kb-ref-meta{color:#9ca3af}',
     '#ai-input{position:relative;padding:6px 8px;border-top:1px solid #e5e7eb;background:#fafafa}',
     '#ai-vresizer{position:absolute;right:0;top:0;width:8px;height:100%;cursor:ew-resize;background:transparent;z-index:10}',
     '#ai-vresizer:hover{background:rgba(59,130,246,0.15)}',
@@ -1512,8 +1524,23 @@ function ensureCss() {
   DOC().head.appendChild(css)
 }
 
-function pushMsg(role, content) {
-  __AI_SESSION__.messages.push({ role, content })
+function pushMsg(role, content, extra) {
+  const msg = { role, content }
+  if (extra && typeof extra === 'object') {
+    try { Object.assign(msg, extra) } catch {}
+  }
+  __AI_SESSION__.messages.push(msg)
+}
+
+function sanitizeChatMessageForAPI(m){
+  try {
+    if (!m || typeof m !== 'object') return null
+    const role = String(m.role || '').trim()
+    if (!role) return null
+    if (role !== 'system' && role !== 'user' && role !== 'assistant') return null
+    return { role, content: m.content }
+  } catch {}
+  return null
 }
 
 function renderMsgs(root) {
@@ -1610,6 +1637,59 @@ function renderMsgs(root) {
       d.textContent = String(m.content || '')
     }
     contentWrapper.appendChild(d)
+
+    // RAG 引用：显示“笔记标题”，并支持点击打开对应笔记
+    if (m.role === 'assistant' && m.kbRefs && Array.isArray(m.kbRefs) && m.kbRefs.length) {
+      const refsWrap = DOC().createElement('div')
+      refsWrap.className = 'ai-kb-refs'
+
+      const refsTitle = DOC().createElement('div')
+      refsTitle.className = 'ai-kb-refs-title'
+      refsTitle.textContent = aiText('引用笔记', 'Sources')
+      refsWrap.appendChild(refsTitle)
+
+      const list = DOC().createElement('div')
+      list.className = 'ai-kb-refs-list'
+
+      for (const ref of m.kbRefs) {
+        const a = DOC().createElement('a')
+        a.className = 'ai-kb-ref'
+        a.href = '#'
+
+        const filePath = String(ref && ref.filePath ? ref.filePath : '').trim()
+        const relative = String(ref && ref.relative ? ref.relative : '').trim()
+        const title = String(ref && ref.title ? ref.title : '').trim()
+        const heading = String(ref && ref.heading ? ref.heading : '').trim()
+        const startLine = Number(ref && ref.startLine ? ref.startLine : 0) || 0
+        const endLine = Number(ref && ref.endLine ? ref.endLine : 0) || 0
+        const n = Number(ref && ref.n ? ref.n : 0) || 0
+
+        const mainText = `[${n || ''}] ${title || relative || filePath || aiText('未命名笔记', 'Untitled')}`.trim()
+        const mainSpan = DOC().createElement('span')
+        mainSpan.textContent = mainText
+        a.appendChild(mainSpan)
+
+        const meta = DOC().createElement('span')
+        meta.className = 'ai-kb-ref-meta'
+        meta.textContent =
+          (heading ? ` · ${heading}` : '') +
+          ((relative || filePath) ? ` · ${(relative || filePath)}${startLine ? `:${startLine}-${endLine || startLine}` : ''}` : '')
+        a.appendChild(meta)
+
+        a.title = (relative || filePath || '') + (startLine ? `:${startLine}-${endLine || startLine}` : '')
+        a.addEventListener('click', async (e) => {
+          try { e.preventDefault(); e.stopPropagation() } catch {}
+          if (!filePath) return
+          if (!__AI_CONTEXT__ || typeof __AI_CONTEXT__.openFileByPath !== 'function') return
+          try { await __AI_CONTEXT__.openFileByPath(filePath) } catch {}
+        })
+
+        list.appendChild(a)
+      }
+
+      refsWrap.appendChild(list)
+      contentWrapper.appendChild(refsWrap)
+    }
 
     wrapper.appendChild(contentWrapper)
 
@@ -3822,21 +3902,53 @@ function buildKnowledgeContextText(hits, maxChars){
   return out.trim()
 }
 
+function deriveNoteTitleFromPath(p){
+  try {
+    const s = String(p || '').replace(/[\\]+/g, '/').trim()
+    const base = (s.split('/').pop() || '').trim()
+    if (!base) return ''
+    return base.replace(/\.[^/.]+$/, '') || base
+  } catch {}
+  return ''
+}
+
+function buildKbRefsFromHits(hits){
+  const arr = Array.isArray(hits) ? hits : []
+  const out = []
+  for (let i = 0; i < arr.length; i++) {
+    const h = arr[i] || {}
+    const filePath = String(h.filePath || '').trim()
+    const relative = String(h.relative || '').trim()
+    const title = deriveNoteTitleFromPath(relative) || deriveNoteTitleFromPath(filePath) || (relative || filePath || '')
+    out.push({
+      n: i + 1,
+      title,
+      heading: String(h.heading || '').trim(),
+      relative,
+      filePath,
+      startLine: Number(h.startLine || 0) || 0,
+      endLine: Number(h.endLine || 0) || 0,
+      score: (typeof h.score === 'number' && Number.isFinite(h.score)) ? h.score : null,
+    })
+  }
+  return out
+}
+
 async function maybeInjectKnowledgeContext(context, cfg, userMsgs, finalMsgs, textOnlyMsgs){
   const kb = normalizeKbCfgForAi(cfg)
-  if (!kb.enabled) return { finalMsgs, textOnlyMsgs, injected: false }
-  if (!context || typeof context.getPluginAPI !== 'function') return { finalMsgs, textOnlyMsgs, injected: false }
+  if (!kb.enabled) return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
+  if (!context || typeof context.getPluginAPI !== 'function') return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
 
   const query = getLastUserTextFromMsgs(userMsgs)
-  if (!query) return { finalMsgs, textOnlyMsgs, injected: false }
+  if (!query) return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
 
   const api = context.getPluginAPI('flymdRAG')
-  if (!api || typeof api.search !== 'function') return { finalMsgs, textOnlyMsgs, injected: false }
+  if (!api || typeof api.search !== 'function') return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
 
   try {
     if (typeof api.getConfig === 'function') {
       const vcfg = await api.getConfig()
-      if (vcfg && vcfg.enabled === false) return { finalMsgs, textOnlyMsgs, injected: false }
+      if (vcfg && vcfg.enabled === false) return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
     }
   } catch {}
 
@@ -3845,12 +3957,12 @@ async function maybeInjectKnowledgeContext(context, cfg, userMsgs, finalMsgs, te
     hits = await api.search(query, { topK: kb.topK })
   } catch (e) {
     console.warn('flymd-RAG 检索失败：', e)
-    return { finalMsgs, textOnlyMsgs, injected: false }
+    return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
   }
-  if (!hits || !hits.length) return { finalMsgs, textOnlyMsgs, injected: false }
+  if (!hits || !hits.length) return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
 
   const content = buildKnowledgeContextText(hits, kb.maxChars)
-  if (!content) return { finalMsgs, textOnlyMsgs, injected: false }
+  if (!content) return { finalMsgs, textOnlyMsgs, injected: false, hits: [] }
   const sysMsg = { role: 'system', content }
   const inject = (arr) => {
     const a = Array.isArray(arr) ? arr : []
@@ -3858,7 +3970,7 @@ async function maybeInjectKnowledgeContext(context, cfg, userMsgs, finalMsgs, te
     if (a[0] && a[0].role === 'system') return [a[0], sysMsg, ...a.slice(1)]
     return [sysMsg, ...a]
   }
-  return { finalMsgs: inject(finalMsgs), textOnlyMsgs: inject(textOnlyMsgs), injected: true }
+  return { finalMsgs: inject(finalMsgs), textOnlyMsgs: inject(textOnlyMsgs), injected: true, hits }
 }
 
 // 带快捷操作的发送函数
@@ -3927,7 +4039,10 @@ async function sendFromInputWithAction(context){
       const system = aiGetLocale() === 'en'
         ? `You are a professional writing assistant. Answer concisely and practically, with suggestions that can be directly applied. Current time: ${timeContext}`
         : `你是专业的中文写作助手，回答要简洁、实用、可直接落地。当前时间：${timeContext}`
-      const userMsgs = __AI_SESSION__.messages
+      const sessionMsgs = __AI_SESSION__.messages
+      const sessionApiMsgs = (Array.isArray(sessionMsgs) ? sessionMsgs : [])
+        .map(sanitizeChatMessageForAPI)
+        .filter(Boolean)
 
       const visionOn = isVisionEnabledForConfig(cfg)
       let userMsg
@@ -3951,7 +4066,7 @@ async function sendFromInputWithAction(context){
       }
 
       let finalMsgs = [{ role: 'system', content: system }, userMsg]
-      userMsgs.forEach(m => finalMsgs.push(m))
+      sessionApiMsgs.forEach(m => finalMsgs.push(m))
 
       // 纯文本降级版本：保留图片的文字说明，去掉 image_url 结构
       let textOnlyMsgs = finalMsgs
@@ -3960,15 +4075,19 @@ async function sendFromInputWithAction(context){
           const mergedText = visionBlocks.map(b => (b && b.type === 'text') ? String(b.text || '') : '').join('')
           const textUserMsg = { role: 'user', content: mergedText || ('文档上下文：\n\n' + docCtx) }
           textOnlyMsgs = [{ role: 'system', content: system }, textUserMsg]
-          userMsgs.forEach(m => textOnlyMsgs.push(m))
+          sessionApiMsgs.forEach(m => textOnlyMsgs.push(m))
         } catch {}
       }
 
       // RAG：可选追加知识库引用（默认关闭；未安装/未启用 flymd-RAG 时不影响现有行为）
+      let kbRefs = []
       try {
-        const r = await maybeInjectKnowledgeContext(context, cfg, userMsgs, finalMsgs, textOnlyMsgs)
+        const r = await maybeInjectKnowledgeContext(context, cfg, sessionApiMsgs, finalMsgs, textOnlyMsgs)
         finalMsgs = r.finalMsgs
         textOnlyMsgs = r.textOnlyMsgs
+        if (r && r.injected && r.hits && r.hits.length) {
+          kbRefs = buildKbRefsFromHits(r.hits)
+        }
       } catch (e) {
         console.warn('知识库联动失败：', e)
       }
@@ -4097,7 +4216,7 @@ async function sendFromInputWithAction(context){
       }
 
       __AI_LAST_REPLY__ = finalText || ''
-      pushMsg('assistant', __AI_LAST_REPLY__ || '[空响应]')
+      pushMsg('assistant', __AI_LAST_REPLY__ || '[空响应]', kbRefs && kbRefs.length ? { kbRefs } : null)
       renderMsgs(el('ai-chat'))
       // 同步会话库：写回当前文档的 active 会话
       try {

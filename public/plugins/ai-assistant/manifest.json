@@ -1,7 +1,7 @@
 {
   "id": "ai-assistant",
   "name": "AI 助手",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "author": "flyMD",
   "description": "多供应商 AI 写作助手",
   "i18n": {
