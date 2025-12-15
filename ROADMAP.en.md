@@ -3,6 +3,12 @@
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
 
+## Update v0.8.1
+- Added: Resizable split view (drag to adjust the ratio)
+- Added: WYSIWYG supports HTML rendering; optional HTML editing can be enabled in Theme settings (off by default) and will be converted back to Markdown
+- Improved: Built-in flymd-RAG upgraded to v0.1.3: adds file fingerprinting, incrementally re-embeds modified documents and cleans up stale chunk references; index sync temporarily disabled (risk > benefit)
+- Improved: Built-in “AI Assistant” upgraded to v0.3.7: shows knowledge-base citation paths; adaptive chat window sizing
+
 ## Update v0.8.0
 - Added: Font size setting (applies consistently across Source/Preview/WYSIWYG views)
 - Improved: Unified default font size to 16px (Source/Preview/WYSIWYG are consistent)

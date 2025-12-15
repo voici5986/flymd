@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use chrono::{DateTime, Utc};
 use std::time::Duration;
+use std::sync::OnceLock;
 
 #[cfg(target_os = "linux")]
 fn init_linux_render_env() {
@@ -18,6 +19,105 @@ fn init_linux_render_env() {
   use std::env;
   if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
     env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+  }
+}
+
+// 启动诊断日志：发布版也能落盘，便于定位“黑屏/卡初始化”等问题
+static STARTUP_LOG_PATH: OnceLock<std::path::PathBuf> = OnceLock::new();
+static PANIC_HOOK_INSTALLED: OnceLock<()> = OnceLock::new();
+
+fn now_epoch_ms() -> u128 {
+  std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|d| d.as_millis())
+    .unwrap_or(0)
+}
+
+fn try_write_log_line(path: &std::path::Path, line: &str) -> std::io::Result<()> {
+  use std::io::Write;
+  let mut f = std::fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(path)?;
+  writeln!(f, "{line}")?;
+  Ok(())
+}
+
+fn write_startup_log(line: &str) {
+  let Some(path) = STARTUP_LOG_PATH.get() else { return; };
+  let _ = try_write_log_line(path, line);
+}
+
+fn install_panic_hook_once() {
+  if PANIC_HOOK_INSTALLED.set(()).is_err() {
+    return;
+  }
+
+  std::panic::set_hook(Box::new(|info| {
+    // 注意：release 里 panic=abort，但 hook 仍有机会写入关键信息
+    let ts = now_epoch_ms();
+    write_startup_log(&format!("[panic] t={ts}ms {info}"));
+  }));
+}
+
+fn init_startup_log<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+  // 优先写入 app_log_dir；失败则退回 app_data_dir；再失败就放弃（不能为了日志把应用搞崩）
+  let dir = app
+    .path()
+    .app_log_dir()
+    .or_else(|_| app.path().app_data_dir());
+  let Ok(mut dir) = dir else { return; };
+  let _ = std::fs::create_dir_all(&dir);
+  dir.push("flymd-startup.log");
+
+  // 覆盖写：保留“最近一次启动”的信息，避免无限增长
+  if let Ok(mut f) = std::fs::OpenOptions::new()
+    .create(true)
+    .write(true)
+    .truncate(true)
+    .open(&dir)
+  {
+    use std::io::Write;
+    let _ = writeln!(f, "flymd 启动诊断日志（仅保留最近一次）");
+  }
+
+  let _ = STARTUP_LOG_PATH.set(dir);
+  install_panic_hook_once();
+
+  let ts = now_epoch_ms();
+  write_startup_log(&format!("[boot] t={ts}ms pid={}", std::process::id()));
+
+  if let Ok(exe) = std::env::current_exe() {
+    let exe_s = exe.to_string_lossy();
+    write_startup_log(&format!("[boot] exe={exe_s}"));
+    if exe_s.contains("AppTranslocation") {
+      write_startup_log("[boot] 检测到 AppTranslocation（quarantine/未签名常见触发点）");
+    }
+  }
+  if let Ok(cwd) = std::env::current_dir() {
+    write_startup_log(&format!("[boot] cwd={}", cwd.to_string_lossy()));
+  }
+
+  let args: Vec<String> = std::env::args().collect();
+  if !args.is_empty() {
+    write_startup_log(&format!("[boot] args={}", args.join(" ")));
+  }
+
+  // 只记录少量关键变量：GUI 启动与终端启动差异最大的就是这些
+  for k in ["PATH", "HOME", "SHELL", "LANG", "LC_ALL"] {
+    if let Ok(v) = std::env::var(k) {
+      write_startup_log(&format!("[env] {k}={v}"));
+    }
+  }
+
+  if let Ok(p) = app.path().app_log_dir() {
+    write_startup_log(&format!("[path] app_log_dir={}", p.to_string_lossy()));
+  }
+  if let Ok(p) = app.path().app_config_dir() {
+    write_startup_log(&format!("[path] app_config_dir={}", p.to_string_lossy()));
+  }
+  if let Ok(p) = app.path().app_data_dir() {
+    write_startup_log(&format!("[path] app_data_dir={}", p.to_string_lossy()));
   }
 }
 
@@ -53,6 +153,7 @@ fn dispatch_open_file_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, path: 
     return;
   }
   let path_str = path.to_string_lossy().to_string();
+  write_startup_log(&format!("[open] {}", path_str));
   // 先写入共享状态：即便当前窗口尚未创建，前端仍可在启动后通过 get_pending_open_path 主动拉取
   if let Some(state) = app.try_state::<PendingOpenPath>() {
     if let Ok(mut slot) = state.0.lock() {
@@ -80,6 +181,7 @@ fn init_macos_open_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> 
   PluginBuilder::new("macos-open-handler")
     .on_event(|app, event| {
       if let RunEvent::Opened { urls } = event {
+        write_startup_log(&format!("[run] Opened urls={}", urls.len()));
         for url in urls {
           // 仅处理 file:// URL，其它协议（如自定义 URL Scheme）暂不介入
           if url.scheme() != "file" {
@@ -724,6 +826,9 @@ fn main() {
       open_as_sticky_note
     ])
     .setup(|app| {
+      init_startup_log(&app.handle());
+      write_startup_log("[setup] begin");
+
       // Windows "打开方式/默认程序" 传入的文件参数处理
       #[cfg(target_os = "windows")]
       {
@@ -764,6 +869,8 @@ fn main() {
           let _ = win.set_focus();
         }
       }
+
+      write_startup_log("[setup] end");
       Ok(())
     });
 

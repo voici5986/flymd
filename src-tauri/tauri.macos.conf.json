@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "飞速MarkDown",
+        "width": 960,
+        "height": 640,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "visible": false,
+        "transparent": false,
+        "shadow": true,
+        "devtools": true,
+        "dragDropEnabled": true
+      }
+    ]
+  }
+}
