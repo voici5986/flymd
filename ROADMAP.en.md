@@ -2,6 +2,8 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v0.8.3
+- New: New tab name incremental naming
 
 ## Update v0.8.2
 - Added: Tabs can be reordered via drag & drop
