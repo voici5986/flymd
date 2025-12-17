@@ -5,6 +5,7 @@
 // 3) 只调用后端：/auth/* /billing/* /ai/proxy/*
 
 const CFG_KEY = 'aiNovel.config'
+const DRAFT_KEY = 'aiNovel.lastDraft'
 const AI_LOCALE_LS_KEY = 'flymd.locale'
 
 const DEFAULT_CFG = {
@@ -259,6 +260,19 @@ function sliceTail(s, maxChars) {
   const m = Math.max(0, maxChars | 0)
   if (!m || str.length <= m) return str
   return str.slice(str.length - m)
+}
+
+function sliceHeadTail(s, maxChars, headRatio) {
+  const str = String(s || '')
+  const m = Math.max(0, maxChars | 0)
+  if (!m || str.length <= m) return str
+  const r = Math.min(0.8, Math.max(0.2, Number(headRatio || 0.45) || 0.45))
+  const sep = '\n\n……（中间省略）……\n\n'
+  const headLen = Math.max(1, Math.floor((m - sep.length) * r))
+  const tailLen = Math.max(1, (m - sep.length) - headLen)
+  const head = str.slice(0, headLen)
+  const tail = str.slice(Math.max(0, str.length - tailLen))
+  return head + sep + tail
 }
 
 function normFsPath(p) {
@@ -530,26 +544,52 @@ async function getBibleDocText(ctx, cfg) {
     const inf = await inferProjectDir(ctx, cfg)
     if (!inf) return ''
 
-    const limit = (cfg && cfg.ctx && cfg.ctx.maxBibleChars) ? (cfg.ctx.maxBibleChars | 0) : (cfg && cfg.ctx && cfg.ctx.maxProgressChars ? (cfg.ctx.maxProgressChars | 0) : 10000)
-    const files = [
-      ['02_故事圣经.md', t('【故事圣经】', '[Bible]')],
-      ['02_世界设定.md', t('【世界设定】', '[World]')],
-      ['03_主要角色.md', t('【主要角色】', '[Characters]')],
-      ['04_人物关系.md', t('【人物关系】', '[Relations]')],
-      ['05_章节大纲.md', t('【章节大纲】', '[Outline]')],
+    // 注意：limit 是“总预算”，不是每个文件都给一份预算；否则 5 个文件会膨胀成 5*limit，角色设定很容易被挤掉/被上游截断。
+    const limit = (cfg && cfg.ctx && cfg.ctx.maxBibleChars) ? Math.max(0, cfg.ctx.maxBibleChars | 0) : 10000
+    if (limit <= 0) return ''
+
+    const sections = [
+      // 兼容旧项目/手动改名：同一分节允许多个候选文件名，按顺序取第一个存在且非空的。
+      { key: 'bible', w: 0.35, head: 0.55, title: t('【故事圣经】', '[Bible]'), files: ['02_故事圣经.md', '02_故事资料.md', '02_圣经.md'] },
+      { key: 'world', w: 0.20, head: 0.70, title: t('【世界设定】', '[World]'), files: ['02_世界设定.md', '02_设定.md', '02_世界观.md'] },
+      { key: 'chars', w: 0.25, head: 0.85, title: t('【主要角色】', '[Characters]'), files: ['03_主要角色.md', '03_主要人物.md', '03_角色设定.md', '03_人物设定.md'] },
+      { key: 'rels', w: 0.10, head: 0.80, title: t('【人物关系】', '[Relations]'), files: ['04_人物关系.md', '04_关系.md', '04_角色关系.md'] },
+      { key: 'outline', w: 0.10, head: 0.80, title: t('【章节大纲】', '[Outline]'), files: ['05_章节大纲.md', '05_大纲.md', '05_剧情大纲.md'] },
     ]
 
-    const parts = []
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i]
-      const abs = joinFsPath(inf.projectAbs, f[0])
-      try {
-        const text = await readTextAny(ctx, abs)
-        const v = sliceTail(text, limit).trim()
-        if (v) parts.push(f[1] + '\n' + v)
-      } catch {}
+    async function readFirstNonEmpty(fileList) {
+      for (let i = 0; i < fileList.length; i++) {
+        const abs = joinFsPath(inf.projectAbs, fileList[i])
+        try {
+          const text = await readTextAny(ctx, abs)
+          const s = safeText(text).trim()
+          if (s) return s
+        } catch {}
+      }
+      return ''
     }
-    return parts.join('\n\n')
+
+    const present = []
+    for (let i = 0; i < sections.length; i++) {
+      const sec = sections[i]
+      const raw = await readFirstNonEmpty(sec.files)
+      if (!raw) continue
+      present.push({ ...sec, raw })
+    }
+    if (!present.length) return ''
+
+    const totalW = present.reduce((a, s) => a + (Number.isFinite(s.w) ? s.w : 0), 0) || 1
+    const parts = []
+    for (let i = 0; i < present.length; i++) {
+      const sec = present[i]
+      const cap = Math.max(200, Math.floor(limit * (sec.w / totalW)))
+      const v = sliceHeadTail(sec.raw, cap, sec.head).trim()
+      if (v) parts.push(sec.title + '\n' + v)
+    }
+
+    // 最终再兜底一次总长度，避免拼接误差/多语言标题导致超预算
+    const all = parts.join('\n\n')
+    return sliceHeadTail(all, limit, 0.6).trim()
   } catch {
     return ''
   }
@@ -1359,7 +1399,13 @@ async function openSettingsDialog(ctx) {
     const who = me && (me.username || me.id) ? `  ·  ${t('用户', 'User')}: ${(me.username || ('#' + String(me.id)) )}` : ''
     const ts = json && json.ts ? String(json.ts) : ''
     const when = ts ? `  ·  ${t('时间', 'Time')}: ${ts}` : ''
-    billingBox.innerHTML = `<span class="ain-ok">${t('余额', 'Balance')}: ${b.balance_chars}</span>  ·  ${t('单价', 'Price')}: ${b.price_per_1k_chars}/1k  ·  ${t('试用', 'Trial')}: ${b.trial_chars}${who}${when}`
+    const explain = t(
+      '计费范围：计费字符=输入+输出。输入包含：指令/硬约束/进度脉络/资料(圣经)/前文尾部/RAG命中/走向/待审计或待修订文本；输出包含：候选/正文/审计/摘要/修订结果。咨询与 embedding 不计费（仅记录日志）。',
+      'Billing: billed chars = input + output. Input may include instruction/constraints/progress/meta/prev/RAG hits/choice/text-to-audit-or-revise; output includes options/story/audit/summary/revision. Consult & embeddings are not billed (logs only).'
+    )
+    billingBox.innerHTML =
+      `<span class="ain-ok">${t('余额', 'Balance')}: ${b.balance_chars}</span>  ·  ${t('单价', 'Price')}: ${b.price_per_1k_chars}/1k  ·  ${t('试用', 'Trial')}: ${b.trial_chars}${who}${when}` +
+      `<div class="ain-muted" style="margin-top:6px">${explain}</div>`
   }
 
   btnLogin.onclick = async () => {
@@ -1910,9 +1956,23 @@ async function openNextOptionsDialog(ctx) {
   const row2 = mkBtnRow()
   const btnAppend = document.createElement('button')
   btnAppend.className = 'ain-btn gray'
-  btnAppend.textContent = t('把生成正文追加到文末', 'Append generated text')
+  btnAppend.textContent = t('追加到文末（立即生效）', 'Append to doc (immediate)')
   btnAppend.disabled = true
+
+  const btnAppendDraft = document.createElement('button')
+  btnAppendDraft.className = 'ain-btn gray'
+  btnAppendDraft.style.marginLeft = '8px'
+  btnAppendDraft.textContent = t('追加为草稿（可审阅）', 'Append as draft (reviewable)')
+  btnAppendDraft.disabled = true
+
+  const btnReview = document.createElement('button')
+  btnReview.className = 'ain-btn gray'
+  btnReview.style.marginLeft = '8px'
+  btnReview.textContent = t('审阅/修改草稿（对话）', 'Review/Edit draft (chat)')
+  btnReview.disabled = true
   row2.appendChild(btnAppend)
+  row2.appendChild(btnAppendDraft)
+  row2.appendChild(btnReview)
   sec.appendChild(row2)
 
   body.appendChild(sec)
@@ -1920,6 +1980,7 @@ async function openNextOptionsDialog(ctx) {
   let lastArr = null
   let selectedIdx = 0
   let lastText = ''
+  let lastDraftId = ''
 
   function renderOptions() {
     optBox.innerHTML = ''
@@ -2040,8 +2101,11 @@ async function openNextOptionsDialog(ctx) {
 
     setBusy(btnWrite, true)
     btnAppend.disabled = true
+    btnAppendDraft.disabled = true
+    btnReview.disabled = true
     out.textContent = t('续写中…', 'Writing...')
     lastText = ''
+    lastDraftId = ''
     try {
       const r = await apiFetch(ctx, cfg, 'ai/proxy/chat/', {
         mode: 'novel',
@@ -2065,6 +2129,7 @@ async function openNextOptionsDialog(ctx) {
       if (!lastText) throw new Error(t('后端未返回正文', 'Backend returned empty text'))
       out.textContent = lastText
       btnAppend.disabled = false
+      btnAppendDraft.disabled = false
       ctx.ui.notice(t('已生成正文（未写入文档）', 'Generated (not inserted)'), 'ok', 1600)
     } catch (e) {
       out.textContent = t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e))
@@ -2102,6 +2167,42 @@ async function openNextOptionsDialog(ctx) {
     }
   }
 
+  btnAppendDraft.onclick = async () => {
+    try {
+      if (!lastText) return
+      cfg = await loadCfg(ctx)
+      const bid = genDraftBlockId()
+      const block = wrapDraftBlock(lastText, bid)
+      appendToDoc(ctx, block)
+      lastDraftId = bid
+      try { await saveLastDraftInfo(ctx, cfg, bid) } catch {}
+      btnReview.disabled = false
+      ctx.ui.notice(t('已追加草稿块（不会自动更新进度）', 'Draft appended (no auto progress update)'), 'ok', 2000)
+      try {
+        await openDraftReviewDialog(ctx, { blockId: bid, text: lastText })
+      } catch {}
+    } catch (e) {
+      ctx.ui.notice(t('追加失败：', 'Append failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
+  btnReview.onclick = async () => {
+    try {
+      cfg = await loadCfg(ctx)
+      const bid = String(lastDraftId || '').trim()
+      if (!bid) {
+        ctx.ui.notice(t('没有可审阅的草稿：请先用“追加为草稿”。', 'No draft: append as draft first.'), 'err', 2200)
+        return
+      }
+      const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+      const txt = extractDraftBlockText(doc, bid)
+      if (!txt) throw new Error(t('未找到草稿块', 'Draft block not found'))
+      await openDraftReviewDialog(ctx, { blockId: bid, text: txt })
+    } catch (e) {
+      ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
   inp.ta.addEventListener('keydown', (e) => {
     const k = e && e.key ? String(e.key) : ''
     if (k === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -2118,7 +2219,7 @@ async function openWriteWithChoiceDialog(ctx) {
     throw new Error(t('请先在设置里填写上游 BaseURL 和模型', 'Please set upstream BaseURL and model in Settings first'))
   }
 
-  const { body } = createDialogShell(t('续写正文（按走向）', 'Write (with choice)'))
+  const { body } = createDialogShell(t('走向及续写', 'Options & Write'))
 
   const sec = document.createElement('div')
   sec.className = 'ain-card'
@@ -2141,20 +2242,33 @@ async function openWriteWithChoiceDialog(ctx) {
   btnOptions.className = 'ain-btn'
   btnOptions.textContent = t('生成走向候选', 'Generate options')
 
+  const btnInsertJson = document.createElement('button')
+  btnInsertJson.className = 'ain-btn gray'
+  btnInsertJson.style.marginLeft = '8px'
+  btnInsertJson.textContent = t('插入候选 JSON 到文末', 'Insert JSON to doc')
+  btnInsertJson.disabled = true
+
   const btnWrite = document.createElement('button')
   btnWrite.className = 'ain-btn gray'
   btnWrite.style.marginLeft = '8px'
   btnWrite.textContent = t('按选中走向续写', 'Write with selected')
   btnWrite.disabled = true
 
+  const btnWriteDirect = document.createElement('button')
+  btnWriteDirect.className = 'ain-btn gray'
+  btnWriteDirect.style.marginLeft = '8px'
+  btnWriteDirect.textContent = t('直接按指令续写', 'Write directly')
+
   const btnAppend = document.createElement('button')
   btnAppend.className = 'ain-btn gray'
   btnAppend.style.marginLeft = '8px'
-  btnAppend.textContent = t('把生成正文追加到文末', 'Append generated text')
+  btnAppend.textContent = t('追加到文末（立即生效）', 'Append to doc (immediate)')
   btnAppend.disabled = true
 
   row.appendChild(btnOptions)
+  row.appendChild(btnInsertJson)
   row.appendChild(btnWrite)
+  row.appendChild(btnWriteDirect)
   row.appendChild(btnAppend)
   sec.appendChild(row)
 
@@ -2191,11 +2305,44 @@ async function openWriteWithChoiceDialog(ctx) {
   out.textContent = t('走向候选/正文会显示在这里。', 'Options/output will appear here.')
   sec.appendChild(out)
 
+  const row2 = mkBtnRow()
+  const btnAppendDraft = document.createElement('button')
+  btnAppendDraft.className = 'ain-btn gray'
+  btnAppendDraft.textContent = t('追加为草稿（可审阅）', 'Append as draft (reviewable)')
+  btnAppendDraft.disabled = true
+  const btnReview = document.createElement('button')
+  btnReview.className = 'ain-btn gray'
+  btnReview.style.marginLeft = '8px'
+  btnReview.textContent = t('审阅/修改草稿（对话）', 'Review/Edit draft (chat)')
+  btnReview.disabled = true
+  row2.appendChild(btnAppendDraft)
+  row2.appendChild(btnReview)
+  sec.appendChild(row2)
+
   body.appendChild(sec)
 
   let lastArr = null
   let selectedIdx = 0
   let lastText = ''
+  let lastDraftId = ''
+
+  function ensureInstruction(v, fallback) {
+    const s = safeText(v).trim()
+    return s || safeText(fallback).trim() || '继续'
+  }
+
+  function makeDirectChoice(instruction) {
+    const ins = safeText(instruction).trim().replace(/\s+/g, ' ')
+    const one = ins.length > 180 ? (ins.slice(0, 180) + '…') : ins
+    return {
+      title: t('直接续写', 'Direct'),
+      one_line: one,
+      conflict: '',
+      characters: [],
+      foreshadow: '',
+      risks: ''
+    }
+  }
 
   function getInstructionText() {
     return safeText(inp.ta.value).trim()
@@ -2243,18 +2390,17 @@ async function openWriteWithChoiceDialog(ctx) {
 
   async function doOptions() {
     cfg = await loadCfg(ctx)
-    const instruction = getInstructionText()
+    const instruction = ensureInstruction(getInstructionText(), t('基于当前上下文给出走向候选', 'Give options based on current context'))
     const localConstraints = getLocalConstraintsText()
-    if (!instruction) {
-      ctx.ui.notice(t('请先写清楚“本章目标/要求”', 'Please provide instruction/goal'), 'err', 2000)
-      return
-    }
 
     setBusy(btnOptions, true)
     setBusy(btnWrite, true)
+    setBusy(btnWriteDirect, true)
     setBusy(btnAppend, true)
+    setBusy(btnInsertJson, true)
     btnWrite.disabled = true
     btnAppend.disabled = true
+    btnInsertJson.disabled = true
     out.textContent = t('生成走向候选中…（最多等 3 分钟）', 'Generating options... (up to 3 minutes)')
     lastArr = null
     selectedIdx = 0
@@ -2291,11 +2437,14 @@ async function openWriteWithChoiceDialog(ctx) {
       renderOptions()
       out.textContent = JSON.stringify(arr, null, 2)
       btnWrite.disabled = false
+      btnInsertJson.disabled = false
       ctx.ui.notice(t('已生成走向候选', 'Options ready'), 'ok', 1600)
     } catch (e) {
       out.textContent = t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e))
     } finally {
       setBusy(btnOptions, false)
+      setBusy(btnInsertJson, false)
+      setBusy(btnWriteDirect, false)
     }
   }
 
@@ -2306,13 +2455,9 @@ async function openWriteWithChoiceDialog(ctx) {
     if (!chosen) return
 
     cfg = await loadCfg(ctx)
-    const instruction = getInstructionText()
+    const instruction = ensureInstruction(getInstructionText(), t('按选中走向续写本章', 'Write with the selected option'))
     const localConstraints = getLocalConstraintsText()
     const constraints = mergeConstraints(cfg, localConstraints)
-    if (!instruction) {
-      ctx.ui.notice(t('请先写清楚“本章目标/要求”', 'Please provide instruction/goal'), 'err', 2000)
-      return
-    }
 
     const prev = await getPrevTextForRequest(ctx, cfg)
     const progress = await getProgressDocText(ctx, cfg)
@@ -2323,9 +2468,13 @@ async function openWriteWithChoiceDialog(ctx) {
     } catch {}
 
     setBusy(btnWrite, true)
+    setBusy(btnWriteDirect, true)
     btnAppend.disabled = true
+    btnAppendDraft.disabled = true
+    btnReview.disabled = true
     out.textContent = t('续写中…（最多等 3 分钟）', 'Writing... (up to 3 minutes)')
     lastText = ''
+    lastDraftId = ''
     try {
       const r = await apiFetch(ctx, cfg, 'ai/proxy/chat/', {
         mode: 'novel',
@@ -2349,16 +2498,89 @@ async function openWriteWithChoiceDialog(ctx) {
       if (!lastText) throw new Error(t('后端未返回正文', 'Backend returned empty text'))
       out.textContent = lastText
       btnAppend.disabled = false
+      btnAppendDraft.disabled = false
       ctx.ui.notice(t('已生成正文（未写入文档）', 'Generated (not inserted)'), 'ok', 1600)
     } catch (e) {
       out.textContent = t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e))
     } finally {
+      setBusy(btnWrite, false)
+      setBusy(btnWriteDirect, false)
+    }
+  }
+
+  async function doWriteDirect() {
+    cfg = await loadCfg(ctx)
+    const instruction = getInstructionText()
+    const localConstraints = getLocalConstraintsText()
+    const constraints = mergeConstraints(cfg, localConstraints)
+    if (!instruction) {
+      ctx.ui.notice(t('请先写清楚“本章目标/要求”', 'Please provide instruction/goal'), 'err', 2000)
+      return
+    }
+
+    const prev = await getPrevTextForRequest(ctx, cfg)
+    const progress = await getProgressDocText(ctx, cfg)
+    const bible = await getBibleDocText(ctx, cfg)
+    let rag = null
+    try {
+      rag = await rag_get_hits(ctx, cfg, instruction + '\n\n' + sliceTail(prev, 2000))
+    } catch {}
+
+    setBusy(btnWriteDirect, true)
+    setBusy(btnWrite, true)
+    btnAppend.disabled = true
+    btnAppendDraft.disabled = true
+    btnReview.disabled = true
+    out.textContent = t('续写中…（不走候选）', 'Writing... (no options)')
+    lastText = ''
+    lastDraftId = ''
+
+    try {
+      const r = await apiFetch(ctx, cfg, 'ai/proxy/chat/', {
+        mode: 'novel',
+        action: 'write',
+        upstream: {
+          baseUrl: cfg.upstream.baseUrl,
+          apiKey: cfg.upstream.apiKey,
+          model: cfg.upstream.model
+        },
+        input: {
+          instruction,
+          progress,
+          bible,
+          prev,
+          choice: makeDirectChoice(instruction),
+          constraints: constraints || undefined,
+          rag: rag || undefined
+        }
+      })
+      lastText = safeText(r && r.text).trim()
+      if (!lastText) throw new Error(t('后端未返回正文', 'Backend returned empty text'))
+      out.textContent = lastText
+      btnAppend.disabled = false
+      btnAppendDraft.disabled = false
+      ctx.ui.notice(t('已生成正文（未写入文档）', 'Generated (not inserted)'), 'ok', 1600)
+    } catch (e) {
+      out.textContent = t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e))
+    } finally {
+      setBusy(btnWriteDirect, false)
       setBusy(btnWrite, false)
     }
   }
 
   btnOptions.onclick = () => { doOptions().catch(() => {}) }
   btnWrite.onclick = () => { doWrite().catch(() => {}) }
+  btnWriteDirect.onclick = () => { doWriteDirect().catch(() => {}) }
+  btnInsertJson.onclick = () => {
+    try {
+      const arr = Array.isArray(lastArr) ? lastArr : null
+      if (!arr) return
+      appendToDoc(ctx, JSON.stringify(arr, null, 2))
+      ctx.ui.notice(t('已插入候选（JSON）到文末', 'Inserted JSON'), 'ok', 1600)
+    } catch (e) {
+      ctx.ui.notice(t('插入失败：', 'Insert failed: ') + (e && e.message ? e.message : String(e)), 'err', 2400)
+    }
+  }
   selSelect.onchange = () => {
     const v = parseInt(String(selSelect.value || '0'), 10)
     if (!Number.isFinite(v)) return
@@ -2373,6 +2595,39 @@ async function openWriteWithChoiceDialog(ctx) {
       progress_auto_update_after_accept(ctx, lastText, '续写正文追加到文末')
     } catch (e) {
       ctx.ui.notice(t('追加失败：', 'Append failed: ') + (e && e.message ? e.message : String(e)), 'err', 2400)
+    }
+  }
+
+  btnAppendDraft.onclick = async () => {
+    try {
+      if (!lastText) return
+      cfg = await loadCfg(ctx)
+      const bid = genDraftBlockId()
+      appendToDoc(ctx, wrapDraftBlock(lastText, bid))
+      lastDraftId = bid
+      try { await saveLastDraftInfo(ctx, cfg, bid) } catch {}
+      btnReview.disabled = false
+      ctx.ui.notice(t('已追加草稿块（不会自动更新进度）', 'Draft appended (no auto progress update)'), 'ok', 2000)
+      try { await openDraftReviewDialog(ctx, { blockId: bid, text: lastText }) } catch {}
+    } catch (e) {
+      ctx.ui.notice(t('追加失败：', 'Append failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
+  btnReview.onclick = async () => {
+    try {
+      cfg = await loadCfg(ctx)
+      const bid = String(lastDraftId || '').trim()
+      if (!bid) {
+        ctx.ui.notice(t('没有可审阅的草稿：请先用“追加为草稿”。', 'No draft: append as draft first.'), 'err', 2200)
+        return
+      }
+      const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+      const txt = extractDraftBlockText(doc, bid)
+      if (!txt) throw new Error(t('未找到草稿块', 'Draft block not found'))
+      await openDraftReviewDialog(ctx, { blockId: bid, text: txt })
+    } catch (e) {
+      ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
     }
   }
 
@@ -2477,6 +2732,8 @@ function tryParseOptionsDataFromText(text) {
   // 去掉 ```json 围栏
   const m = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(t0)
   if (m && m[1]) t0 = safeText(m[1]).trim()
+  // 去 BOM（某些代理会塞）
+  t0 = t0.replace(/^\uFEFF/, '').trim()
 
   function pick(x) {
     if (Array.isArray(x)) return x
@@ -2502,6 +2759,70 @@ function tryParseOptionsDataFromText(text) {
       if (arr && arr.length) return arr
     } catch {}
   }
+
+  // 截断 JSON 兜底：尽量从数组里捞出“完整对象”
+  function tryParsePartialJsonArray(s) {
+    const str = safeText(s)
+    const i0 = str.indexOf('[')
+    if (i0 < 0) return null
+
+    let inStr = false
+    let esc = false
+    let depth = 0
+    let objStart = -1
+    const out = []
+
+    for (let i = i0 + 1; i < str.length; i++) {
+      const ch = str[i]
+      if (inStr) {
+        if (esc) { esc = false; continue }
+        if (ch === '\\') { esc = true; continue }
+        if (ch === '"') { inStr = false; continue }
+        continue
+      }
+      if (ch === '"') { inStr = true; continue }
+      if (ch === '{') {
+        if (depth === 0) objStart = i
+        depth++
+        continue
+      }
+      if (ch === '}') {
+        if (depth > 0) depth--
+        if (depth === 0 && objStart >= 0) {
+          const seg = str.slice(objStart, i + 1)
+          objStart = -1
+          try {
+            const v = JSON.parse(seg)
+            if (v && typeof v === 'object') out.push(v)
+          } catch {}
+        }
+        continue
+      }
+      // 看到 ] 就可以停（即便有尾巴）
+      if (ch === ']') break
+    }
+
+    if (!out.length) return null
+    // 统一成我们 UI 需要的字段（缺省填空）
+    return out.map((it) => {
+      const x = it && typeof it === 'object' ? it : {}
+      const fo = x.foreshadow
+      const foTxt = (fo && typeof fo === 'object') ? JSON.stringify(fo, null, 2) : safeText(fo)
+      return {
+        title: safeText(x.title || x.name).trim() || t('未命名', 'Untitled'),
+        one_line: safeText(x.one_line || x.oneline || x.summary).trim(),
+        conflict: safeText(x.conflict).trim(),
+        characters: Array.isArray(x.characters) ? x.characters : [],
+        foreshadow: safeText(foTxt).trim(),
+        risks: safeText(x.risks).trim(),
+      }
+    })
+  }
+
+  try {
+    const arr2 = tryParsePartialJsonArray(t0)
+    if (arr2 && arr2.length) return arr2
+  } catch {}
 
   // 编号/项目符号列表兜底
   const lines = t0.split(/\r?\n/)
@@ -2535,6 +2856,106 @@ function appendToDoc(ctx, text) {
   const cur = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
   const sep = cur.trim() ? '\n\n' : ''
   ctx.setEditorValue(cur + sep + safeText(text))
+}
+
+function genDraftBlockId() {
+  try {
+    const r = Math.random().toString(16).slice(2, 10)
+    return String(Date.now()) + '-' + r
+  } catch {
+    return String(Date.now())
+  }
+}
+
+function draftBeginMarker(id) {
+  return `<!-- AINOVEL:DRAFT:BEGIN id=${String(id || '').trim()} -->`
+}
+
+function draftEndMarker(id) {
+  return `<!-- AINOVEL:DRAFT:END id=${String(id || '').trim()} -->`
+}
+
+function wrapDraftBlock(text, id) {
+  const bid = String(id || '').trim()
+  const t0 = safeText(text).trim()
+  return draftBeginMarker(bid) + '\n' + t0 + '\n' + draftEndMarker(bid)
+}
+
+function findDraftBlockRange(docText, id) {
+  const doc = safeText(docText)
+  const bid = String(id || '').trim()
+  if (!bid) return null
+  const a = draftBeginMarker(bid)
+  const b = draftEndMarker(bid)
+  const i0 = doc.lastIndexOf(a)
+  if (i0 < 0) return null
+  const i1 = doc.indexOf(b, i0 + a.length)
+  if (i1 < 0) return null
+  const contentStart = i0 + a.length
+  const contentEnd = i1
+  return { i0, i1, contentStart, contentEnd, a, b }
+}
+
+function extractDraftBlockText(docText, id) {
+  const r = findDraftBlockRange(docText, id)
+  if (!r) return ''
+  const mid = safeText(docText).slice(r.contentStart, r.contentEnd)
+  return mid.replace(/^\s*\r?\n/, '').replace(/\r?\n\s*$/, '').trim()
+}
+
+function replaceDraftBlockText(docText, id, newText) {
+  const r = findDraftBlockRange(docText, id)
+  if (!r) return null
+  const doc = safeText(docText)
+  const before = doc.slice(0, r.contentStart)
+  const after = doc.slice(r.contentEnd)
+  const mid = '\n' + safeText(newText).trim() + '\n'
+  return before + mid + after
+}
+
+function findLastDraftIdInDoc(docText) {
+  const doc = safeText(docText)
+  const re = /<!--\s*AINOVEL:DRAFT:BEGIN\s+id=([^\s]+)\s*-->/g
+  let m = null
+  let last = ''
+  while ((m = re.exec(doc)) !== null) {
+    if (m[1]) last = String(m[1]).trim()
+  }
+  return last
+}
+
+async function saveLastDraftInfo(ctx, cfg, blockId) {
+  try {
+    const inf = await inferProjectDir(ctx, cfg)
+    const val = {
+      blockId: String(blockId || ''),
+      projectRel: inf && inf.projectRel ? String(inf.projectRel) : '',
+      ts: Date.now()
+    }
+    if (ctx && ctx.storage && typeof ctx.storage.set === 'function') {
+      await ctx.storage.set(DRAFT_KEY, val)
+    }
+    return val
+  } catch {
+    return null
+  }
+}
+
+async function loadLastDraftInfo(ctx) {
+  try {
+    if (!ctx || !ctx.storage || typeof ctx.storage.get !== 'function') return null
+    const v = await ctx.storage.get(DRAFT_KEY)
+    if (!v || typeof v !== 'object') return null
+    const blockId = v.blockId ? String(v.blockId) : ''
+    if (!blockId) return null
+    return {
+      blockId,
+      projectRel: v.projectRel ? String(v.projectRel) : '',
+      ts: v.ts ? Number(v.ts) : 0
+    }
+  } catch {
+    return null
+  }
 }
 
 function _fmtLocalTs() {
@@ -3002,6 +3423,10 @@ async function openConsultDialog(ctx) {
 
   const q = mkTextarea(t('你想问什么？例如：后续走向、人物动机、节奏、伏笔回收、章节安排…', 'Ask about plot, motivation, pacing, foreshadowing...'), '')
   sec.appendChild(q.wrap)
+  
+  const cons = mkTextarea(t('本次硬约束（可空，合并全局硬约束后一起生效）', 'Hard constraints (optional, merged with global constraints)'), '')
+  cons.ta.style.minHeight = '70px'
+  sec.appendChild(cons.wrap)
 
   const out = document.createElement('div')
   out.className = 'ain-out'
@@ -3041,6 +3466,7 @@ async function openConsultDialog(ctx) {
     const prev = await getPrevTextForRequest(ctx, cfg)
     const progress = await getProgressDocText(ctx, cfg)
     const bible = await getBibleDocText(ctx, cfg)
+    const constraints = mergeConstraints(cfg, safeText(cons.ta.value).trim())
     let rag = null
     try {
       rag = await rag_get_hits(ctx, cfg, question + '\n\n' + sliceTail(prev, 2000))
@@ -3064,6 +3490,7 @@ async function openConsultDialog(ctx) {
           progress,
           bible,
           prev,
+          constraints,
           rag: rag || undefined
         }
       }, {
@@ -3092,6 +3519,265 @@ async function openConsultDialog(ctx) {
       ctx.ui.notice(t('已追加到文末', 'Appended'), 'ok', 1800)
     } catch (e) {
       ctx.ui.notice(t('追加失败：', 'Append failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+}
+
+async function openMetaUpdateDialog(ctx) {
+  let cfg = await loadCfg(ctx)
+  if (!cfg.token) throw new Error(t('请先登录后端', 'Please login first'))
+  if (!cfg.upstream || !cfg.upstream.baseUrl || !cfg.upstream.model) {
+    throw new Error(t('请先在设置里填写上游 BaseURL 和模型', 'Please set upstream BaseURL and model in Settings first'))
+  }
+
+  const { body } = createDialogShell(t('更新资料文件（提议）', 'Update meta files (proposal)'))
+
+  const sec = document.createElement('div')
+  sec.className = 'ain-card'
+  sec.innerHTML = `<div style="font-weight:700;margin-bottom:6px">${t('让 AI 生成“资料更新提议”，你审阅后再写入文件（不会自动改资料）', 'Ask AI for a proposal; you review then write files (no auto changes).')}</div>`
+
+  const goal = mkTextarea(t('变更目标/要求（必填）', 'Goal / change request (required)'), '')
+  goal.ta.style.minHeight = '90px'
+  sec.appendChild(goal.wrap)
+
+  const cons = mkTextarea(t('本次硬约束（可空）', 'Hard constraints (optional)'), '')
+  cons.ta.style.minHeight = '70px'
+  sec.appendChild(cons.wrap)
+
+  const pick = document.createElement('div')
+  pick.className = 'ain-muted'
+  pick.style.marginTop = '6px'
+  pick.textContent = t('选择要更新的文件：', 'Pick files to update:')
+  sec.appendChild(pick)
+
+  function mkCheck(label, checked) {
+    const row = document.createElement('div')
+    row.style.display = 'flex'
+    row.style.alignItems = 'center'
+    row.style.gap = '8px'
+    row.style.marginTop = '6px'
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.checked = !!checked
+    const tx = document.createElement('div')
+    tx.className = 'ain-muted'
+    tx.textContent = label
+    row.appendChild(cb)
+    row.appendChild(tx)
+    return { row, cb }
+  }
+
+  const cWorld = mkCheck('02_世界设定.md', true)
+  const cChars = mkCheck('03_主要角色.md', true)
+  const cRels = mkCheck('04_人物关系.md', true)
+  const cOutline = mkCheck('05_章节大纲.md', true)
+  sec.appendChild(cWorld.row)
+  sec.appendChild(cChars.row)
+  sec.appendChild(cRels.row)
+  sec.appendChild(cOutline.row)
+
+  const rowBtn = mkBtnRow()
+  const btnGen = document.createElement('button')
+  btnGen.className = 'ain-btn'
+  btnGen.textContent = t('生成更新提议', 'Generate proposal')
+  const btnWrite = document.createElement('button')
+  btnWrite.className = 'ain-btn gray'
+  btnWrite.style.marginLeft = '8px'
+  btnWrite.textContent = t('写入所选资料文件', 'Write selected files')
+  btnWrite.disabled = true
+  rowBtn.appendChild(btnGen)
+  rowBtn.appendChild(btnWrite)
+  sec.appendChild(rowBtn)
+
+  const out = document.createElement('div')
+  out.className = 'ain-out'
+  out.style.marginTop = '10px'
+  out.textContent = t('生成后会在下方分文件显示，允许你手动再改。', 'After generation, per-file previews will appear below. You can edit manually.')
+  sec.appendChild(out)
+
+  const pWorld = mkTextarea('02_世界设定.md', '')
+  const pChars = mkTextarea('03_主要角色.md', '')
+  const pRels = mkTextarea('04_人物关系.md', '')
+  const pOutline = mkTextarea('05_章节大纲.md', '')
+  pWorld.ta.style.minHeight = '140px'
+  pChars.ta.style.minHeight = '140px'
+  pRels.ta.style.minHeight = '140px'
+  pOutline.ta.style.minHeight = '140px'
+
+  body.appendChild(sec)
+  body.appendChild(pWorld.wrap)
+  body.appendChild(pChars.wrap)
+  body.appendChild(pRels.wrap)
+  body.appendChild(pOutline.wrap)
+
+  let lastProposal = null
+
+  function anySelected() {
+    return !!(cWorld.cb.checked || cChars.cb.checked || cRels.cb.checked || cOutline.cb.checked)
+  }
+
+  function fillFromData(data) {
+    const d = data && typeof data === 'object' ? data : null
+    if (!d) return false
+    if (d.world != null) pWorld.ta.value = safeText(d.world).trim()
+    if (d.characters != null) pChars.ta.value = safeText(d.characters).trim()
+    if (d.relations != null) pRels.ta.value = safeText(d.relations).trim()
+    if (d.outline != null) pOutline.ta.value = safeText(d.outline).trim()
+    return true
+  }
+
+  function grabFromText(txt, sectionName) {
+    const t0 = safeText(txt)
+    const re = new RegExp('【' + sectionName + '】\\s*([\\s\\S]*?)(?=\\n\\s*【|$)', 'g')
+    const m = re.exec(t0)
+    return m && m[1] ? String(m[1]).trim() : ''
+  }
+
+  async function readMetaFiles(inf) {
+    const base = inf && inf.projectAbs ? String(inf.projectAbs) : ''
+    const out0 = { world: '', characters: '', relations: '', outline: '' }
+    if (!base) return out0
+    try { out0.world = safeText(await readTextAny(ctx, joinFsPath(base, '02_世界设定.md'))) } catch {}
+    try { out0.characters = safeText(await readTextAny(ctx, joinFsPath(base, '03_主要角色.md'))) } catch {}
+    try { out0.relations = safeText(await readTextAny(ctx, joinFsPath(base, '04_人物关系.md'))) } catch {}
+    try { out0.outline = safeText(await readTextAny(ctx, joinFsPath(base, '05_章节大纲.md'))) } catch {}
+    return out0
+  }
+
+  btnGen.onclick = async () => {
+    try {
+      cfg = await loadCfg(ctx)
+      const g = safeText(goal.ta.value).trim()
+      if (!g) {
+        ctx.ui.notice(t('请先填写“变更目标/要求”', 'Please input goal/change request'), 'err', 2000)
+        return
+      }
+      if (!anySelected()) {
+        ctx.ui.notice(t('请至少选择一个资料文件', 'Pick at least one file'), 'err', 2000)
+        return
+      }
+
+      const inf = await inferProjectDir(ctx, cfg)
+      if (!inf) throw new Error(t('无法推断当前项目：请先在“项目管理”选择项目', 'Cannot infer project; select one in Project Manager'))
+
+      const cur = await readMetaFiles(inf)
+      const progress = await getProgressDocText(ctx, cfg)
+      const prev = await getPrevTextForRequest(ctx, cfg)
+      let rag = null
+      try {
+        rag = await rag_get_hits(ctx, cfg, g + '\n\n' + sliceTail(prev, 2000))
+      } catch {}
+
+      const constraints = mergeConstraints(cfg, safeText(cons.ta.value).trim())
+
+      setBusy(btnGen, true)
+      btnWrite.disabled = true
+      out.textContent = t('生成资料更新提议中…（不计费）', 'Generating proposal... (no billing)')
+      lastProposal = null
+
+      const resp = await apiFetchConsultWithJob(ctx, cfg, {
+        upstream: {
+          baseUrl: cfg.upstream.baseUrl,
+          apiKey: cfg.upstream.apiKey,
+          model: cfg.upstream.model
+        },
+        input: {
+          async: true,
+          mode: 'job',
+          task: 'meta_update',
+          goal: g,
+          constraints,
+          progress,
+          prev,
+          rag: rag || undefined,
+          world: cur.world,
+          characters: cur.characters,
+          relations: cur.relations,
+          outline: cur.outline,
+          // 兼容旧实现：同时带 question，防止后端忽略 task
+          question: [
+            '任务：基于“变更目标/要求”，对小说资料文件做增量修订（不是正文）。',
+            '输出按分节：【世界设定】【主要角色】【人物关系】【章节大纲】【需要你补充】。',
+            g
+          ].join('\n')
+        }
+      }, {
+        onTick: ({ waitMs }) => {
+          const s = Math.max(0, Math.round(waitMs / 1000))
+          out.textContent = t('生成中… 已等待 ', 'Generating... waited ') + s + 's'
+        }
+      })
+
+      lastProposal = resp
+      const data = resp && resp.data && typeof resp.data === 'object' ? resp.data : null
+      if (!fillFromData(data)) {
+        const txt = safeText(resp && resp.text)
+        pWorld.ta.value = grabFromText(txt, '世界设定')
+        pChars.ta.value = grabFromText(txt, '主要角色')
+        pRels.ta.value = grabFromText(txt, '人物关系')
+        pOutline.ta.value = grabFromText(txt, '章节大纲')
+      }
+
+      btnWrite.disabled = false
+      out.textContent = safeText(resp && resp.text).trim() || t('已生成提议', 'Proposal ready')
+      ctx.ui.notice(t('已生成资料更新提议（未写入）', 'Proposal ready (not written)'), 'ok', 1800)
+    } catch (e) {
+      out.textContent = t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e))
+    } finally {
+      setBusy(btnGen, false)
+    }
+  }
+
+  btnWrite.onclick = async () => {
+    try {
+      cfg = await loadCfg(ctx)
+      const inf = await inferProjectDir(ctx, cfg)
+      if (!inf) throw new Error(t('无法推断当前项目', 'Cannot infer project'))
+      if (!anySelected()) return
+
+      const todo = []
+      if (cWorld.cb.checked) todo.push(['02_世界设定.md', safeText(pWorld.ta.value).trim()])
+      if (cChars.cb.checked) todo.push(['03_主要角色.md', safeText(pChars.ta.value).trim()])
+      if (cRels.cb.checked) todo.push(['04_人物关系.md', safeText(pRels.ta.value).trim()])
+      if (cOutline.cb.checked) todo.push(['05_章节大纲.md', safeText(pOutline.ta.value).trim()])
+
+      // 防呆：别把空内容覆盖掉
+      const bad = todo.filter((x) => !x[1])
+      if (bad.length) {
+        throw new Error(t('有文件内容为空，拒绝写入：', 'Refuse to write empty: ') + bad.map((x) => x[0]).join(', '))
+      }
+
+      const ok = await openConfirmDialog(ctx, {
+        title: t('写入资料文件', 'Write meta files'),
+        message: t('将覆盖写入以下文件：\n', 'Will overwrite files:\n') + todo.map((x) => '- ' + x[0]).join('\n')
+      })
+      if (!ok) return
+
+      setBusy(btnWrite, true)
+      for (let i = 0; i < todo.length; i++) {
+        const f = todo[i]
+        await writeTextAny(ctx, joinFsPath(inf.projectAbs, f[0]), f[1].trim() + '\n')
+      }
+      ctx.ui.notice(t('已写入资料文件', 'Meta files written'), 'ok', 1800)
+      btnWrite.disabled = true
+
+      const okIdx = await openConfirmDialog(ctx, {
+        title: t('更新 RAG 索引', 'Update RAG index'),
+        message: t('资料已更新。现在更新 RAG 索引以便检索命中最新内容？（可能会调用 embedding）', 'Meta updated. Update RAG index now? (may call embeddings)')
+      })
+      if (okIdx) {
+        try {
+          setBusy(btnWrite, true)
+          await rag_build_or_update_index(ctx, cfg)
+          ctx.ui.notice(t('RAG 索引已更新', 'RAG index updated'), 'ok', 1600)
+        } catch (e) {
+          ctx.ui.notice(t('RAG 更新失败：', 'RAG update failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+        }
+      }
+    } catch (e) {
+      ctx.ui.notice(t('写入失败：', 'Write failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    } finally {
+      setBusy(btnWrite, false)
     }
   }
 }
@@ -3296,6 +3982,184 @@ async function openProgressUpdateDialog(ctx) {
       out.textContent = t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e))
     }
   }
+}
+
+async function callNovelRevise(ctx, cfg, baseText, instruction, localConstraints, history) {
+  if (!cfg || !cfg.token) throw new Error(t('请先登录后端', 'Please login first'))
+  if (!cfg.upstream || !cfg.upstream.baseUrl || !cfg.upstream.model) {
+    throw new Error(t('请先在设置里填写上游 BaseURL 和模型', 'Please set upstream BaseURL and model in Settings first'))
+  }
+  const inst = safeText(instruction).trim()
+  if (!inst) throw new Error(t('请先写清楚“修改要求”', 'Please provide edit request'))
+
+  const text = safeText(baseText)
+  const prev = await getPrevTextForRequest(ctx, cfg)
+  const progress = await getProgressDocText(ctx, cfg)
+  const bible = await getBibleDocText(ctx, cfg)
+  const constraints = mergeConstraints(cfg, localConstraints)
+
+  let rag = null
+  try {
+    const q = inst + '\n\n' + sliceTail(text, 2000) + '\n\n' + sliceTail(prev, 2000)
+    rag = await rag_get_hits(ctx, cfg, q)
+  } catch {}
+
+  const json = await apiFetch(ctx, cfg, 'ai/proxy/chat/', {
+    mode: 'novel',
+    action: 'revise',
+    upstream: {
+      baseUrl: cfg.upstream.baseUrl,
+      apiKey: cfg.upstream.apiKey,
+      model: cfg.upstream.model
+    },
+    input: {
+      instruction: inst,
+      text,
+      history: Array.isArray(history) ? history.slice(-10) : undefined,
+      progress,
+      bible,
+      prev,
+      constraints: constraints || undefined,
+      rag: rag || undefined
+    }
+  })
+  return json
+}
+
+async function openDraftReviewDialog(ctx, opts) {
+  let cfg = await loadCfg(ctx)
+  if (!cfg.token) throw new Error(t('请先登录后端', 'Please login first'))
+  if (!cfg.upstream || !cfg.upstream.baseUrl || !cfg.upstream.model) {
+    throw new Error(t('请先在设置里填写上游 BaseURL 和模型', 'Please set upstream BaseURL and model in Settings first'))
+  }
+
+  const o = opts || {}
+  const blockId = o.blockId ? String(o.blockId) : ''
+  const title = String(o.title || t('审阅/修改草稿（对话）', 'Review/Edit (chat)'))
+  const initialText = safeText(o.text)
+
+  const { body } = createDialogShell(title)
+
+  const sec = document.createElement('div')
+  sec.className = 'ain-card'
+  sec.innerHTML = `<div style="font-weight:700;margin-bottom:6px">${t('草稿正文（可手动改）', 'Draft text (editable)')}</div>`
+
+  const taText = mkTextarea('', initialText)
+  taText.ta.style.minHeight = '220px'
+  sec.appendChild(taText.wrap)
+
+  const secChat = document.createElement('div')
+  secChat.className = 'ain-card'
+  secChat.innerHTML = `<div style="font-weight:700;margin-bottom:6px">${t('对话修改', 'Chat edits')}</div>`
+
+  const taCons = mkTextarea(t('本次硬约束（可空）', 'Hard constraints (optional)'), '')
+  taCons.ta.style.minHeight = '70px'
+  secChat.appendChild(taCons.wrap)
+
+  const taAsk = mkTextarea(t('你希望怎么改？（一条条说，越具体越好）', 'What to change? (be specific)'), '')
+  taAsk.ta.style.minHeight = '90px'
+  secChat.appendChild(taAsk.wrap)
+
+  const log = document.createElement('div')
+  log.className = 'ain-out'
+  log.style.marginTop = '10px'
+  log.textContent = t('这里会记录对话。', 'Conversation will appear here.')
+  secChat.appendChild(log)
+
+  const row = mkBtnRow()
+  const btnSend = document.createElement('button')
+  btnSend.className = 'ain-btn'
+  btnSend.textContent = t('发送修改请求', 'Send edit request')
+  const btnApply = document.createElement('button')
+  btnApply.className = 'ain-btn gray'
+  btnApply.style.marginLeft = '8px'
+  btnApply.textContent = t('覆盖草稿块（定稿）', 'Overwrite draft block (finalize)')
+  btnApply.disabled = !blockId
+  row.appendChild(btnSend)
+  row.appendChild(btnApply)
+  secChat.appendChild(row)
+
+  body.appendChild(sec)
+  body.appendChild(secChat)
+
+  const history = []
+
+  function renderLog() {
+    if (!history.length) {
+      log.textContent = t('这里会记录对话。', 'Conversation will appear here.')
+      return
+    }
+    const lines = []
+    const take = history.slice(-12)
+    for (let i = 0; i < take.length; i++) {
+      const it = take[i] || {}
+      const u = safeText(it.user).trim()
+      const a = safeText(it.assistant).trim()
+      if (u) lines.push('用户：' + u)
+      if (a) lines.push('AI：' + a)
+      lines.push('')
+    }
+    log.textContent = lines.join('\n').trim()
+  }
+
+  btnSend.onclick = async () => {
+    try {
+      cfg = await loadCfg(ctx)
+      const ask = safeText(taAsk.ta.value).trim()
+      if (!ask) {
+        ctx.ui.notice(t('请先写清楚“修改要求”', 'Please input edit request'), 'err', 1800)
+        return
+      }
+      const curText = safeText(taText.ta.value)
+      setBusy(btnSend, true)
+      outBusy()
+      const hist = history.slice(-10).map((x) => ({ user: x.user, assistant: x.assistant }))
+      const json = await callNovelRevise(ctx, cfg, curText, ask, safeText(taCons.ta.value).trim(), hist)
+      const next = safeText(json && json.text).trim()
+      if (!next) throw new Error(t('后端未返回正文', 'Backend returned empty text'))
+      taText.ta.value = next
+      history.push({ user: ask, assistant: next })
+      taAsk.ta.value = ''
+      renderLog()
+      ctx.ui.notice(t('已生成修订版本（未写入）', 'Revised (not written)'), 'ok', 1600)
+    } catch (e) {
+      ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2400)
+    } finally {
+      setBusy(btnSend, false)
+    }
+
+    function outBusy() {
+      try { log.textContent = t('生成修订中…', 'Revising...') } catch {}
+    }
+  }
+
+  btnApply.onclick = async () => {
+    try {
+      if (!blockId) return
+      cfg = await loadCfg(ctx)
+      const nextText = safeText(taText.ta.value).trim()
+      if (!nextText) {
+        ctx.ui.notice(t('正文不能为空', 'Text cannot be empty'), 'err', 1800)
+        return
+      }
+      const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+      const replaced = replaceDraftBlockText(doc, blockId, nextText)
+      if (replaced == null) {
+        throw new Error(t('未找到草稿块：可能已被手动删除或文件已切换。', 'Draft block not found.'))
+      }
+      setBusy(btnApply, true)
+      ctx.setEditorValue(replaced)
+      // 定稿后再更新进度（避免反复改稿污染进度脉络）
+      try { progress_auto_update_after_accept(ctx, nextText, '草稿定稿覆盖写入') } catch {}
+      ctx.ui.notice(t('已覆盖草稿块', 'Draft overwritten'), 'ok', 1800)
+    } catch (e) {
+      ctx.ui.notice(t('覆盖失败：', 'Overwrite failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    } finally {
+      setBusy(btnApply, false)
+    }
+  }
+
+  renderLog()
 }
 
 async function openProjectManagerDialog(ctx) {
@@ -3555,20 +4419,43 @@ export function activate(context) {
           }
         },
         {
-          label: t('走向候选', 'Options'),
+          label: t('走向及续写', 'Options & Write'),
           onClick: async () => {
             try {
-              await openNextOptionsDialog(context)
+              await openWriteWithChoiceDialog(context)
             } catch (e) {
               context.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
             }
           }
         },
         {
-          label: t('续写正文（按走向）', 'Write (with choice)'),
+          label: t('审阅/修改草稿（对话）', 'Review/Edit draft (chat)'),
           onClick: async () => {
             try {
-              await openWriteWithChoiceDialog(context)
+              const cfg = await loadCfg(context)
+              const doc = safeText(context.getEditorValue ? context.getEditorValue() : '')
+              let bid = findLastDraftIdInDoc(doc)
+              if (!bid) {
+                const last = await loadLastDraftInfo(context)
+                bid = last && last.blockId ? String(last.blockId) : ''
+              }
+              bid = String(bid || '').trim()
+              if (!bid) {
+                throw new Error(t('未发现草稿块：请先用“追加为草稿（可审阅）”。', 'No draft block: append as draft first.'))
+              }
+              const txt = extractDraftBlockText(doc, bid)
+              if (!txt) throw new Error(t('未找到草稿块：可能已被手动删除或当前文件不是写入文件。', 'Draft block not found in current doc.'))
+              await openDraftReviewDialog(context, { blockId: bid, text: txt })
+            } catch (e) {
+              context.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+            }
+          }
+        },
+        {
+          label: t('更新资料文件（提议）', 'Update meta files (proposal)'),
+          onClick: async () => {
+            try {
+              await openMetaUpdateDialog(context)
             } catch (e) {
               context.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
             }
