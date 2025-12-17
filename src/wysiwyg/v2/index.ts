@@ -14,6 +14,7 @@ import { automd } from '@milkdown/plugin-automd'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import { upload, uploadConfig } from '@milkdown/plugin-upload'
 import { uploader } from './plugins/paste'
+import { protectExcelDollarRefs, unprotectExcelDollarRefs } from '../../utils/excelFormula'
 import { mermaidPlugin } from './plugins/mermaid'
 import { mathInlineViewPlugin, mathBlockViewPlugin } from './plugins/math'
 import { htmlMediaPlugin } from './plugins/htmlMedia'
@@ -246,6 +247,8 @@ export async function enableWysiwygV2(root: HTMLElement, initialMd: string, onCh
   // 规范化内容：空内容也是合法的（新文档或空文档）
   const content0 = (initialMd || '').toString()
   const content = maybeConvertHtmlTableBlocksToGfm(content0)
+  // 保护 Excel 公式里的 `$`，避免被 remark-math / 输入规则误识别为行内数学
+  const contentForEditor = protectExcelDollarRefs(content)
   console.log('[WYSIWYG V2] enableWysiwygV2 called, content length:', content.length)
 
   // 仅销毁旧编辑器与观察器，保留外层传入的 root（避免被移除导致空白）
@@ -253,7 +256,7 @@ export async function enableWysiwygV2(root: HTMLElement, initialMd: string, onCh
   _root = root
   _onChange = onChange
   _suppressInitialUpdate = true
-  _lastMd = content
+  _lastMd = contentForEditor
 
   const editor = await Editor.make()
     .config((ctx) => {
@@ -431,8 +434,9 @@ export async function enableWysiwygV2(root: HTMLElement, initialMd: string, onCh
           return s
         } catch { return md2 }
       })()
-      _lastMd = md3
-      try { _onChange?.(md3) } catch {}
+      const md4 = unprotectExcelDollarRefs(md3)
+      _lastMd = md4
+      try { _onChange?.(md4) } catch {}
       try { setTimeout(() => { try { rewriteLocalImagesToAsset() } catch {} }, 0) } catch {}
       try { scheduleCodeCopyRefresh() } catch {}
       // Markdown 更新时，也刷新 Mermaid 渲染 - 已由 Milkdown 插件处理
@@ -451,7 +455,10 @@ export async function disableWysiwygV2() {
   } catch {}
   try {
     if (_editor) {
-      try { const mdNow = await (_editor as any).action(getMarkdown()); _lastMd = mdNow;} catch {}
+      try {
+        const mdNow = await (_editor as any).action(getMarkdown())
+        _lastMd = unprotectExcelDollarRefs(mdNow)
+      } catch {}
     }
   } catch {}
   try { if (_imgObserver) { _imgObserver.disconnect(); _imgObserver = null } } catch {}
@@ -483,7 +490,8 @@ export async function wysiwygV2ReplaceAll(markdown: string) {
     const ctx: any = (_editor as any).ctx
     // 若 editorView 尚未就绪或已被销毁，直接跳过，避免 MilkdownError 冒泡
     try { ctx.get(editorViewCtx) } catch { return }
-    const next = maybeConvertHtmlTableBlocksToGfm(String(markdown || ''))
+    const next0 = maybeConvertHtmlTableBlocksToGfm(String(markdown || ''))
+    const next = protectExcelDollarRefs(next0)
     await _editor.action(replaceAll(next))
   } catch {}
 }
@@ -2073,7 +2081,6 @@ export function wysiwygV2GetSelectedText(): string {
     return ''
   }
 }
-
 
 
 

@@ -34,6 +34,7 @@ import { uploadImageToS3R2, type UploaderConfig } from './uploader/s3'
 import { openUploaderDialog as openUploaderDialogInternal, testUploaderConnectivity } from './uploader/uploaderDialog'
 import { uploadImageFromContextMenu } from './uploader/manualImageUpload'
 import { transcodeToWebpIfNeeded } from './utils/image'
+import { protectExcelDollarRefs } from './utils/excelFormula'
 import { saveImageToLocalAndGetPathCore, toggleUploaderEnabledFromMenuCore } from './core/imagePaste'
 // 方案A：多库管理（统一 libraries/activeLibraryId）
 import { getLibraries, getActiveLibraryId, getActiveLibraryRoot, setActiveLibraryId as setActiveLibId, upsertLibrary, removeLibrary as removeLib, renameLibrary as renameLib } from './utils/library'
@@ -1589,6 +1590,8 @@ async function renderPreviewLight() {
     const { body } = splitYamlFrontMatter(raw)
     raw = body
   } catch {}
+  // Excel 公式里的 `$` 不是行内数学分隔符：先转义，避免 KaTeX 把整行当数学渲染
+  raw = protectExcelDollarRefs(raw)
   const html = md!.render(raw)
   // 方案 A：占位符机制不需要 DOMPurify
   // KaTeX 占位符（data-math 属性）是安全的，后续会用 KaTeX.render() 替换
@@ -2867,6 +2870,8 @@ async function renderPreview() {
     previewMeta = parseFrontMatterMeta(r.frontMatter)
     raw = r.body
   } catch {}
+  // Excel 公式里的 `$` 不是行内数学分隔符：先转义，避免 KaTeX 把整段当数学渲染
+  raw = protectExcelDollarRefs(raw)
   const html = md!.render(raw)
   // 按需加载 KaTeX 样式：检测渲染结果是否包含 katex 片段
   try {
