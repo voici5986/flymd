@@ -253,10 +253,51 @@ let _extLastMarketItems: InstallableItem[] = []
 // 室内缓存：已安装映射与可更新状态，避免频繁网络请求阻塞 UI
 let _extLastInstalledMap: Record<string, InstalledPlugin> = {}
 let _extLastUpdateMap: Record<string, PluginUpdateState> = {}
+let _extMarketInstalledOnly = false // 是否仅显示已安装（隐藏市场区块）
 let _extUpdatesOnly = false  // 是否仅显示可更新扩展（已安装区块过滤）
 let _extGlobalOrder: Record<string, number> = {} // 扩展卡片统一排序顺序
 let _extOverlayRenderedOnce = false  // 是否已完成首次渲染
 let _extApplyMarketFilter: ((itemsOverride?: InstallableItem[] | null) => Promise<void>) | null = null
+
+type ExtPanelUiPrefs = {
+  // 扩展市场：仅显示已安装
+  marketInstalledOnly?: boolean
+  // 已安装区块：仅显示可更新
+  updatesOnly?: boolean
+}
+
+async function loadExtPanelUiPrefs(): Promise<ExtPanelUiPrefs> {
+  try {
+    if (!host) return {}
+    const store = host.getStore()
+    if (!store) return {}
+    const plugins = ((await store.get('plugins')) as any) || {}
+    const ui = plugins && typeof plugins === 'object' ? (plugins as any).ui : null
+    if (!ui || typeof ui !== 'object') return {}
+    return {
+      marketInstalledOnly: typeof ui.marketInstalledOnly === 'boolean' ? ui.marketInstalledOnly : undefined,
+      updatesOnly: typeof ui.updatesOnly === 'boolean' ? ui.updatesOnly : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
+async function saveExtPanelUiPrefs(patch: ExtPanelUiPrefs): Promise<void> {
+  try {
+    if (!host) return
+    const store = host.getStore()
+    if (!store) return
+    const raw = (await store.get('plugins')) as any
+    const old = raw && typeof raw === 'object' ? raw : {}
+    const ui = old.ui && typeof old.ui === 'object' ? old.ui : {}
+    if (typeof patch.marketInstalledOnly === 'boolean') ui.marketInstalledOnly = patch.marketInstalledOnly
+    if (typeof patch.updatesOnly === 'boolean') ui.updatesOnly = patch.updatesOnly
+    old.ui = ui
+    await store.set('plugins', old)
+    await store.save()
+  } catch {}
+}
 
 // 插件市场实例（专供扩展管理 UI 使用）
 const pluginMarket = createPluginMarket({
@@ -642,6 +683,13 @@ export async function refreshExtensionsUI(): Promise<void> {
   const container = _extListHost
   container.innerHTML = ''
 
+  // 先恢复筛选状态：避免更新/删除触发刷新后丢失选中态
+  try {
+    const prefs = await loadExtPanelUiPrefs()
+    if (typeof prefs.marketInstalledOnly === 'boolean') _extMarketInstalledOnly = prefs.marketInstalledOnly
+    if (typeof prefs.updatesOnly === 'boolean') _extUpdatesOnly = prefs.updatesOnly
+  } catch {}
+
   // 1) 创建统一的扩展列表容器
   const unifiedSection = document.createElement('div')
   unifiedSection.className = 'ext-section'
@@ -663,9 +711,11 @@ export async function refreshExtensionsUI(): Promise<void> {
   const installedOnlyCheckbox = document.createElement('input')
   installedOnlyCheckbox.type = 'checkbox'
   installedOnlyCheckbox.id = 'ext-installed-only'
-  installedOnlyCheckbox.checked = false
+  installedOnlyCheckbox.checked = _extMarketInstalledOnly
   installedOnlyCheckbox.style.cursor = 'pointer'
   installedOnlyCheckbox.addEventListener('change', () => {
+    _extMarketInstalledOnly = installedOnlyCheckbox.checked
+    void saveExtPanelUiPrefs({ marketInstalledOnly: _extMarketInstalledOnly })
     void applyMarketFilter()
   })
   const installedOnlyLabel = document.createElement('span')
@@ -686,6 +736,7 @@ export async function refreshExtensionsUI(): Promise<void> {
   updatesOnlyCheckbox.style.cursor = 'pointer'
   updatesOnlyCheckbox.addEventListener('change', () => {
     _extUpdatesOnly = updatesOnlyCheckbox.checked
+    void saveExtPanelUiPrefs({ updatesOnly: _extUpdatesOnly })
     void (async () => {
       try { await refreshInstalledExtensionsUI() } catch {}
       try { await applyMarketFilter() } catch {}
