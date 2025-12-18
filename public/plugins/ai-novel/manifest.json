@@ -1,7 +1,7 @@
 {
   "id": "ai-novel",
   "name": "AI 小说引擎",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": "flyMD",
   "description": "长篇小说写作：（内测中/非内测人员安装无用/）。",
   "i18n": {

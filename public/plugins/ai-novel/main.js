@@ -8,6 +8,9 @@ const CFG_KEY = 'aiNovel.config'
 const DRAFT_KEY = 'aiNovel.lastDraft'
 const AI_LOCALE_LS_KEY = 'flymd.locale'
 
+// fetch 的硬超时：避免网络/CORS 卡死导致 UI 永久无响应（给足时间，不影响正常长请求）
+const API_FETCH_TIMEOUT_MS = 200000
+
 const DEFAULT_CFG = {
   // 后端地址：强制内置，不在设置里展示
   backendBaseUrl: 'https://flymd.llingfei.com/xiaoshuo',
@@ -117,6 +120,20 @@ function joinUrl(base, path) {
   return b + '/' + p
 }
 
+function fetchWithTimeout(url, init, timeoutMs) {
+  const ms = Math.max(1000, Number(timeoutMs) || 0)
+  // 极少数环境没 AbortController：只能退回原生 fetch（仍可能卡死，但至少不破坏功能）
+  if (typeof AbortController === 'undefined') return fetch(url, init)
+  const ctl = new AbortController()
+  const timer = setTimeout(() => {
+    try { ctl.abort() } catch {}
+  }, ms)
+  const init2 = { ...(init || {}), signal: ctl.signal }
+  return fetch(url, init2).finally(() => {
+    try { clearTimeout(timer) } catch {}
+  })
+}
+
 function getOrCreateDeviceId() {
   const k = 'aiNovel.deviceId'
   try {
@@ -162,11 +179,11 @@ async function apiFetch(ctx, cfg, path, body) {
   if (cfg.token) headers.Authorization = 'Bearer ' + cfg.token
   let res
   try {
-    res = await fetch(url, {
+    res = await fetchWithTimeout(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body || {}),
-    })
+    }, API_FETCH_TIMEOUT_MS)
   } catch (e) {
     const msg = e && e.message ? String(e.message) : String(e)
     throw new Error(t('网络请求失败：', 'Network request failed: ') + msg + t('（常见原因：后端未处理 CORS/OPTIONS 预检，或网络不可达）', ' (common: backend missing CORS/OPTIONS preflight, or network unreachable)') + ' ' + url)
@@ -209,7 +226,7 @@ async function apiGet(ctx, cfg, path) {
   if (cfg.token) headers.Authorization = 'Bearer ' + cfg.token
   let res
   try {
-    res = await fetch(url, { method: 'GET', headers, cache: 'no-store' })
+    res = await fetchWithTimeout(url, { method: 'GET', headers, cache: 'no-store' }, API_FETCH_TIMEOUT_MS)
   } catch (e) {
     const msg = e && e.message ? String(e.message) : String(e)
     throw new Error(t('网络请求失败：', 'Network request failed: ') + msg + t('（常见原因：后端未处理 CORS/OPTIONS 预检，或网络不可达）', ' (common: backend missing CORS/OPTIONS preflight, or network unreachable)') + ' ' + url)
@@ -1773,9 +1790,22 @@ async function openSettingsDialog(ctx) {
       '计费范围：计费字符=输入+输出。输入包含：指令/硬约束/进度脉络/资料(圣经)/前文尾部/RAG命中/走向/待审计或待修订文本；输出包含：候选/正文/审计/摘要/修订结果。咨询与 embedding 不计费（仅记录日志）。',
       'Billing: billed chars = input + output. Input may include instruction/constraints/progress/meta/prev/RAG hits/choice/text-to-audit-or-revise; output includes options/story/audit/summary/revision. Consult & embeddings are not billed (logs only).'
     )
-    billingBox.innerHTML =
-      `<span class="ain-ok">${t('余额', 'Balance')}: ${b.balance_chars}</span>  ·  ${t('单价', 'Price')}: ${b.price_per_1k_chars}/1k  ·  ${t('试用', 'Trial')}: ${b.trial_chars}${who}${when}` +
-      `<div class="ain-muted" style="margin-top:6px">${explain}</div>`
+    // 不用 innerHTML：后端字段一旦异常/被污染就会形成 XSS 面
+    billingBox.textContent = ''
+    const line = document.createElement('div')
+    const okSpan = document.createElement('span')
+    okSpan.className = 'ain-ok'
+    okSpan.textContent = `${t('余额', 'Balance')}: ${safeText(b.balance_chars)}`
+    line.appendChild(okSpan)
+    line.appendChild(document.createTextNode(
+      `  ·  ${t('单价', 'Price')}: ${safeText(b.price_per_1k_chars)}/1k  ·  ${t('试用', 'Trial')}: ${safeText(b.trial_chars)}${who}${when}`
+    ))
+    billingBox.appendChild(line)
+    const explainDiv = document.createElement('div')
+    explainDiv.className = 'ain-muted'
+    explainDiv.style.marginTop = '6px'
+    explainDiv.textContent = explain
+    billingBox.appendChild(explainDiv)
   }
 
   btnLogin.onclick = async () => {
