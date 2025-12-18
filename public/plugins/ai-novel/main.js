@@ -1536,6 +1536,12 @@ function ensureDialogStyle() {
 .ain-todo-title{flex:1;min-width:0}
 .ain-todo-title .ain-muted{margin-left:6px}
 .ain-todo-log{white-space:pre-wrap;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px;margin-top:8px;max-height:240px;overflow:auto}
+.ain-table-wrap{max-height:320px;overflow:auto;border:1px solid #30363d;border-radius:6px;background:#0d1117}
+.ain-table{width:100%;border-collapse:collapse}
+.ain-table th,.ain-table td{border-bottom:1px solid #30363d;padding:8px 10px;font-size:12px;vertical-align:top;white-space:nowrap}
+.ain-table th{position:sticky;top:0;background:#161b22;font-weight:600;z-index:1}
+.ain-table td.num,.ain-table th.num{text-align:right}
+.ain-table td.mono,.ain-table th.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
 .ain-minibar{position:fixed;z-index:1000000;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:999px;padding:0 10px;display:flex;align-items:center;gap:8px;height:var(--ain-bar-h,28px);line-height:var(--ain-bar-h,28px);user-select:none}
 .ain-minibar .ain-minititle{font-size:12px;font-weight:600;max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab}
 .ain-minibar .ain-minititle:active{cursor:grabbing}
@@ -2250,6 +2256,143 @@ async function openSettingsDialog(ctx) {
 
   // 初次打开尝试刷新一次
   try { await refreshBilling() } catch {}
+}
+
+async function openUsageLogsDialog(ctx) {
+  if (typeof document === 'undefined') return
+
+  const { body } = createDialogShell(t('消费日志', 'Usage logs'))
+
+  const sec = document.createElement('div')
+  sec.className = 'ain-card'
+  const title = document.createElement('div')
+  title.style.fontWeight = '700'
+  title.style.marginBottom = '6px'
+  title.textContent = t('消费日志（仅当前账号）', 'Usage logs (current account only)')
+  sec.appendChild(title)
+
+  const row = document.createElement('div')
+  row.style.marginTop = '6px'
+  const btnRefresh = document.createElement('button')
+  btnRefresh.className = 'ain-btn gray'
+  btnRefresh.textContent = t('刷新日志', 'Refresh')
+  const btnOpenSettings = document.createElement('button')
+  btnOpenSettings.className = 'ain-btn gray'
+  btnOpenSettings.style.marginLeft = '8px'
+  btnOpenSettings.textContent = t('去登录/设置', 'Open settings')
+  btnOpenSettings.onclick = async () => {
+    try { await openSettingsDialog(ctx) } catch {}
+  }
+  row.appendChild(btnRefresh)
+  row.appendChild(btnOpenSettings)
+  sec.appendChild(row)
+
+  const hint = document.createElement('div')
+  hint.className = 'ain-muted'
+  hint.style.marginTop = '6px'
+  sec.appendChild(hint)
+
+  const wrap = document.createElement('div')
+  wrap.className = 'ain-table-wrap'
+  wrap.style.marginTop = '8px'
+  sec.appendChild(wrap)
+
+  const table = document.createElement('table')
+  table.className = 'ain-table'
+  wrap.appendChild(table)
+
+  const thead = document.createElement('thead')
+  const trh = document.createElement('tr')
+  function mkTh(text, cls) {
+    const th = document.createElement('th')
+    if (cls) th.className = cls
+    th.textContent = safeText(text)
+    return th
+  }
+  trh.appendChild(mkTh(t('时间', 'Time'), 'mono'))
+  trh.appendChild(mkTh(t('功能', 'Feature'), ''))
+  trh.appendChild(mkTh(t('字符', 'Chars'), 'num mono'))
+  trh.appendChild(mkTh(t('费用(元)', 'Cost(CNY)'), 'num mono'))
+  thead.appendChild(trh)
+  table.appendChild(thead)
+
+  const tbody = document.createElement('tbody')
+  table.appendChild(tbody)
+
+  function mkTd(text, cls) {
+    const td = document.createElement('td')
+    if (cls) td.className = cls
+    td.textContent = safeText(text)
+    return td
+  }
+
+  function renderRows(items) {
+    tbody.textContent = ''
+    const arr = Array.isArray(items) ? items : []
+    if (!arr.length) {
+      const tr = document.createElement('tr')
+      const td = document.createElement('td')
+      td.colSpan = 4
+      td.className = 'ain-muted'
+      td.textContent = t('暂无记录', 'No records')
+      tr.appendChild(td)
+      tbody.appendChild(tr)
+      return
+    }
+    for (let i = 0; i < arr.length; i++) {
+      const it = arr[i] || {}
+      const tr = document.createElement('tr')
+      const time = safeText(it.time || '')
+      const feature = safeText(it.feature || '')
+      const chars = safeText(it.chars == null ? '' : it.chars)
+      const cost = safeText(it.cost_cny == null ? '' : it.cost_cny)
+      tr.appendChild(mkTd(time, 'mono'))
+      tr.appendChild(mkTd(feature, ''))
+      tr.appendChild(mkTd(chars, 'num mono'))
+      tr.appendChild(mkTd(cost, 'num mono'))
+      tbody.appendChild(tr)
+    }
+  }
+
+  async function refresh() {
+    let cfg = null
+    try { cfg = await loadCfg(ctx) } catch {}
+    if (!cfg || !cfg.token) {
+      hint.textContent = t('未登录：请先在“小说→设置”里登录后端。', 'Not logged in: please login via Novel → Settings.')
+      renderRows([])
+      return
+    }
+
+    try {
+      setBusy(btnRefresh, true)
+      hint.textContent = t('加载中…', 'Loading...')
+      const json = await apiGet(ctx, cfg, 'billing/usage/?limit=200')
+      const logs = json && Array.isArray(json.logs) ? json.logs : []
+      renderRows(logs)
+      const me = json && json.me ? json.me : null
+      const who = me && (me.username || me.id) ? `  ·  ${(me.username || ('#' + String(me.id)) )}` : ''
+      hint.textContent = t('仅显示当前账号。', 'Current account only.') + who
+    } catch (e) {
+      const msg = e && e.message ? String(e.message) : String(e)
+      hint.textContent = t('读取日志失败：', 'Failed to load logs: ') + msg
+      renderRows([])
+    } finally {
+      setBusy(btnRefresh, false)
+    }
+  }
+
+  btnRefresh.onclick = async () => {
+    try {
+      await refresh()
+      ctx.ui.notice(t('已刷新', 'Refreshed'), 'ok', 1200)
+    } catch (e) {
+      ctx.ui.notice(t('读取失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2400)
+    }
+  }
+
+  body.appendChild(sec)
+
+  try { await refresh() } catch {}
 }
 
 function createDialogShell(title, onClose) {
@@ -6783,6 +6926,16 @@ export function activate(context) {
       label: t('小说', 'Novel'),
       children: [
         { label: t('设置', 'Settings'), onClick: async () => await openSettingsDialog(context) },
+        {
+          label: t('消费日志', 'Usage logs'),
+          onClick: async () => {
+            try {
+              await openUsageLogsDialog(context)
+            } catch (e) {
+              context.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+            }
+          }
+        },
         {
           label: t('项目管理', 'Project Manager'),
           onClick: async () => {
