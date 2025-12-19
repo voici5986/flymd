@@ -4998,6 +4998,61 @@ async function agentRunPlan(ctx, cfg, base, ui) {
   let draft = ''
   let auditText = ''
   let consultChecklist = ''
+  const writeTotal = items.filter((x) => x && x.type === 'write').length || chunkCount
+  let writeNo = 0
+
+  // Agent 分段续写的“低风险兜底”：尽量只消掉“重复拼接”这类明显错误，别自作主张改正文内容。
+  function _ainNormWs(s) {
+    return safeText(s).replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  }
+
+  function _ainFindOverlapSuffixPrefix(a, b, opt) {
+    const aa = _ainNormWs(a)
+    const bb = _ainNormWs(b)
+    if (!aa || !bb) return 0
+    const maxLen = Math.max(0, (opt && opt.maxLen != null ? opt.maxLen : 1200) | 0)
+    const minLen = Math.max(0, (opt && opt.minLen != null ? opt.minLen : 160) | 0)
+    const max = Math.min(maxLen, aa.length, bb.length)
+    for (let len = max; len >= minLen; len--) {
+      if (aa.slice(aa.length - len) === bb.slice(0, len)) return len
+    }
+    return 0
+  }
+
+  function _ainMergeAgentSegment(curDraft, piece, hintPrev, segNo) {
+    const d0 = safeText(curDraft).trim()
+    let p0 = safeText(piece).trim()
+    if (!p0) return { draft: d0, piece: '', merged: d0, mode: 'empty' }
+    if (!d0) return { draft: p0, piece: p0, merged: p0, mode: 'init' }
+
+    // 1) 完全重复：直接忽略（避免双份）
+    if (p0 === d0) return { draft: d0, piece: '', merged: d0, mode: 'dup_all' }
+    if (d0.includes(p0) && p0.length >= 500) return { draft: d0, piece: '', merged: d0, mode: 'dup_in_draft' }
+    if (p0.includes(d0) && d0.length >= 500) return { draft: p0, piece: p0, merged: p0, mode: 'rewrite_full' }
+
+    // 2) 常见：段首复述上一段结尾（严格重叠才裁剪，避免误伤）
+    // 只在第 2 段及之后启用；第 1 段允许自然承接，但也不该回顾前文。
+    if ((segNo | 0) > 1) {
+      const prevHint = safeText(hintPrev).trim()
+      const overlap = _ainFindOverlapSuffixPrefix(prevHint || d0, p0, { maxLen: 1200, minLen: 160 })
+      if (overlap > 0) {
+        const pn = _ainNormWs(p0)
+        const cut = pn.slice(0, overlap)
+        const idx = _ainNormWs(p0).indexOf(cut)
+        // idx 理论上总是 0；这里写得更保守一点，避免归一化导致错位
+        if (idx === 0) {
+          // 用“归一化后的裁剪长度”去裁原文会不精确；所以直接按原文前缀近似裁剪：取同长度的原文前缀丢掉。
+          p0 = p0.slice(Math.min(p0.length, cut.length)).trimStart()
+          if (!p0) return { draft: d0, piece: '', merged: d0, mode: 'trim_to_empty' }
+          const merged = d0.trimEnd() + '\n\n' + p0
+          return { draft: merged, piece: p0, merged, mode: 'trim_overlap' }
+        }
+      }
+    }
+
+    const merged = d0.trimEnd() + '\n\n' + p0
+    return { draft: merged, piece: p0, merged, mode: 'append' }
+  }
 
   function sliceNiceEnd(text, maxChars) {
     const s = String(text || '')
@@ -5101,9 +5156,12 @@ async function agentRunPlan(ctx, cfg, base, ui) {
         }
         it.status = 'done'
       } else if (it.type === 'write') {
+        writeNo++
         const instruction = safeText(it.instruction).trim() || safeText(base && base.instruction).trim()
         if (!instruction) throw new Error(t('instruction 为空', 'Empty instruction'))
-        const prev = curPrev()
+        const prevFull = curPrev()
+        // 分段续写：只喂“尾巴”，减少模型回头重写的诱因；同时把分段信息传给后端做增量约束（不影响非 Agent）。
+        const prev = writeNo > 1 ? sliceTail(prevFull, 2400) : prevFull
         const progress = safeText(base && base.progress)
         const bible = base && base.bible != null ? base.bible : ''
         const constraints = safeText(base && base.constraints).trim()
@@ -5119,10 +5177,18 @@ async function agentRunPlan(ctx, cfg, base, ui) {
           consultChecklist,
           '注意：不要在正文中复述/列出检查清单，只需要遵守它。'
         ].join('\n') : ''
+        const segRule = [
+          '【分段续写硬规则】',
+          `当前为第 ${writeNo}/${writeTotal} 段：只输出“新增正文”，必须紧接【前文尾部】最后一句继续写。`,
+          '禁止：复述/重写/润色【前文尾部】中已经出现过的句子或段落；禁止从头回顾剧情；禁止重复段落。',
+          '如果你发现自己在写重复内容：立刻跳过重复处，直接写新的推进。'
+        ].join('\n')
         const ins2 = [
           instruction,
           '',
           checklistBlock,
+          '',
+          segRule,
           '',
           `长度目标：本章总字数≈${targetChars}（目标值，允许略超）；本段尽量控制在 ≈${wantLen} 字（允许 ±15%）。`,
           (rest <= 0 ? '提示：正文可能已接近/超过目标字数，本段请优先收束推进，避免灌水。' : '')
@@ -5143,7 +5209,9 @@ async function agentRunPlan(ctx, cfg, base, ui) {
             prev,
             choice: base && base.choice != null ? base.choice : undefined,
             constraints: constraints || undefined,
-            rag: rag || undefined
+            rag: rag || undefined,
+            // 可选字段：仅用于 Agent 分段续写的增量约束/去重兜底；不影响旧后端/非 Agent。
+            agent: { segmented: true, seg_no: writeNo, seg_total: writeTotal, prev_tail_chars: prev.length }
           }
         }, {
           onTick: ({ waitMs }) => {
@@ -5153,11 +5221,18 @@ async function agentRunPlan(ctx, cfg, base, ui) {
             }
           }
         })
-        const piece = safeText(r && r.text).trim()
-        if (!piece) throw new Error(t('后端未返回正文', 'Backend returned empty text'))
-        draft = draft ? (draft.trimEnd() + '\n\n' + piece) : piece
-        it.status = 'done'
-        pushLog(t('写作完成：追加 ', 'Written: +') + String(piece.length) + t(' 字符', ' chars'))
+        const pieceRaw = safeText(r && r.text).trim()
+        if (!pieceRaw) throw new Error(t('后端未返回正文', 'Backend returned empty text'))
+        const m = _ainMergeAgentSegment(draft, pieceRaw, prevFull, writeNo)
+        const piece = m && m.piece != null ? safeText(m.piece).trim() : ''
+        if (!piece) {
+          it.status = 'skipped'
+          pushLog(t('写作返回重复内容：已忽略（继续下一步）', 'Write returned duplicate: ignored (continue)'))
+        } else {
+          draft = m && m.draft != null ? safeText(m.draft).trim() : (draft ? (draft.trimEnd() + '\n\n' + piece) : piece)
+          it.status = 'done'
+          pushLog(t('写作完成：', 'Written: ') + (m && m.mode ? ('[' + String(m.mode) + '] ') : '') + String(piece.length) + t(' 字符', ' chars'))
+        }
       } else if (it.type === 'audit') {
         if (!draft.trim()) {
           it.status = 'skipped'
