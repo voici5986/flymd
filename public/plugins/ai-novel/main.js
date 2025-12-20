@@ -11,6 +11,10 @@ const AI_LOCALE_LS_KEY = 'flymd.locale'
 // fetch 的硬超时：避免网络/CORS 卡死导致 UI 永久无响应（给足时间，不影响正常长请求）
 const API_FETCH_TIMEOUT_MS = 200000
 
+// 余额低于该阈值时给出常驻警告（字符）
+const LOW_BALANCE_WARN_CHARS = 50000
+const LOW_BALANCE_WARN_TEXT = '当前剩余字符不足5万，大文本场景写作可能失败或无响应'
+
 const DEFAULT_CFG = {
   // 后端地址：强制内置，不在设置里展示
   backendBaseUrl: 'https://flymd.nyc.mn/xiaoshuo',
@@ -78,6 +82,7 @@ let __CTX_MENU_DISPOSER__ = null
 let __DIALOG__ = null
 let __MINIBAR__ = null
 let __MINI__ = null
+let __LOW_BALANCE_WARN_SHOWN__ = false
 
 function detectLocale() {
   try {
@@ -2337,6 +2342,9 @@ async function openSettingsDialog(ctx) {
     explainDiv.style.marginTop = '6px'
     explainDiv.textContent = explain
     billingBox.appendChild(explainDiv)
+
+    // 余额过低：给宿主右下角发一个“常驻通知”（仅首次触发，避免刷屏）
+    try { maybeShowLowBalanceWarn(ctx, b.balance_chars) } catch {}
   }
 
   btnLogin.onclick = async () => {
@@ -5966,6 +5974,26 @@ function ui_notice_hold_end(ctx, hold) {
   }
 }
 
+function maybeShowLowBalanceWarn(ctx, balanceChars) {
+  if (__LOW_BALANCE_WARN_SHOWN__) return
+  const n = parseInt(String(balanceChars == null ? '' : balanceChars), 10)
+  if (!Number.isFinite(n)) return
+  if (n >= LOW_BALANCE_WARN_CHARS) return
+  __LOW_BALANCE_WARN_SHOWN__ = true
+  ui_notice_hold_begin(ctx, LOW_BALANCE_WARN_TEXT)
+}
+
+async function probeLowBalanceWarn(ctx) {
+  try {
+    const cfg = await loadCfg(ctx)
+    if (!cfg || !cfg.token) return
+    const json = await apiGet(ctx, cfg, 'billing/status/')
+    const b = json && json.billing ? json.billing : null
+    if (!b) return
+    maybeShowLowBalanceWarn(ctx, b.balance_chars)
+  } catch {}
+}
+
 async function char_state_try_update_from_prev_chapter(ctx, cfg, reason, opt) {
   // 约定：在“开始下一章/新开一卷”创建并打开新章节后调用；
   // 这样“上一章”才会被正确识别（尤其是新开卷的第一章要回退到上一卷最后一章）。
@@ -8811,6 +8839,9 @@ export function activate(context) {
         }
       ]
     })
+
+    // 启动后尝试拉一次余额：低余额时给出“常驻通知”（不阻塞主流程）
+    try { void probeLowBalanceWarn(context) } catch {}
   } catch (e) {
     console.error('[ai-novel] activate failed', e)
   }
