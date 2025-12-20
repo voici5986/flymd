@@ -6424,6 +6424,43 @@ async function progress_auto_update_after_accept(ctx, deltaText, reason) {
   } catch {}
 }
 
+async function progress_try_update_from_prev_chapter(ctx, cfg, prev, reason) {
+  try {
+    const ragCfg = cfg && cfg.rag ? cfg.rag : {}
+    if (ragCfg.autoUpdateProgress === false) return { ok: true, updated: false, skipped: true, why: 'disabled' }
+    if (!cfg || !cfg.token) return { ok: true, updated: false, skipped: true, why: 'no_token' }
+    if (!cfg.upstream || !cfg.upstream.baseUrl || !cfg.upstream.model) return { ok: true, updated: false, skipped: true, why: 'no_upstream' }
+
+    const p0 = prev && typeof prev === 'object' ? prev : null
+    const text = safeText(p0 && p0.text).trim()
+    if (!text) return { ok: true, updated: false, skipped: true, why: 'no_prev' }
+
+    const inf = await inferProjectDir(ctx, cfg)
+    if (!inf) return { ok: true, updated: false, skipped: true, why: 'no_project' }
+
+    const src = safeText(p0 && p0.path).trim()
+    const srcBase = src ? fsBaseName(src) : ''
+    const headTitle = '自动更新（开始下一章）' + (srcBase ? (' - ' + srcBase) : '')
+    const progressPath = joinFsPath(inf.projectAbs, '01_进度脉络.md')
+    let cur = ''
+    try { cur = await readTextAny(ctx, progressPath) } catch { cur = '' }
+    if (cur && cur.includes('## ' + headTitle)) return { ok: true, updated: false, skipped: true, why: 'already' }
+
+    const note = [
+      reason ? ('触发来源：' + String(reason)) : '',
+      srcBase ? ('来源章节：' + srcBase) : ''
+    ].filter(Boolean).join('\n')
+    const upd = await progress_generate_update(ctx, cfg, text, note)
+    if (!upd) return { ok: true, updated: false, skipped: true, why: 'empty' }
+
+    await progress_append_block(ctx, cfg, upd, headTitle)
+    try { await rag_build_or_update_index(ctx, cfg) } catch {}
+    return { ok: true, updated: true, skipped: false, why: '' }
+  } catch (e) {
+    return { ok: false, updated: false, skipped: false, why: 'exception', error: (e && e.message ? e.message : String(e)) }
+  }
+}
+
 function char_state_format_snapshot_md(data) {
   const arr = Array.isArray(data) ? data : []
   const seen = new Set()
@@ -6607,7 +6644,8 @@ async function char_state_try_update_from_prev_chapter(ctx, cfg, reason, opt) {
     if (!cfg.upstream || !cfg.upstream.baseUrl || !cfg.upstream.model) return { ok: true, updated: false, skipped: true, why: 'no_upstream' }
 
     const lim = (cfg && cfg.ctx && cfg.ctx.maxUpdateSourceChars) ? (cfg.ctx.maxUpdateSourceChars | 0) : 20000
-    const prev = await getPrevChapterTextForExtract(ctx, cfg, lim)
+    const prev0 = opt && opt.prev && typeof opt.prev === 'object' ? opt.prev : null
+    const prev = prev0 ? prev0 : await getPrevChapterTextForExtract(ctx, cfg, lim)
     if (!prev || !safeText(prev.text).trim()) return { ok: true, updated: false, skipped: true, why: 'no_prev' }
 
     if (onBegin) {
@@ -6694,7 +6732,7 @@ async function novel_create_next_chapter(ctx) {
   })
   if (!ok) return null
   const title = `# 第${inf.chapZh}章`
-  const titleBusy = '# 正在更新人物状态……请勿打断！！！！'
+  const titleBusy = '# 正在更新人物状态/进度脉络……请耐心等待'
   await writeTextAny(ctx, inf.chapPath, title + '\n\n')
   let opened = false
   try {
@@ -6706,15 +6744,23 @@ async function novel_create_next_chapter(ctx) {
 
   // 自动更新人物状态：只在“开始下一章”时更新，避免草稿小片段导致信息丢失
   if (opened) {
-    try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, title, titleBusy) } catch {}
     let hold = null
-    const r = await char_state_try_update_from_prev_chapter(ctx, cfg, t('开始下一章', 'Start next chapter'), {
-      onBegin: () => {
-        hold = ui_notice_hold_begin(ctx, t('人物状态更新中…请等待更新完成再使用续写功能', 'Updating character states... Please wait until it finishes before continuing.'))
-      }
-    })
-    ui_notice_hold_end(ctx, hold)
-    try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, titleBusy, title) } catch {}
+    let r = null
+    let pr = null
+    try {
+      try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, title, titleBusy) } catch {}
+      const lim = (cfg && cfg.ctx && cfg.ctx.maxUpdateSourceChars) ? (cfg.ctx.maxUpdateSourceChars | 0) : 20000
+      const prev = await getPrevChapterTextForExtract(ctx, cfg, lim)
+      hold = ui_notice_hold_begin(ctx, t('人物状态/进度脉络更新中…请等待更新完成再使用续写功能', 'Updating character states/progress... Please wait until it finishes before continuing.'))
+      r = await char_state_try_update_from_prev_chapter(ctx, cfg, t('开始下一章', 'Start next chapter'), { prev })
+      pr = await progress_try_update_from_prev_chapter(ctx, cfg, prev, '开始下一章')
+    } catch (e) {
+      try { ctx.ui.notice(t('更新失败：', 'Update failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600) } catch {}
+    } finally {
+      ui_notice_hold_end(ctx, hold)
+      try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, titleBusy, title) } catch {}
+    }
+
     if (r && r.updated) {
       if (r.parseOk) {
         try { ctx.ui.notice(t('人物状态已更新（写入 06_人物状态.md）', 'Character states updated (written to 06_人物状态.md)'), 'ok', 2000) } catch {}
@@ -6723,6 +6769,11 @@ async function novel_create_next_chapter(ctx) {
       }
     } else if (r && r.ok === false) {
       try { ctx.ui.notice(t('人物状态更新失败：', 'Character state update failed: ') + safeText(r.error || ''), 'err', 2600) } catch {}
+    }
+    if (pr && pr.updated) {
+      try { ctx.ui.notice(t('进度脉络已更新（写入 01_进度脉络.md）', 'Progress updated (written to 01_进度脉络.md)'), 'ok', 2000) } catch {}
+    } else if (pr && pr.ok === false) {
+      try { ctx.ui.notice(t('进度脉络更新失败：', 'Progress update failed: ') + safeText(pr.error || ''), 'err', 2600) } catch {}
     }
   }
 
@@ -6748,7 +6799,7 @@ async function novel_create_next_volume(ctx) {
   })
   if (!ok) return null
   const title = `# 第${inf.volZh}卷 第一章`
-  const titleBusy = '#正在更新人物状态……'
+  const titleBusy = '# 正在更新人物状态/进度脉络……请耐心等待'
   await writeTextAny(ctx, inf.chapPath, title + '\n\n')
   let opened = false
   try {
@@ -6760,15 +6811,23 @@ async function novel_create_next_volume(ctx) {
 
   // 新开卷后：同样用“上一卷最后一章”自动更新人物状态
   if (opened) {
-    try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, title, titleBusy) } catch {}
     let hold = null
-    const r = await char_state_try_update_from_prev_chapter(ctx, cfg, t('新开一卷', 'Start new volume'), {
-      onBegin: () => {
-        hold = ui_notice_hold_begin(ctx, t('人物状态更新中…请等待更新完成再使用续写功能', 'Updating character states... Please wait until it finishes before continuing.'))
-      }
-    })
-    ui_notice_hold_end(ctx, hold)
-    try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, titleBusy, title) } catch {}
+    let r = null
+    let pr = null
+    try {
+      try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, title, titleBusy) } catch {}
+      const lim = (cfg && cfg.ctx && cfg.ctx.maxUpdateSourceChars) ? (cfg.ctx.maxUpdateSourceChars | 0) : 20000
+      const prev = await getPrevChapterTextForExtract(ctx, cfg, lim)
+      hold = ui_notice_hold_begin(ctx, t('人物状态/进度脉络更新中…请等待更新完成再使用续写功能', 'Updating character states/progress... Please wait until it finishes before continuing.'))
+      r = await char_state_try_update_from_prev_chapter(ctx, cfg, t('新开一卷', 'Start new volume'), { prev })
+      pr = await progress_try_update_from_prev_chapter(ctx, cfg, prev, '新开一卷')
+    } catch (e) {
+      try { ctx.ui.notice(t('更新失败：', 'Update failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600) } catch {}
+    } finally {
+      ui_notice_hold_end(ctx, hold)
+      try { await _ainTryReplaceFirstLineInPath(ctx, inf.chapPath, titleBusy, title) } catch {}
+    }
+
     if (r && r.updated) {
       if (r.parseOk) {
         try { ctx.ui.notice(t('人物状态已更新（写入 06_人物状态.md）', 'Character states updated (written to 06_人物状态.md)'), 'ok', 2000) } catch {}
@@ -6777,6 +6836,11 @@ async function novel_create_next_volume(ctx) {
       }
     } else if (r && r.ok === false) {
       try { ctx.ui.notice(t('人物状态更新失败：', 'Character state update failed: ') + safeText(r.error || ''), 'err', 2600) } catch {}
+    }
+    if (pr && pr.updated) {
+      try { ctx.ui.notice(t('进度脉络已更新（写入 01_进度脉络.md）', 'Progress updated (written to 01_进度脉络.md)'), 'ok', 2000) } catch {}
+    } else if (pr && pr.ok === false) {
+      try { ctx.ui.notice(t('进度脉络更新失败：', 'Progress update failed: ') + safeText(pr.error || ''), 'err', 2600) } catch {}
     }
   }
 
