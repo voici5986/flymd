@@ -5522,7 +5522,7 @@ async function agentRunPlan(ctx, cfg, base, ui) {
           if (consultChecklist) {
             pushLog(t('已提炼写作检查清单：', 'Checklist extracted: ') + String(consultChecklist.length) + t(' 字（将注入后续写作）', ' chars (will be injected)'))
           } else {
-            pushLog(t('未提炼到检查清单：后续写作将不注入', 'No checklist extracted: will not inject'))
+            pushLog(t('未提炼到检查清单：后续写作将不注入（请检查后端 agent_checklist 输出格式）', 'No checklist extracted: will not inject (check backend agent_checklist output format)'))
           }
         }
         it.status = 'done'
