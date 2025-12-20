@@ -6993,6 +6993,25 @@ async function openBootstrapDialog(ctx) {
   agentProgress.appendChild(agentTodo)
   agentProgress.appendChild(agentLog)
 
+  const agentCtrlRow = mkBtnRow()
+  agentCtrlRow.style.marginTop = '8px'
+  const btnAgentAbort = document.createElement('button')
+  btnAgentAbort.className = 'ain-btn gray'
+  btnAgentAbort.textContent = t('终止本次任务', 'Abort task')
+  btnAgentAbort.disabled = true
+  const btnAgentRetry = document.createElement('button')
+  btnAgentRetry.className = 'ain-btn gray'
+  btnAgentRetry.textContent = t('重试', 'Retry')
+  btnAgentRetry.style.display = 'none'
+  const btnAgentSkip = document.createElement('button')
+  btnAgentSkip.className = 'ain-btn gray'
+  btnAgentSkip.textContent = t('跳过该步骤', 'Skip step')
+  btnAgentSkip.style.display = 'none'
+  agentCtrlRow.appendChild(btnAgentAbort)
+  agentCtrlRow.appendChild(btnAgentRetry)
+  agentCtrlRow.appendChild(btnAgentSkip)
+  agentProgress.appendChild(agentCtrlRow)
+
   function renderAgentProgress(items, logs) {
     try { agentProgress.style.display = '' } catch {}
     try {
