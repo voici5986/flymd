@@ -6694,7 +6694,7 @@ async function novel_create_next_chapter(ctx) {
   })
   if (!ok) return null
   const title = `# 第${inf.chapZh}章`
-  const titleBusy = '#正在更新人物状态……'
+  const titleBusy = '# 正在更新人物状态……请勿打断！！！！'
   await writeTextAny(ctx, inf.chapPath, title + '\n\n')
   let opened = false
   try {
