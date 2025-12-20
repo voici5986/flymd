@@ -3347,9 +3347,14 @@ async function openNextOptionsDialog(ctx) {
 
   btnReview.textContent = t('审阅/修改草稿（对话）', 'Review/Edit draft (chat)')
   btnReview.disabled = true
+
+  const btnPickDraft = document.createElement('button')
+  btnPickDraft.className = 'ain-btn gray'
+  btnPickDraft.textContent = t('选择草稿块…', 'Pick draft…')
   row2.appendChild(btnAppend)
   row2.appendChild(btnAppendDraft)
   row2.appendChild(btnReview)
+  row2.appendChild(btnPickDraft)
   sec.appendChild(row2)
 
   body.appendChild(sec)
@@ -3580,6 +3585,14 @@ async function openNextOptionsDialog(ctx) {
       const txt = extractDraftBlockText(doc, bid)
       if (!txt) throw new Error(t('未找到草稿块', 'Draft block not found'))
       await openDraftReviewDialog(ctx, { blockId: bid, text: txt })
+    } catch (e) {
+      ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
+  btnPickDraft.onclick = async () => {
+    try {
+      await openDraftPickerDialog(ctx)
     } catch (e) {
       ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
     }
@@ -4115,8 +4128,12 @@ async function openWriteWithChoiceDialog(ctx) {
 
   btnReview.textContent = t('审阅/修改草稿（对话）', 'Review/Edit draft (chat)')
   btnReview.disabled = true
+  const btnPickDraft = document.createElement('button')
+  btnPickDraft.className = 'ain-btn gray'
+  btnPickDraft.textContent = t('选择草稿块…', 'Pick draft…')
   row2.appendChild(btnAppendDraft)
   row2.appendChild(btnReview)
+  row2.appendChild(btnPickDraft)
   sec.appendChild(row2)
 
   body.appendChild(sec)
@@ -4562,6 +4579,14 @@ async function openWriteWithChoiceDialog(ctx) {
       const txt = extractDraftBlockText(doc, bid)
       if (!txt) throw new Error(t('未找到草稿块', 'Draft block not found'))
       await openDraftReviewDialog(ctx, { blockId: bid, text: txt })
+    } catch (e) {
+      ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
+  btnPickDraft.onclick = async () => {
+    try {
+      await openDraftPickerDialog(ctx)
     } catch (e) {
       ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
     }
@@ -5726,6 +5751,282 @@ function replaceDraftBlockText(docText, id, newText) {
   const after = doc.slice(r.contentEnd)
   const mid = '\n' + safeText(newText).trim() + '\n'
   return before + mid + after
+}
+
+function listDraftBlocksInDoc(docText) {
+  const doc = safeText(docText).replace(/\r\n/g, '\n')
+  const re = /<!--\s*AINOVEL:DRAFT:BEGIN\s+id=([^\s]+)\s*-->/g
+  const out = []
+  let m = null
+  while ((m = re.exec(doc)) !== null) {
+    const id = m && m[1] ? String(m[1]).trim() : ''
+    if (!id) continue
+    const i0 = m.index
+    const a = m[0]
+    const b = draftEndMarker(id)
+    const i1 = doc.indexOf(b, i0 + a.length)
+    if (i1 < 0) continue
+    const end = i1 + b.length
+    const contentStart = i0 + a.length
+    const contentEnd = i1
+    const text = doc.slice(contentStart, contentEnd).replace(/^\s*\n/, '').replace(/\n\s*$/, '').trim()
+    out.push({ id, i0, end, contentStart, contentEnd, text })
+  }
+  return out
+}
+
+function _ainDraftMetaFromId(id) {
+  const bid = String(id || '').trim()
+  const m = /^(\d{13})-/.exec(bid)
+  if (!m) return ''
+  const ts = parseInt(String(m[1] || ''), 10)
+  if (!Number.isFinite(ts) || ts <= 0) return ''
+  try {
+    const d = new Date(ts)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return ''
+  }
+}
+
+function _ainDraftLabelFromText(text, id) {
+  const s = safeText(text).replace(/\r\n/g, '\n').trim()
+  const first = s.split('\n').map((x) => String(x || '').trim()).filter(Boolean)[0] || ''
+  const meta = _ainDraftMetaFromId(id)
+  let title = first || s.replace(/\s+/g, ' ').slice(0, 60)
+  if (!title) title = t('空草稿', 'Empty draft')
+  if (title.length > 80) title = title.slice(0, 80) + '…'
+  return meta ? (meta + ' / ' + title) : title
+}
+
+function removeDraftBlockFromDoc(docText, id) {
+  const doc = safeText(docText).replace(/\r\n/g, '\n')
+  const bid = String(id || '').trim()
+  if (!bid) return null
+  const r = findDraftBlockRange(doc, bid)
+  if (!r) return null
+
+  const start = Math.max(0, r.i0 | 0)
+  const end = Math.max(start, ((r.i1 | 0) + String(r.b || '').length))
+  let before = doc.slice(0, start)
+  let after = doc.slice(end)
+
+  const bt = (/\n+$/.exec(before) || [''])[0].length
+  const al = (/^\n+/.exec(after) || [''])[0].length
+
+  if (bt && al) {
+    before = before.replace(/\n+$/, '')
+    after = after.replace(/^\n+/, '')
+    return before + '\n\n' + after
+  }
+  if (bt > 2) before = before.replace(/\n+$/, '\n\n')
+  if (al > 2) after = after.replace(/^\n+/, '\n\n')
+  return before + after
+}
+
+function unwrapDraftBlockFromDoc(docText, id) {
+  // 只删除草稿标签，保留正文（把草稿块变成普通正文）
+  const doc = safeText(docText).replace(/\r\n/g, '\n')
+  const bid = String(id || '').trim()
+  if (!bid) return null
+  const r = findDraftBlockRange(doc, bid)
+  if (!r) return null
+
+  const start = Math.max(0, r.i0 | 0)
+  const end = Math.max(start, ((r.i1 | 0) + String(r.b || '').length))
+  const txt = extractDraftBlockText(doc, bid)
+  const mid = '\n' + safeText(txt).trim() + '\n'
+
+  let before = doc.slice(0, start)
+  let after = doc.slice(end)
+
+  // 尽量把“删标签”变成自然的段落拼接，别留下奇怪的多行空白
+  const bt = (/\n+$/.exec(before) || [''])[0].length
+  const al = (/^\n+/.exec(after) || [''])[0].length
+  if (bt && al) {
+    before = before.replace(/\n+$/, '')
+    after = after.replace(/^\n+/, '')
+    return before + '\n\n' + safeText(txt).trim() + '\n\n' + after
+  }
+  if (bt > 2) before = before.replace(/\n+$/, '\n\n')
+  if (al > 2) after = after.replace(/^\n+/, '\n\n')
+  return before + mid + after
+}
+
+function _ainArmDangerButton(btn, armText, opt) {
+  // 两次点击确认（不依赖 confirm，避免某些宿主环境 confirm 不弹窗导致误删）
+  const b = btn
+  if (!b) return false
+  const ms = Math.max(1500, (opt && opt.ms != null ? (opt.ms | 0) : 4500))
+  const now = Date.now()
+  const armedUntil = b.__ainArmedUntil ? Number(b.__ainArmedUntil) : 0
+  if (Number.isFinite(armedUntil) && armedUntil > now) {
+    b.__ainArmedUntil = 0
+    try { b.textContent = b.__ainArmedText0 || String(b.textContent || '') } catch {}
+    return true
+  }
+  b.__ainArmedText0 = String(b.textContent || '')
+  b.__ainArmedUntil = now + ms
+  try { b.textContent = String(armText || '') || b.__ainArmedText0 } catch {}
+  try {
+    setTimeout(() => {
+      try {
+        const until = b.__ainArmedUntil ? Number(b.__ainArmedUntil) : 0
+        if (!until) return
+        if (Date.now() >= until) {
+          b.__ainArmedUntil = 0
+          b.textContent = b.__ainArmedText0 || b.textContent
+        }
+      } catch {}
+    }, ms + 50)
+  } catch {}
+  return false
+}
+
+async function clearLastDraftInfoIfMatch(ctx, blockId) {
+  try {
+    const last = await loadLastDraftInfo(ctx)
+    const bid = String(blockId || '').trim()
+    if (!last || !bid) return
+    if (String(last.blockId || '').trim() !== bid) return
+    if (ctx && ctx.storage && typeof ctx.storage.set === 'function') {
+      await ctx.storage.set(DRAFT_KEY, { blockId: '', projectRel: '', ts: 0 })
+    }
+  } catch {}
+}
+
+async function openDraftPickerDialog(ctx) {
+  const { body } = createDialogShell(t('选择草稿块', 'Pick draft block'))
+
+  const sec = document.createElement('div')
+  sec.className = 'ain-card'
+  sec.innerHTML = `<div style="font-weight:700;margin-bottom:6px">${t('草稿块列表（当前文档）', 'Draft blocks (current doc)')}</div>`
+
+  const hint = document.createElement('div')
+  hint.className = 'ain-muted'
+  hint.style.marginTop = '6px'
+  hint.textContent = t('提示：会以草稿块正文的“第一行”作为标题。你也可以按格式写：出场/人物名/上一章状态/下一章走向（可空）。', 'Tip: uses first line of draft as title. Suggested: Cast/Character/Prev status/Next arc (optional).')
+  sec.appendChild(hint)
+
+  const rowBtn = mkBtnRow()
+  const btnRefresh = document.createElement('button')
+  btnRefresh.className = 'ain-btn gray'
+  btnRefresh.textContent = t('刷新列表', 'Refresh')
+  rowBtn.appendChild(btnRefresh)
+  sec.appendChild(rowBtn)
+
+  const listBox = document.createElement('div')
+  listBox.style.marginTop = '10px'
+  sec.appendChild(listBox)
+
+  body.appendChild(sec)
+
+  function renderList(blocks) {
+    listBox.innerHTML = ''
+    const arr = Array.isArray(blocks) ? blocks : []
+    if (!arr.length) {
+      const empty = document.createElement('div')
+      empty.className = 'ain-muted'
+      empty.textContent = t('当前文档未发现草稿块。', 'No draft blocks found in current doc.')
+      listBox.appendChild(empty)
+      return
+    }
+
+    const show = arr.slice(0).reverse()
+    for (let i = 0; i < show.length; i++) {
+      const it = show[i] || {}
+      const bid = String(it.id || '').trim()
+      const label = _ainDraftLabelFromText(it.text, bid)
+
+      const row = document.createElement('div')
+      row.className = 'ain-card'
+      row.style.marginTop = '10px'
+
+      const head = document.createElement('div')
+      head.style.display = 'flex'
+      head.style.alignItems = 'center'
+      head.style.justifyContent = 'space-between'
+      head.style.gap = '10px'
+
+      const left = document.createElement('div')
+      left.style.flex = '1'
+      const ttl = document.createElement('div')
+      ttl.style.fontWeight = '700'
+      ttl.textContent = label
+      const meta = document.createElement('div')
+      meta.className = 'ain-muted'
+      meta.textContent = 'id=' + bid
+      left.appendChild(ttl)
+      left.appendChild(meta)
+
+      const btns = document.createElement('div')
+      btns.style.display = 'flex'
+      btns.style.gap = '8px'
+
+      const btnOpen = document.createElement('button')
+      btnOpen.className = 'ain-btn gray'
+      btnOpen.textContent = t('审阅', 'Review')
+
+      const btnDel = document.createElement('button')
+      btnDel.className = 'ain-btn red'
+      btnDel.textContent = t('删除草稿标签', 'Delete')
+
+      btns.appendChild(btnOpen)
+      btns.appendChild(btnDel)
+
+      head.appendChild(left)
+      head.appendChild(btns)
+      row.appendChild(head)
+
+      const preview = document.createElement('div')
+      preview.className = 'ain-muted'
+      preview.style.marginTop = '6px'
+      const p0 = safeText(it.text).replace(/\r\n/g, '\n').trim()
+      preview.textContent = p0 ? p0.slice(0, 120).replace(/\n+/g, ' / ') + (p0.length > 120 ? '…' : '') : t('（空）', '(empty)')
+      row.appendChild(preview)
+
+      btnOpen.onclick = async () => {
+        try {
+          const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+          const txt = extractDraftBlockText(doc, bid)
+          if (!txt) throw new Error(t('未找到草稿块：可能已被删除或文件已切换。', 'Draft block not found.'))
+          await openDraftReviewDialog(ctx, { blockId: bid, text: txt })
+        } catch (e) {
+          ctx.ui.notice(t('失败：', 'Failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+        }
+      }
+
+      btnDel.onclick = async () => {
+        try {
+          if (!bid) return
+          if (!_ainArmDangerButton(btnDel, t('再次点击确认', 'Click again to confirm'))) return
+
+          const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+          const nextDoc = unwrapDraftBlockFromDoc(doc, bid)
+          if (nextDoc == null) throw new Error(t('未找到草稿块：可能已被删除或文件已切换。', 'Draft block not found.'))
+          ctx.setEditorValue(nextDoc)
+          try { await clearLastDraftInfoIfMatch(ctx, bid) } catch {}
+          ctx.ui.notice(t('已删除草稿标签（正文保留）', 'Draft markers removed (text kept)'), 'ok', 1800)
+          await refresh()
+        } catch (e) {
+          ctx.ui.notice(t('删除失败：', 'Delete failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+        }
+      }
+
+      listBox.appendChild(row)
+    }
+  }
+
+  async function refresh() {
+    const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+    const blocks = listDraftBlocksInDoc(doc)
+    renderList(blocks)
+  }
+
+  btnRefresh.onclick = () => { refresh().catch(() => {}) }
+
+  await refresh()
 }
 
 function findLastDraftIdInDoc(docText) {
@@ -8264,12 +8565,39 @@ async function openDraftReviewDialog(ctx, opts) {
   const blockId = o.blockId ? String(o.blockId) : ''
   const title = String(o.title || t('审阅/修改草稿（对话）', 'Review/Edit (chat)'))
   const initialText = safeText(o.text)
+  let curBlockId = String(blockId || '').trim()
 
   const { body } = createDialogShell(title)
 
   const sec = document.createElement('div')
   sec.className = 'ain-card'
   sec.innerHTML = `<div style="font-weight:700;margin-bottom:6px">${t('草稿正文（可手动改）', 'Draft text (editable)')}</div>`
+
+  // 草稿块选择（在“审阅窗口”里直接切换/删除草稿块）
+  const pickRow = document.createElement('div')
+  pickRow.className = 'ain-row'
+  const pickWrap = document.createElement('div')
+  const pickLab = document.createElement('div')
+  pickLab.className = 'ain-lab'
+  pickLab.textContent = t('草稿块', 'Draft block')
+  const selDraft = document.createElement('select')
+  selDraft.className = 'ain-in ain-select'
+  pickWrap.appendChild(pickLab)
+  pickWrap.appendChild(selDraft)
+  pickRow.appendChild(pickWrap)
+
+  const btnDelDraft = document.createElement('button')
+  btnDelDraft.className = 'ain-btn red'
+  btnDelDraft.textContent = t('删除该草稿标签', 'Delete this draft')
+  btnDelDraft.style.alignSelf = 'end'
+  pickRow.appendChild(btnDelDraft)
+  sec.appendChild(pickRow)
+
+  const pickHint = document.createElement('div')
+  pickHint.className = 'ain-muted'
+  pickHint.style.marginTop = '6px'
+  pickHint.textContent = t('标题取草稿正文第一行；建议格式：出场/人物名/上一章状态/下一章走向（可空）。', 'Title uses first line; suggested: Cast/Character/Prev status/Next arc (optional).')
+  sec.appendChild(pickHint)
 
   const taText = mkTextarea('', initialText)
   taText.ta.style.minHeight = '220px'
@@ -8345,7 +8673,7 @@ async function openDraftReviewDialog(ctx, opts) {
   btnApply.className = 'ain-btn gray'
 
   btnApply.textContent = t('覆盖草稿块（定稿）', 'Overwrite draft block (finalize)')
-  btnApply.disabled = !blockId
+  btnApply.disabled = !curBlockId
   row.appendChild(btnSend)
   row.appendChild(btnApply)
   secChat.appendChild(row)
@@ -8489,7 +8817,8 @@ async function openDraftReviewDialog(ctx, opts) {
 
   btnApply.onclick = async () => {
     try {
-      if (!blockId) return
+      const bid = String(curBlockId || '').trim()
+      if (!bid) return
       cfg = await loadCfg(ctx)
       const nextText = safeText(taText.ta.value).trim()
       if (!nextText) {
@@ -8497,7 +8826,7 @@ async function openDraftReviewDialog(ctx, opts) {
         return
       }
       const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
-      const replaced = replaceDraftBlockText(doc, blockId, nextText)
+      const replaced = replaceDraftBlockText(doc, bid, nextText)
       if (replaced == null) {
         throw new Error(t('未找到草稿块：可能已被手动删除或文件已切换。', 'Draft block not found.'))
       }
@@ -8512,6 +8841,82 @@ async function openDraftReviewDialog(ctx, opts) {
       setBusy(btnApply, false)
     }
   }
+
+  function loadDraftToEditor(id) {
+    const bid = String(id || '').trim()
+    if (!bid) return false
+    const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+    const txt = extractDraftBlockText(doc, bid)
+    if (!txt) return false
+    curBlockId = bid
+    taText.ta.value = txt
+    btnApply.disabled = false
+    return true
+  }
+
+  function refreshDraftSelect() {
+    const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+    const blocks = listDraftBlocksInDoc(doc)
+    selDraft.innerHTML = ''
+    const list = Array.isArray(blocks) ? blocks : []
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i] || {}
+      const bid = String(it.id || '').trim()
+      if (!bid) continue
+      const op = document.createElement('option')
+      op.value = bid
+      op.textContent = _ainDraftLabelFromText(it.text, bid)
+      selDraft.appendChild(op)
+    }
+
+    let pick = String(curBlockId || '').trim()
+    if (!pick) pick = findLastDraftIdInDoc(doc)
+    try { selDraft.value = pick } catch {}
+
+    const has = !!(selDraft.value && String(selDraft.value).trim())
+    btnDelDraft.disabled = !has
+    btnApply.disabled = !has
+    if (has) {
+      const ok = loadDraftToEditor(selDraft.value)
+      if (!ok) btnApply.disabled = true
+    } else {
+      curBlockId = ''
+      btnApply.disabled = true
+    }
+  }
+
+  selDraft.onchange = () => {
+    try {
+      const bid = String(selDraft.value || '').trim()
+      if (!bid) return
+      const ok = loadDraftToEditor(bid)
+      if (!ok) throw new Error(t('未找到草稿块：可能已被删除或文件已切换。', 'Draft block not found.'))
+      btnDelDraft.disabled = false
+    } catch (e) {
+      ctx.ui.notice(t('切换失败：', 'Switch failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
+  btnDelDraft.onclick = async () => {
+    try {
+      const bid = String(selDraft.value || curBlockId || '').trim()
+      if (!bid) return
+      if (!_ainArmDangerButton(btnDelDraft, t('再次点击确认', 'Click again to confirm'))) return
+
+      const doc = safeText(ctx.getEditorValue ? ctx.getEditorValue() : '')
+      const nextDoc = unwrapDraftBlockFromDoc(doc, bid)
+      if (nextDoc == null) throw new Error(t('未找到草稿块：可能已被删除或文件已切换。', 'Draft block not found.'))
+      ctx.setEditorValue(nextDoc)
+      try { await clearLastDraftInfoIfMatch(ctx, bid) } catch {}
+      ctx.ui.notice(t('已删除草稿标签（正文保留）', 'Draft markers removed (text kept)'), 'ok', 1800)
+      refreshDraftSelect()
+    } catch (e) {
+      ctx.ui.notice(t('删除失败：', 'Delete failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
+  // 初始化：允许在 opts.text 为空/过期时也能从当前文档恢复
+  try { refreshDraftSelect() } catch {}
 
   renderLog()
 }
