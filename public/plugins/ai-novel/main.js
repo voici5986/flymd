@@ -5532,10 +5532,10 @@ async function agentBuildPlan(ctx, cfg, base) {
     const baseConstraints = safeText(base && base.constraints).trim()
     const planQualityHint = hasPlanOverride ? [
       '【Plan 生成要求（只影响 TODO，不影响正文）】',
-      '- TODO 至少 10 条，尽量贴合“进度脉络/故事圣经/前文尾部/走向选择”，避免通用模板措辞。',
-      '- 至少 2 个 rag，rag_query 必须具体（包含人物/地点/设定/伏笔关键词）。',
-      '- 至少 2 个 consult（蓝图/风险点/检查清单/伏笔回收/节奏与视角）。',
-      '- write 的 instruction 需要写清“本段要推进什么冲突/信息/转折”，不要只写“续写”。',
+      '- TODO 数量根据章节复杂度自适应（简单过渡章6-8条，复杂冲突章10-14条），避免为凑数而水。',
+      '- rag_query 必须具体（包含人物/地点/设定/伏笔关键词），通用查询无效。',
+      '- consult 聚焦"写作蓝图/检查清单/风险点"，不要重复 rag 能查到的内容。',
+      '- write 的 instruction 需要写清"本段要推进什么冲突/信息/转折"，不要只写"续写"。',
       '- 必须严格输出 JSON 数组，不要 Markdown/解释。',
     ].join('\n') : ''
     const constraints = planQualityHint
@@ -5899,6 +5899,12 @@ async function agentRunPlan(ctx, cfg, base, ui) {
           consultChecklist,
           '注意：不要在正文中复述/列出检查清单，只需要遵守它。'
         ].join('\n') : ''
+        const writingTipBlock = [
+          '【本段写作提醒】',
+          '- 检查句式：是否连续5句以上相同结构？如是，改变下一句的句式。',
+          '- 检查感官：最近500字是否全是视觉描写？如是，插入一个非视觉细节。',
+          '- 检查密度：本段是否有"意外"或"锚点"？如无，考虑加入。'
+        ].join('\n')
         const segRule = [
           '【分段续写硬规则】',
           `当前为第 ${writeNo}/${writeTotal} 段：只输出“新增正文”，必须紧接【前文尾部】最后一句继续写。`,
@@ -5909,6 +5915,8 @@ async function agentRunPlan(ctx, cfg, base, ui) {
           instruction,
           '',
           checklistBlock,
+          '',
+          writingTipBlock,
           '',
           segRule,
           '',
@@ -6066,8 +6074,8 @@ function safeText(v) {
 }
 
 function _ainWritingStyleHumanHintBlock() {
-  // 统一的写作风格约束：续写/修订都复用，避免到处复制导致口径漂移。
-  return '请完全采用‘冰山理论’（Iceberg Theory）写作：只通过客观的动作、环境细节和对话来推动剧情，禁止任何直接的心理描写、形容词堆砌和情感总结。请像电影镜头一样展示画面（Show, don\'t tell）。'
+  // 核心风格约束前端部分
+  return '提醒：注意本段的节奏类型（高张力/过渡/氛围），调整句式和感官描写。'
 }
 
 function _ainAppendWritingStyleHintToConstraints(constraintsText) {
