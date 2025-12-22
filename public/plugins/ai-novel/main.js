@@ -1,8 +1,7 @@
-// AI 小说引擎（强制后端）
-// 原则：
+// AI 小说引擎
 // 1) 计费与质量保证在后端，插件只是 UI
 // 2) 默认不自动写回文档（用户确认后再写）
-// 3) 只调用后端：/auth/* /billing/* /ai/proxy/*
+
 
 const CFG_KEY = 'aiNovel.config'
 const DRAFT_KEY = 'aiNovel.lastDraft'
