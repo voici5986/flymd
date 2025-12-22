@@ -562,6 +562,31 @@ function setupBracketPairingForWysiwyg(pm: HTMLElement | null) {
     if (!pm) return
   } catch { return }
 
+  // 判断鼠标按下是否落在滚动条区域（否则会被“兜底 mousedown”误判为外部空白点击）
+  const isMouseDownOnScrollbar = (ev: MouseEvent, el: HTMLElement): boolean => {
+    try {
+      const rc = el.getBoundingClientRect()
+      const x = ev.clientX
+      const y = ev.clientY
+      if (x < rc.left || x > rc.right || y < rc.top || y > rc.bottom) return false
+
+      const scrollableY = el.scrollHeight > el.clientHeight + 1
+      const scrollableX = el.scrollWidth > el.clientWidth + 1
+      if (!scrollableY && !scrollableX) return false
+
+      // 非 overlay 滚动条：通过几何差值能准确拿到尺寸；overlay 场景差值可能为 0，用兜底宽度近似。
+      const barW0 = Math.max(0, el.offsetWidth - el.clientWidth)
+      const barH0 = Math.max(0, el.offsetHeight - el.clientHeight)
+      const fallback = 20
+      const barW = barW0 || (scrollableY ? fallback : 0)
+      const barH = barH0 || (scrollableX ? fallback : 0)
+
+      const onV = barW > 0 && x >= (rc.right - barW - 1)
+      const onH = barH > 0 && y >= (rc.bottom - barH - 1)
+      return onV || onH
+    } catch { return false }
+  }
+
   // 仅包含括号/引号类标点，不处理 * / _ / ~ 等 Markdown 语法
   const OPEN_TO_CLOSE: Record<string, string> = {
     '(': ')',
@@ -782,6 +807,13 @@ function setupBracketPairingForWysiwyg(pm: HTMLElement | null) {
           if (tgt && tgt.closest('.ProseMirror')) return
           // 覆盖层（如 Katex 编辑弹层、代码复制按钮等）内部点击也不拦截，避免干扰 textarea 光标定位
           if (tgt && tgt.closest('.overlay-host')) return
+          // 点击/拖拽滚动条（轨道/滑块）不能被当成“空白区点击”，否则会先 scrollIntoView 跳到底部
+          const root = rootEl
+          const sv = root?.querySelector?.('.scrollView') as HTMLElement | null
+          if (tgt) {
+            if (sv && tgt === sv && isMouseDownOnScrollbar(ev, sv)) return
+            if (root && tgt === root && isMouseDownOnScrollbar(ev, root)) return
+          }
           const view = _getView()
           if (!view) return
           const state = view.state
