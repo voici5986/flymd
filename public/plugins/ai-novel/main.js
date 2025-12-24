@@ -7425,13 +7425,61 @@ function _ainCtxRenderUsageInto(container, usage) {
     return
   }
 
+  function segLabel(k) {
+    const key = safeText(k).trim()
+    // 中文尽量短；英文也用短标签，避免表格太宽
+    switch (key) {
+      case 'instruction': return t('指令', 'inst')
+      case 'text': return t('正文', 'text')
+      case 'history': return t('历史', 'hist')
+      case 'constraints': return t('约束', 'cnst')
+      case 'progress': return t('进度', 'prog')
+      case 'bible': return t('设定', 'bible')
+      case 'prev': return t('上文', 'prev')
+      case 'rag': return t('检索', 'rag')
+      case 'choice': return t('走向', 'choice')
+      default: return key || t('未知', 'unknown')
+    }
+  }
+
+  const headRow = document.createElement('div')
+  headRow.style.display = 'flex'
+  headRow.style.alignItems = 'center'
+  headRow.style.justifyContent = 'space-between'
+  headRow.style.gap = '10px'
+  host.appendChild(headRow)
+
   const head = document.createElement('div')
   head.className = 'ain-muted'
   const ov = (u.overflow | 0) || 0
   head.textContent = ov > 0
     ? (t('上下文可能超窗：已超出 ', 'Context may overflow: +') + String(ov) + t(' 字符（已自动裁剪低优先级片段）', ' chars (auto-trimmed low-priority segments)'))
-    : (t('上下文占用：', 'Context usage: ') + String((u.totalUsed | 0) || 0) + '/' + String((u.effective | 0) || 0) + t(' 字符（有效预算）', ' chars (effective)'))
-  host.appendChild(head)
+    : (
+      t('上下文占用：', 'Context usage: ') +
+      String((u.totalUsed | 0) || 0) +
+      '/' +
+      String((u.effective | 0) || 0) +
+      t(' 字符（有效预算；窗口 ', ' chars (effective; window ') +
+      String((u.window | 0) || 0) +
+      ')'
+    )
+  headRow.appendChild(head)
+
+  const collapsed0 = (host.dataset && host.dataset.ainCtxUsageCollapsed === '1')
+  const btnToggle = document.createElement('button')
+  btnToggle.className = 'ain-btn gray'
+  btnToggle.style.padding = '6px 10px'
+  btnToggle.textContent = collapsed0 ? t('展开表格', 'Expand table') : t('折叠表格', 'Collapse table')
+  btnToggle.onclick = () => {
+    try {
+      const collapsed = (host.dataset && host.dataset.ainCtxUsageCollapsed === '1')
+      host.dataset.ainCtxUsageCollapsed = collapsed ? '0' : '1'
+      _ainCtxRenderUsageInto(host, u)
+    } catch {}
+  }
+  headRow.appendChild(btnToggle)
+
+  if (collapsed0) return
 
   const wrap = document.createElement('div')
   wrap.className = 'ain-table-wrap'
@@ -7462,7 +7510,8 @@ function _ainCtxRenderUsageInto(container, usage) {
     const s = byKey.get(k) || { label: k, raw: 0, used: 0, trimmed: 0 }
     const tr = document.createElement('tr')
     const td0 = document.createElement('td')
-    td0.textContent = safeText(s.label || k)
+    td0.textContent = segLabel(k)
+    td0.title = safeText(s.label || k)
     const td1 = document.createElement('td')
     td1.className = 'num mono'
     td1.textContent = String((s.raw | 0) || 0)
