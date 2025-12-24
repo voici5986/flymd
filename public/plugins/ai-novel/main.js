@@ -1390,12 +1390,14 @@ function _ainNormName(name) {
 function _ainSplitNameAliases(name) {
   const s = _ainNormName(name)
   if (!s) return []
-  // 形如：克莱曼婷 (Clementine) / 克莱曼婷（Clementine）
-  const base = s.replace(/\s*[（(].*?[)）]\s*$/, '').trim()
+  // 形如：克莱曼婷 (Clementine)： / 克莱曼婷（Clementine）: / 克莱曼婷 (Clementine)
+  // 注意：主要角色文件常写成 "**名字 (EN)：**"，冒号会破坏“括号在行尾”的匹配，所以先剥掉结尾标点再处理。
+  const s1 = s.replace(/[：:，,。.\s]+$/g, '').trim()
+  const base = s1.replace(/\s*[（(].*?[)）]\s*$/g, '').trim()
   const arr = []
   if (base) arr.push(base)
   // 英文别名也收一下（可选）
-  const m = /[（(]\s*([^()（）]{1,40})\s*[)）]\s*$/.exec(s)
+  const m = /[（(]\s*([^()（）]{1,40})\s*[)）]\s*$/.exec(s1)
   if (m && m[1]) {
     const a = String(m[1]).trim()
     if (a) arr.push(a)
@@ -4659,13 +4661,6 @@ async function openWriteWithChoiceDialog(ctx) {
   styleStatus.textContent = t('未读取人物风格。', 'No style loaded.')
   styleCard.appendChild(styleStatus)
 
-  const styleOut = document.createElement('div')
-  styleOut.className = 'ain-out'
-  styleOut.style.minHeight = '90px'
-  styleOut.style.marginTop = '8px'
-  styleOut.textContent = t('（无）', '(none)')
-  styleCard.appendChild(styleOut)
-
   const newCharBox = document.createElement('div')
   newCharBox.style.marginTop = '10px'
   styleCard.appendChild(newCharBox)
@@ -4706,8 +4701,6 @@ async function openWriteWithChoiceDialog(ctx) {
       const raw = await getStyleDocRaw(ctx, cfg)
       const blockFull = _ainStylePickLatestBlock(raw)
       _styleLastBlockFull = safeText(blockFull).trim()
-      const show = _styleLastBlockFull ? sliceHeadTail(_styleLastBlockFull, 6000, 0.55).trim() : ''
-      styleOut.textContent = show || t('（无）', '(none)')
       styleStatus.textContent = _styleLastBlockFull
         ? t('已读取人物风格快照。', 'Style snapshot loaded.')
         : t('未发现人物风格快照。', 'No style snapshot found.')
