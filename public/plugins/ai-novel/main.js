@@ -8604,16 +8604,42 @@ async function progress_try_update_from_prev_chapter(ctx, cfg, prev, reason) {
     if (!inf) return { ok: true, updated: false, skipped: true, why: 'no_project' }
 
     const src = safeText(p0 && p0.path).trim()
-    const srcBase = src ? fsBaseName(src) : ''
-    const headTitle = '自动更新（开始下一章）' + (srcBase ? (' - ' + srcBase) : '')
+    const srcNorm = src ? normFsPath(src) : ''
+    const srcBase = srcNorm ? fsBaseName(srcNorm) : ''
+    const projectNorm = inf && inf.projectAbs ? normFsPath(inf.projectAbs).replace(/\/+$/, '') : ''
+    let srcRel = ''
+    if (srcNorm && projectNorm && srcNorm.startsWith(projectNorm + '/')) srcRel = srcNorm.slice(projectNorm.length + 1)
+    srcRel = srcRel.replace(/^03_章节\//, '')
+    const srcKey = srcRel || srcBase
+    const headTitle = '自动更新（开始下一章）' + (srcKey ? (' - ' + srcKey) : '')
     const progressPath = joinFsPath(inf.projectAbs, '01_进度脉络.md')
     let cur = ''
     try { cur = await readTextAny(ctx, progressPath) } catch { cur = '' }
     if (cur && cur.includes('## ' + headTitle)) return { ok: true, updated: false, skipped: true, why: 'already' }
+    // 兼容旧版本：旧标题只包含 basename；仅在 basename 全项目唯一时，才把旧标题视为“已更新”
+    if (cur && srcBase) {
+      const oldHeadTitle = '自动更新（开始下一章）' + (srcBase ? (' - ' + srcBase) : '')
+      if (oldHeadTitle !== headTitle && cur.includes('## ' + oldHeadTitle)) {
+        let baseCnt = 0
+        try {
+          const chapRoot = joinFsPath(inf.projectAbs, '03_章节')
+          const filesAll = await listMarkdownFilesAny(ctx, chapRoot)
+          for (let i = 0; i < (filesAll || []).length; i++) {
+            const bn = fsBaseName(filesAll[i] || '')
+            if (!bn) continue
+            if (bn === srcBase) {
+              baseCnt++
+              if (baseCnt > 1) break
+            }
+          }
+        } catch {}
+        if (baseCnt <= 1) return { ok: true, updated: false, skipped: true, why: 'already' }
+      }
+    }
 
     const note = [
       reason ? ('触发来源：' + String(reason)) : '',
-      srcBase ? ('来源章节：' + srcBase) : ''
+      srcKey ? ('来源章节：' + srcKey) : ''
     ].filter(Boolean).join('\n')
     const upd = await progress_generate_update(ctx, cfg, text, note)
     if (!upd) return { ok: true, updated: false, skipped: true, why: 'empty' }
