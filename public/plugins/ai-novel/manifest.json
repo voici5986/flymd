@@ -3,7 +3,7 @@
   "name": "AI 小说引擎",
   "version": "0.5.7",
   "author": "flyMD",
-  "description": "长篇小说写作：（beta测试中）。",
+  "description": "长篇小说写作。",
   "i18n": {
     "en": {
       "name": "AI Novel Engine",
