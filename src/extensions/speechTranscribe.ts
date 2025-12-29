@@ -87,6 +87,232 @@ function manualTranscribeProviderLabel(cfg: ManualTranscribeConfig): string {
   return '官方默认（走自带后端）'
 }
 
+// JS 绘制的“转写设置”窗口：替代 prompt/confirmNative 这种原生弹窗
+const MANUAL_TRANSCRIBE_UI_OVERLAY_ID = 'flymd-speech-transcribe-ui-overlay'
+
+let _manualTranscribeUiResolve: ((cfg: ManualTranscribeConfig | null) => void) | null = null
+
+function closeManualTranscribeUi(ov: HTMLDivElement, result: ManualTranscribeConfig | null): void {
+  const resolve = _manualTranscribeUiResolve
+  _manualTranscribeUiResolve = null
+
+  try { ov.classList.add('hidden') } catch {}
+  try { (ov.querySelector('#flymd-speech-transcribe-ui-body') as HTMLDivElement | null)!.innerHTML = '' } catch {}
+  try { (ov.querySelector('#flymd-speech-transcribe-ui-actions') as HTMLDivElement | null)!.innerHTML = '' } catch {}
+
+  try { resolve?.(result) } catch {}
+}
+
+function ensureManualTranscribeUiOverlay(): HTMLDivElement | null {
+  try {
+    const container = document.querySelector('.container') as HTMLDivElement | null
+    if (!container) return null
+
+    let ov = document.getElementById(MANUAL_TRANSCRIBE_UI_OVERLAY_ID) as HTMLDivElement | null
+    if (ov) return ov
+
+    ov = document.createElement('div')
+    ov.id = MANUAL_TRANSCRIBE_UI_OVERLAY_ID
+    ov.className = 'link-overlay hidden'
+    ov.innerHTML = `
+      <div class="link-dialog" role="dialog" aria-modal="true" aria-labelledby="flymd-speech-transcribe-ui-title">
+        <div class="link-header">
+          <div id="flymd-speech-transcribe-ui-title">转写设置（自定义模型）</div>
+          <button id="flymd-speech-transcribe-ui-close" class="about-close" title="关闭">×</button>
+        </div>
+        <div class="link-body" id="flymd-speech-transcribe-ui-body"></div>
+        <div class="link-actions" id="flymd-speech-transcribe-ui-actions"></div>
+      </div>
+    `
+    container.appendChild(ov)
+
+    const close = () => { closeManualTranscribeUi(ov!, null) }
+    const btn = ov.querySelector('#flymd-speech-transcribe-ui-close') as HTMLButtonElement | null
+    if (btn) btn.addEventListener('click', close)
+    ov.addEventListener('click', (e) => { if (e.target === ov) close() })
+    ov.addEventListener('keydown', (e) => {
+      if ((e as any)?.key === 'Escape') close()
+    })
+
+    return ov
+  } catch {
+    return null
+  }
+}
+
+function showManualTranscribeUi(
+  htmlBody: string,
+  htmlActions: string,
+  onBind: (ov: HTMLDivElement) => void,
+): Promise<ManualTranscribeConfig | null> {
+  return new Promise((resolve) => {
+    const ov = ensureManualTranscribeUiOverlay()
+    if (!ov) return resolve(null)
+
+    // 防止上一次未正常关闭导致 Promise 悬挂
+    if (_manualTranscribeUiResolve) {
+      try { _manualTranscribeUiResolve(null) } catch {}
+      _manualTranscribeUiResolve = null
+    }
+    _manualTranscribeUiResolve = resolve
+
+    const body = ov.querySelector('#flymd-speech-transcribe-ui-body') as HTMLDivElement | null
+    const actions = ov.querySelector('#flymd-speech-transcribe-ui-actions') as HTMLDivElement | null
+    if (!body || !actions) return closeManualTranscribeUi(ov, null)
+
+    body.innerHTML = htmlBody
+    actions.innerHTML = htmlActions
+    ov.classList.remove('hidden')
+    try { onBind(ov) } catch {}
+    try { (ov.querySelector('input,button,select,textarea') as any)?.focus?.() } catch {}
+  })
+}
+
+async function showManualTranscribeSettingsDialog(cur: ManualTranscribeConfig): Promise<ManualTranscribeConfig | null> {
+  const endpointDefault = 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash'
+  const resourceIdDefault = 'volc.seedasr.auc'
+  const curMode: ManualTranscribeMode = cur?.mode === 'volc' ? 'volc' : 'official'
+
+  const htmlBody = `
+    <div id="st-root" style="font-size:13px;line-height:1.6;">
+      <div style="margin-bottom:10px;color:var(--muted);">仅影响：录音 / 音频文件转写。</div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <label style="display:flex;gap:6px;align-items:center;">
+          <input id="st-mode-official" type="radio" name="st-mode" value="official">
+          <span>默认</span>
+        </label>
+        <label style="display:flex;gap:6px;align-items:center;">
+          <input id="st-mode-volc" type="radio" name="st-mode" value="volc">
+          <span>火山引擎</span>
+        </label>
+      </div>
+
+      <div id="st-volc-fields" style="display:none;">
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:8px 10px;align-items:center;">
+          <div>接口地址</div>
+          <input id="st-endpoint" class="input" placeholder="${endpointDefault}">
+
+          <div>X-Api-App-Key（必填）</div>
+          <input id="st-appKey" class="input" placeholder="请输入 App Key">
+
+          <div>X-Api-Access-Key（必填）</div>
+          <input id="st-accessKey" class="input" placeholder="请输入 Access Key" type="password">
+
+          <div>X-Api-Resource-Id</div>
+          <input id="st-resourceId" class="input" placeholder="${resourceIdDefault}">
+
+          <div>language（可选；留空=自动）</div>
+          <input id="st-language" class="input" placeholder="例如：zh-CN / en-US">
+
+          <div>enable_ddc（语义顺滑）</div>
+          <label style="display:flex;gap:8px;align-items:center;">
+            <input id="st-enableDdc" type="checkbox">
+            <span style="color:var(--muted);font-size:12px;">启用</span>
+          </label>
+        </div>
+        <div style="margin-top:10px;color:var(--muted);font-size:12px;">提示：密钥会保存在本地配置里（未加密）。</div>
+      </div>
+
+      <div id="st-msg" style="margin-top:10px;color:var(--muted);"></div>
+    </div>
+  `
+
+  const htmlActions = `
+    <button id="st-save">保存</button>
+    <button id="st-cancel">取消</button>
+  `
+
+  return await showManualTranscribeUi(htmlBody, htmlActions, (ov) => {
+    const modeOfficial = ov.querySelector('#st-mode-official') as HTMLInputElement | null
+    const modeVolc = ov.querySelector('#st-mode-volc') as HTMLInputElement | null
+    const volcFields = ov.querySelector('#st-volc-fields') as HTMLDivElement | null
+
+    const endpointEl = ov.querySelector('#st-endpoint') as HTMLInputElement | null
+    const appKeyEl = ov.querySelector('#st-appKey') as HTMLInputElement | null
+    const accessKeyEl = ov.querySelector('#st-accessKey') as HTMLInputElement | null
+    const resourceIdEl = ov.querySelector('#st-resourceId') as HTMLInputElement | null
+    const languageEl = ov.querySelector('#st-language') as HTMLInputElement | null
+    const enableDdcEl = ov.querySelector('#st-enableDdc') as HTMLInputElement | null
+
+    const msgEl = ov.querySelector('#st-msg') as HTMLDivElement | null
+    const btnSave = ov.querySelector('#st-save') as HTMLButtonElement | null
+    const btnCancel = ov.querySelector('#st-cancel') as HTMLButtonElement | null
+
+    const root = ov.querySelector('#st-root') as HTMLDivElement | null
+
+    const setMsg = (s: string, isErr: boolean) => {
+      if (!msgEl) return
+      msgEl.textContent = s
+      msgEl.style.color = isErr ? 'var(--err, #d33)' : 'var(--muted)'
+    }
+
+    const syncModeUi = () => {
+      const mode: ManualTranscribeMode =
+        (ov.querySelector('input[name="st-mode"]:checked') as HTMLInputElement | null)?.value === 'volc'
+          ? 'volc'
+          : 'official'
+      if (volcFields) volcFields.style.display = mode === 'volc' ? '' : 'none'
+      if (mode === 'official') setMsg('当前：默认', false)
+      else setMsg('当前：火山引擎', false)
+    }
+
+    if (modeOfficial) modeOfficial.checked = curMode === 'official'
+    if (modeVolc) modeVolc.checked = curMode === 'volc'
+
+    if (endpointEl) endpointEl.value = String(cur?.volc?.endpoint || endpointDefault)
+    if (appKeyEl) appKeyEl.value = String(cur?.volc?.appKey || '')
+    if (accessKeyEl) accessKeyEl.value = String(cur?.volc?.accessKey || '')
+    if (resourceIdEl) resourceIdEl.value = String(cur?.volc?.resourceId || resourceIdDefault)
+    if (languageEl) languageEl.value = String(cur?.volc?.language || '')
+    if (enableDdcEl) enableDdcEl.checked = !!cur?.volc?.enableDdc
+
+    if (modeOfficial) modeOfficial.addEventListener('change', syncModeUi)
+    if (modeVolc) modeVolc.addEventListener('change', syncModeUi)
+    syncModeUi()
+
+    const close = (v: ManualTranscribeConfig | null) => { closeManualTranscribeUi(ov, v) }
+    if (btnCancel) btnCancel.addEventListener('click', () => close(null))
+
+    const submit = () => {
+      try {
+        const mode: ManualTranscribeMode =
+          (ov.querySelector('input[name="st-mode"]:checked') as HTMLInputElement | null)?.value === 'volc'
+            ? 'volc'
+            : 'official'
+
+        if (mode === 'official') return close({ mode: 'official', volc: undefined })
+
+        const endpoint = String(endpointEl?.value || '').trim() || endpointDefault
+        const appKey = String(appKeyEl?.value || '').trim()
+        const accessKey = String(accessKeyEl?.value || '').trim()
+        const resourceId = String(resourceIdEl?.value || '').trim() || resourceIdDefault
+        const language = String(languageEl?.value || '').trim()
+        const enableDdc = !!enableDdcEl?.checked
+
+        if (!appKey) return setMsg('未填写 X-Api-App-Key', true)
+        if (!accessKey) return setMsg('未填写 X-Api-Access-Key', true)
+
+        close({ mode: 'volc', volc: { endpoint, appKey, accessKey, resourceId, language, enableDdc } })
+      } catch (e) {
+        setMsg('保存失败：' + String((e as any)?.message || e || ''), true)
+      }
+    }
+
+    if (btnSave) btnSave.addEventListener('click', submit)
+    if (root) {
+      root.addEventListener('keydown', (e) => {
+        const k = (e as any)?.key
+        if (k === 'Enter') submit()
+      })
+    }
+
+    // 体验优先：火山模式时让用户直接开始填密钥
+    try {
+      if (curMode === 'volc') (appKeyEl || endpointEl)?.focus?.()
+    } catch {}
+  })
+}
+
 function updateMenu(): void {
   try {
     const children: any[] = []
@@ -114,50 +340,12 @@ async function openManualTranscribeSettingsFromMenu(): Promise<void> {
   if (!deps) return
   try {
     const cur = await manualTranscribeStoreGet()
-    const curMode = cur?.mode === 'volc' ? 'volc' : 'official'
-    const pick = String(prompt(
-      '转写使用哪种接口？\n' +
-      '0 = 官方默认（走自带后端代理）\n' +
-      '1 = 火山引擎（用户自配；仅影响：录音/音频文件转写）\n\n' +
-      `当前：${curMode === 'volc' ? '1' : '0'}\n` +
-      '请输入 0 或 1：',
-      curMode === 'volc' ? '1' : '0',
-    ) || '').trim()
-    if (!pick) return
-    if (pick === '0') {
-      await manualTranscribeStoreSet({ mode: 'official', volc: undefined })
-      deps.pluginNotice('已切回官方默认转写', 'ok', 2200)
-      updateMenu()
-      return
-    }
-    if (pick !== '1') {
-      deps.pluginNotice('输入无效：请输入 0 或 1', 'err', 2200)
-      return
-    }
+    const next = await showManualTranscribeSettingsDialog(cur)
+    if (!next) return
 
-    const endpoint = String(prompt(
-      '火山接口地址（可回车用默认）：',
-      String(cur?.volc?.endpoint || 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash'),
-    ) || '').trim() || 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash'
-    const appKey = String(prompt('X-Api-App-Key（必填）：', String(cur?.volc?.appKey || '')) || '').trim()
-    if (!appKey) { deps.pluginNotice('未填写 X-Api-App-Key', 'err', 2200); return }
-    const accessKey = String(prompt('X-Api-Access-Key（必填）：', String(cur?.volc?.accessKey || '')) || '').trim()
-    if (!accessKey) { deps.pluginNotice('未填写 X-Api-Access-Key', 'err', 2200); return }
-    const resourceId = String(prompt(
-      'X-Api-Resource-Id（可回车用默认 volc.seedasr.auc）：',
-      String(cur?.volc?.resourceId || 'volc.seedasr.auc'),
-    ) || '').trim() || 'volc.seedasr.auc'
-    const language = String(prompt(
-      'language（可选；留空=自动）：',
-      String(cur?.volc?.language || ''),
-    ) || '').trim()
-    const enableDdc = await deps.confirmNative('启用 enable_ddc（语义顺滑）？\n确定：启用\n取消：关闭', '火山转写设置')
-
-    await manualTranscribeStoreSet({
-      mode: 'volc',
-      volc: { endpoint, appKey, accessKey, resourceId, language, enableDdc },
-    })
-    deps.pluginNotice('火山转写配置已保存', 'ok', 2600)
+    await manualTranscribeStoreSet({ mode: next.mode, volc: next.volc })
+    if (next.mode === 'volc') deps.pluginNotice('火山转写配置已保存', 'ok', 2600)
+    else deps.pluginNotice('已切回官方默认转写', 'ok', 2200)
     updateMenu()
   } catch (e) {
     deps.pluginNotice('打开转写设置失败：' + String((e as any)?.message || e || ''), 'err', 2600)
