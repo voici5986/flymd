@@ -10157,7 +10157,9 @@ async function openConsultDialog(ctx) {
 
   const { body } = createDialogShell(t('写作咨询', 'Writing consult'))
 
-  const CONSULT_SESS_LS_KEY = 'aiNovel.consult.sessions.v1'
+  const _consultProjectRel = String(cfg && cfg.currentProjectRel ? cfg.currentProjectRel : '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+  const CONSULT_SESS_LS_KEY_LEGACY = 'aiNovel.consult.sessions.v1'
+  const CONSULT_SESS_LS_KEY = CONSULT_SESS_LS_KEY_LEGACY + ':' + (_consultProjectRel || 'global')
   const CONSULT_MAX_SESSIONS = 40
   const CONSULT_MAX_MSGS_PER_SESSION = 240
   const CONSULT_INTRO = t('把问题发给我，我会结合进度/设定/前文来聊。', 'Ask me; I will answer with context (no continuation).')
@@ -10202,7 +10204,11 @@ async function openConsultDialog(ctx) {
 
   function _consultLoadStore() {
     try {
-      const raw = localStorage.getItem(CONSULT_SESS_LS_KEY)
+      let raw = localStorage.getItem(CONSULT_SESS_LS_KEY)
+      if (!raw) {
+        // 兼容旧键：如果新键为空但旧键有数据，先读取旧键（不会自动清理旧键）
+        try { raw = localStorage.getItem(CONSULT_SESS_LS_KEY_LEGACY) } catch {}
+      }
       const j = _consultSafeJsonParse(raw)
       const sess = (j && Array.isArray(j.sessions)) ? j.sessions : []
       const currentId = (j && typeof j.currentId === 'string') ? j.currentId : ''
