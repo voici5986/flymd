@@ -12919,21 +12919,7 @@ export function activate(context) {
     __CTX_MENU_DISPOSER__ = null
     try {
       if (typeof context.addContextMenuItem === 'function') {
-        const disposers = []
-        try {
-          const d1 = context.addContextMenuItem({
-            label: t('写作咨询', 'Writing consult'),
-            icon: '✍️',
-            condition: (ctx) => {
-              if (!ctx) return true
-              return ctx.mode === 'edit' || ctx.mode === 'wysiwyg'
-            },
-            onClick: () => { void openConsultDialog(context) }
-          })
-          if (typeof d1 === 'function') disposers.push(d1)
-        } catch {}
-
-        const d2 = context.addContextMenuItem({
+        __CTX_MENU_DISPOSER__ = context.addContextMenuItem({
           label: t('小说引擎', 'Novel Engine'),
           icon: '📚',
           condition: (ctx) => {
@@ -12959,12 +12945,6 @@ export function activate(context) {
             },
           ]
         })
-        if (typeof d2 === 'function') disposers.push(d2)
-        __CTX_MENU_DISPOSER__ = () => {
-          for (let i = 0; i < disposers.length; i++) {
-            try { disposers[i]() } catch {}
-          }
-        }
       }
     } catch (e) {
       try { console.error('[ai-novel] 注册右键菜单失败：', e) } catch {}
