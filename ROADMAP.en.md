@@ -2,6 +2,13 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v0.9.3
+- Fixed: Outline panel H1/H2 expand/collapse toggles work again
+- Fixed: Library sidebar folder/file icons are shown again (switched to VS Code-style SVG icons)
+- Improved: When switching tabs, the library sidebar auto-expands and highlights the active document to avoid stale selection
+- Improved: Built-in “AI Novel Engine” plugin upgraded to v0.6.0
+- Changed: About-page license text updated to GPL-3.0 (consistent with `LICENSE`)
+
 ## Update v0.9.1
 - Improved: In WYSIWYG mode, ordered/unordered list items support Tab to indent (nest) and Shift+Tab to outdent
 - Improved: In WYSIWYG mode, Backspace at the start of a list item outdents (or exits the list)
