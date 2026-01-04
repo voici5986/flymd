@@ -61,6 +61,8 @@ const DEFAULT_CFG = {
     autoBuildIndex: true,
     topK: 6,
     maxChars: 2400,
+    // 调试：把命中片段输出到 Agent 日志（便于确认到底“命中”了什么）
+    showHitsInLog: false,
     chunkSize: 900,
     chunkOverlap: 160,
     // 仅建议 macOS 遇到 forbidden path 时开启：把索引落到 AppLocalData（插件数据目录），避免 Documents 等路径被 fs scope 拦截。
@@ -407,6 +409,23 @@ function fetchWithTimeout(url, init, timeoutMs) {
   return fetch(url, init2).finally(() => {
     try { clearTimeout(timer) } catch {}
   })
+}
+
+function _ainIsThenable(v) {
+  return !!(v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function')
+}
+
+async function _ainConfirm(msg) {
+  try {
+    // 注意：某些宿主会把 window.confirm 改造成 Promise（异步原生弹窗）。
+    // 这里统一兼容：同步 bool / 异步 Promise<bool> 都能正确等待用户选择。
+    const r = (typeof window !== 'undefined' && typeof window.confirm === 'function')
+      ? window.confirm(String(msg || ''))
+      : true
+    return _ainIsThenable(r) ? !!(await r) : !!r
+  } catch {
+    return false
+  }
 }
 
 function getOrCreateDeviceId() {
@@ -1791,7 +1810,8 @@ async function style_generate_for_names(ctx, cfg, names, opt) {
     ].join('\n')
     const ragCfg = (cfg && cfg.rag && typeof cfg.rag === 'object') ? cfg.rag : {}
     const maxChars = Math.max(400, Math.min((ragCfg.maxChars | 0) || 2400, 1400))
-    rag = await rag_get_hits(ctx, cfg, q, { topK: 6, maxChars, hitMaxChars: 900 })
+    const topK = Math.max(1, (ragCfg.topK | 0) || 6)
+    rag = await rag_get_hits(ctx, cfg, q, { topK, maxChars, hitMaxChars: 900 })
   } catch {}
 
   const o = (opt && typeof opt === 'object') ? opt : {}
@@ -4041,6 +4061,27 @@ async function openSettingsDialog(ctx) {
   rowEmb2.appendChild(inpEmbModel.wrap)
   secEmb.appendChild(rowEmb2)
 
+  const ragCfg = (cfg && cfg.rag && typeof cfg.rag === 'object') ? cfg.rag : {}
+  const rowRag1 = document.createElement('div')
+  rowRag1.className = 'ain-row'
+  const inpRagTopK = mkInput(t('RAG topK（每次检索返回条数）', 'RAG topK (hits per search)'), String((ragCfg.topK | 0) || 6))
+  const inpRagMaxChars = mkInput(t('RAG 预算（字符）', 'RAG budget (chars)'), String((ragCfg.maxChars | 0) || 2400))
+  rowRag1.appendChild(inpRagTopK.wrap)
+  rowRag1.appendChild(inpRagMaxChars.wrap)
+  secEmb.appendChild(rowRag1)
+
+  const ragShowLine = document.createElement('label')
+  ragShowLine.style.display = 'flex'
+  ragShowLine.style.gap = '8px'
+  ragShowLine.style.alignItems = 'center'
+  ragShowLine.style.marginTop = '8px'
+  const cbRagShowHits = document.createElement('input')
+  cbRagShowHits.type = 'checkbox'
+  cbRagShowHits.checked = !!(ragCfg && ragCfg.showHitsInLog)
+  ragShowLine.appendChild(cbRagShowHits)
+  ragShowLine.appendChild(document.createTextNode(t('在续写（Agent）日志中显示命中内容', 'Show RAG hit contents in Agent logs')))
+  secEmb.appendChild(ragShowLine)
+
   const ragIdxLine = document.createElement('label')
   ragIdxLine.style.display = 'flex'
   ragIdxLine.style.gap = '8px'
@@ -4262,7 +4303,10 @@ async function openSettingsDialog(ctx) {
           model: inpEmbModel.inp.value
         },
         rag: {
-          indexInAppLocalData: !!cbRagIndexInApp.checked
+          indexInAppLocalData: !!cbRagIndexInApp.checked,
+          topK: _clampInt(inpRagTopK.inp.value, 1, 50),
+          maxChars: _clampInt(inpRagMaxChars.inp.value, 400, 10000000),
+          showHitsInLog: !!cbRagShowHits.checked
         },
         ctx: {
           modelContextChars: _clampInt(inpWindow.inp.value, 8000, 10000000),
@@ -6094,9 +6138,11 @@ async function openWriteWithChoiceDialog(ctx) {
       }
     } catch {}
     try {
+      // 只有用户本来就在底部时才跟随滚动；否则用户上滑查看历史会被强制拉回底部。
+      const nearBottom = (agentLog.scrollTop + agentLog.clientHeight) >= (agentLog.scrollHeight - 24)
       const lines = Array.isArray(logs) ? logs : []
       agentLog.textContent = lines.join('\n')
-      agentLog.scrollTop = agentLog.scrollHeight
+      if (nearBottom) agentLog.scrollTop = agentLog.scrollHeight
     } catch {}
   }
 
@@ -7312,6 +7358,7 @@ async function agentRunPlan(ctx, cfg, base, ui) {
 
   // Agent 的 rag：允许多次检索累积（否则后一次会覆盖前一次，前面的检索基本白做）
   const ragCfg0 = (cfg && cfg.rag && typeof cfg.rag === 'object') ? cfg.rag : {}
+  const ragShowHitsInLog0 = !!(ragCfg0 && ragCfg0.showHitsInLog)
   const ragTotalBudget = Math.max(400, (ragCfg0.maxChars | 0) || 2400)
   // 默认比例：风格:事实 = 1:2（风格用于“写得像”，事实用于“不写错”）
   const _ragRatioStyle = 1
@@ -7325,6 +7372,21 @@ async function agentRunPlan(ctx, cfg, base, ui) {
     let n = 0
     for (let i = 0; i < arr.length; i++) n += safeText(arr[i] && arr[i].text).length
     return n
+  }
+
+  function _ainFmtRagHitsForLog(hits) {
+    const arr = Array.isArray(hits) ? hits : []
+    if (!arr.length) return ''
+    const lines = []
+    const lim = 12
+    for (let i = 0; i < arr.length && i < lim; i++) {
+      const h = arr[i]
+      const src = safeText(h && h.source).trim() || 'unknown'
+      const txt = safeText(h && h.text).trim()
+      if (!txt) continue
+      lines.push(`- ${src}\n${txt}`)
+    }
+    return lines.length ? (t('命中内容：', 'Hit contents: ') + '\n' + lines.join('\n\n')) : ''
   }
 
   function _ainRagPoolMerge(pool, hits, maxChars) {
@@ -7491,16 +7553,26 @@ async function agentRunPlan(ctx, cfg, base, ui) {
         } else {
           const kind = (it.rag_kind === 'style' || it.rag_kind === 'facts') ? it.rag_kind : 'facts'
           const budget = kind === 'style' ? ragBudgetStyle : ragBudgetFacts
+          const topK0 = Math.max(1, (ragCfg.topK | 0) || 6)
           const hits = await rag_get_hits(ctx, cfg, q + '\n\n' + sliceTail(curPrev(), 1800), {
             // 风格片段更短更碎；事实片段允许更长
-            topK: kind === 'style' ? 6 : 6,
+            topK: topK0,
             maxChars: budget,
             hitMaxChars: kind === 'style' ? 900 : 1200
           })
           if (kind === 'style') ragPools.style = _ainRagPoolMerge(ragPools.style, hits, ragBudgetStyle)
           else ragPools.facts = _ainRagPoolMerge(ragPools.facts, hits, ragBudgetFacts)
           rag = _ainRagPoolCompose()
-          pushLog(t('检索命中：', 'RAG hits: ') + String(Array.isArray(hits) ? hits.length : 0))
+          pushLog(
+            t('检索返回：', 'RAG returned: ') +
+            String(Array.isArray(hits) ? hits.length : 0) +
+            t('（topK=', ' (topK=') + String(topK0) +
+            t('，预算 ', ', budget ') + String(budget) + t(' 字符）', ' chars)')
+          )
+          if (!!(ragCfg && ragCfg.showHitsInLog) || ragShowHitsInLog0) {
+            const detail = _ainFmtRagHitsForLog(hits)
+            if (detail) pushLog(detail)
+          }
           pushLog(
             t('RAG 累积：风格 ', 'RAG pool: style ') + String(_ainRagPoolChars(ragPools.style)) +
             t(' 字符；事实 ', ', facts ') + String(_ainRagPoolChars(ragPools.facts)) +
@@ -9702,9 +9774,11 @@ async function openBootstrapDialog(ctx) {
       }
     } catch {}
     try {
+      // 只有用户本来就在底部时才跟随滚动；否则用户上滑查看历史会被强制拉回底部。
+      const nearBottom = (agentLog.scrollTop + agentLog.clientHeight) >= (agentLog.scrollHeight - 24)
       const lines = Array.isArray(logs) ? logs : []
       agentLog.textContent = lines.join('\n')
-      agentLog.scrollTop = agentLog.scrollHeight
+      if (nearBottom) agentLog.scrollTop = agentLog.scrollHeight
     } catch {}
   }
 
@@ -10500,11 +10574,9 @@ async function openConsultDialog(ctx) {
         try { q.focus() } catch {}
       }
 
-      btnRemove.onclick = (e) => {
+      btnRemove.onclick = async (e) => {
         try { e.stopPropagation() } catch {}
-        const ok = (typeof window !== 'undefined' && window.confirm)
-          ? window.confirm(t('确认删除该会话？删除后不可恢复。', 'Delete this session? This cannot be undone.'))
-          : true
+        const ok = await _ainConfirm(t('确认删除该会话？删除后不可恢复。', 'Delete this session? This cannot be undone.'))
         if (!ok) return
         const id = s.id
         sessions = sessions.filter((x) => x && x.id !== id)
@@ -10650,11 +10722,9 @@ async function openConsultDialog(ctx) {
       try { q.focus() } catch {}
     } catch {}
   }
-  btnDelSess.onclick = () => {
+  btnDelSess.onclick = async () => {
     if (!session) return
-    const ok = (typeof window !== 'undefined' && window.confirm)
-      ? window.confirm(t('确认删除当前会话？删除后不可恢复。', 'Delete current session? This cannot be undone.'))
-      : true
+    const ok = await _ainConfirm(t('确认删除当前会话？删除后不可恢复。', 'Delete current session? This cannot be undone.'))
     if (!ok) return
     const id = session.id
     sessions = sessions.filter((x) => x && x.id !== id)
