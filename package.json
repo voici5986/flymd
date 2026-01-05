@@ -46,6 +46,7 @@
     "markdown-it-footnote": "^3.0.3",
     "markdown-it-katex": "^2.0.3",
     "mermaid": "^11.10.0",
-    "pdfjs-dist": "^5.4.394"
+    "pdfjs-dist": "^5.4.394",
+    "pinyin-pro": "^3.27.0"
   }
 }

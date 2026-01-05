@@ -11,6 +11,16 @@ import { getPluginMenuVisibility } from './pluginMenuConfig'
 // 插件菜单项描述
 type PluginMenuItem = { pluginId: string; label: string; onClick?: () => void; children?: any[] }
 
+export type PluginDropdownItem = {
+  pluginId?: string
+  label?: string
+  onClick?: () => void | Promise<void>
+  children?: PluginDropdownItem[]
+  disabled?: boolean
+  note?: string
+  type?: 'divider' | 'group'
+}
+
 // 下拉菜单 DOM 常量
 const PLUGIN_DROPDOWN_OVERLAY_ID = 'plugin-dropdown-overlay'
 const PLUGIN_DROPDOWN_PANEL_ID = 'plugin-dropdown-panel'
@@ -252,6 +262,52 @@ export function togglePluginDropdown(anchor: HTMLElement, items: any[]) {
   }
 }
 
+function buildPluginDropdownItems(): PluginDropdownItem[] {
+  const items: PluginDropdownItem[] = []
+  try {
+    // 构建菜单项列表（按可见性过滤）
+    const visibleItems = Array.from(pluginsMenuItems.values()).filter((item) => {
+      try {
+        const vis = getPluginMenuVisibility(item.pluginId)
+        return vis.dropdownMenu !== false
+      } catch {
+        return true
+      }
+    })
+
+    // 第一项：菜单管理（由宿主注入打开回调）
+    if (_openPluginsMenuManager) {
+      items.push({
+        pluginId: '@app',
+        label: t('menu.plugins.manage') || '菜单管理',
+        onClick: () => {
+          try { _openPluginsMenuManager && _openPluginsMenuManager() } catch (e) { console.error(e) }
+        },
+      })
+      if (visibleItems.length > 0) {
+        items.push({ type: 'divider' })
+      }
+    }
+
+    for (const item of visibleItems) {
+      items.push({
+        pluginId: item.pluginId,
+        label: item.label,
+        onClick: item.onClick,
+        children: item.children,
+      })
+    }
+  } catch (e) {
+    console.error(e)
+  }
+  return items
+}
+
+// 供命令面板使用：返回与“插件”下拉菜单一致的结构化菜单项（包含回调）
+export function getPluginDropdownItems(): PluginDropdownItem[] {
+  return buildPluginDropdownItems()
+}
+
 // 初始化"插件"菜单按钮
 export function initPluginsMenu() {
   try {
@@ -287,44 +343,7 @@ export function initPluginsMenu() {
       ev.preventDefault()
       ev.stopPropagation()
       try {
-        // 构建菜单项列表（按可见性过滤）
-        const visibleItems = Array.from(pluginsMenuItems.values()).filter((item) => {
-          try {
-            const vis = getPluginMenuVisibility(item.pluginId)
-            return vis.dropdownMenu !== false
-          } catch {
-            return true
-          }
-        })
-
-        const items: any[] = []
-
-        // 第一项：菜单管理
-        if (_openPluginsMenuManager) {
-          items.push({
-            label: t('menu.plugins.manage') || '菜单管理',
-            onClick: () => {
-              try {
-                _openPluginsMenuManager && _openPluginsMenuManager()
-              } catch (e) {
-                console.error(e)
-              }
-            },
-          })
-          if (visibleItems.length > 0) {
-            items.push({ type: 'divider' })
-          }
-        }
-
-        for (const item of visibleItems) {
-          items.push({
-            label: item.label,
-            onClick: item.onClick,
-            children: item.children,
-          })
-        }
-
-        togglePluginDropdown(pluginsBtn!, items)
+        togglePluginDropdown(pluginsBtn!, buildPluginDropdownItems() as any)
       } catch (e) { console.error(e) }
     })
 

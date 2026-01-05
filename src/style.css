@@ -1536,6 +1536,97 @@ body > .block-menu { display: none !important; }
   font-size: 13px;
 }
 
+/* 命令面板 Command Palette（Ctrl+Shift+P） */
+.command-palette-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  z-index: 10001;
+}
+.command-palette-overlay.show {
+  display: flex;
+}
+.command-palette-dialog {
+  width: 560px;
+  max-width: 92vw;
+  background: var(--chrome-panel-bg, var(--panel-bg));
+  border-radius: 10px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.command-palette-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  font-size: 15px;
+  outline: none;
+  box-sizing: border-box;
+}
+.command-palette-input::placeholder {
+  color: var(--muted);
+}
+.command-palette-list {
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.command-palette-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.command-palette-item:hover {
+  background: rgba(127, 127, 127, 0.1);
+}
+.command-palette-item.selected {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+}
+.command-palette-item.selected .command-palette-detail {
+  color: rgba(255, 255, 255, 0.7);
+}
+.command-palette-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.command-palette-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.command-palette-detail {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.command-palette-hint {
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.command-palette-loading,
+.command-palette-empty {
+  padding: 18px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .lib-float-toggle { -webkit-app-region: no-drag; cursor: pointer; border: none; background: none; color: var(--fg); font-size: 18px; width: 30px; height: 30px; display: none; align-items: center; justify-content: center; border-radius: 4px; padding: 0; line-height: 1; opacity: 0.5; font-family: monospace; position: fixed; top: 12px; left: 12px; z-index: 90; }
 .lib-float-toggle.side-left { left: 12px; right: auto; }
 .lib-float-toggle.side-right { left: auto; right: 12px; }
@@ -5401,6 +5492,25 @@ body.dark-mode .quick-search-item:hover {
 }
 
 body.dark-mode .quick-search-item.selected {
+  background: #3b82f6 !important;
+}
+
+/* 夜间模式 - 命令面板 */
+body.dark-mode .command-palette-dialog {
+  background: #1a1b1e !important;
+  border: 1px solid #2d3748;
+}
+
+body.dark-mode .command-palette-input {
+  color: #e5e7eb !important;
+  border-bottom-color: #2d3748 !important;
+}
+
+body.dark-mode .command-palette-item:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+body.dark-mode .command-palette-item.selected {
   background: #3b82f6 !important;
 }
 
