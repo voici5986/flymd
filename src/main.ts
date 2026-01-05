@@ -40,6 +40,7 @@ import { saveImageToLocalAndGetPathCore, toggleUploaderEnabledFromMenuCore } fro
 import { getLibraries, getActiveLibraryId, getActiveLibraryRoot, setActiveLibraryId as setActiveLibId, upsertLibrary, removeLibrary as removeLib, renameLibrary as renameLib } from './utils/library'
 import appIconUrl from '../Flymdnew.png?url'
 import { decorateCodeBlocks } from './decorate'
+import { ribbonIcons } from './icons'
 import { APP_VERSION } from './core/appInfo'
 import type { UpdateAssetInfo, CheckUpdateResp, UpdateExtra } from './core/updateTypes'
 // htmlToMarkdown 改为按需动态导入（仅在粘贴 HTML 时使用）
@@ -51,7 +52,7 @@ import { initPlatformIntegration, mobileSaveFile, isMobilePlatform } from './pla
 import { createImageUploader } from './core/imageUpload'
 import { createPluginMarket, compareInstallableItems, FALLBACK_INSTALLABLES } from './extensions/market'
 import type { InstallableItem } from './extensions/market'
-import { listDirOnce, type LibEntry } from './core/libraryFs'
+import { listDirOnce, listAllFiles, type LibEntry } from './core/libraryFs'
 import { normSep, isInside, ensureDir, moveFileSafe, renameFileSafe, normalizePath, readTextFileAnySafe, writeTextFileAnySafe } from './core/fsSafe'
 import { getLibrarySort, setLibrarySort, type LibSortMode } from './core/librarySort'
 import { createCustomTitleBar, removeCustomTitleBar, applyWindowDecorationsCore } from './modes/focusMode'
@@ -1130,34 +1131,45 @@ function guard<T extends (...args: any[]) => any>(fn: T) {
 // UI 结构搭建
 const app = document.getElementById('app')!
 app.innerHTML = `
-  <div class="titlebar">
-    <div class="menubar">
-      <!-- 顶级菜单：文件 / 模式（参考 Windows 文本菜单） -->
-      <div class="menu-item" id="btn-open" title="${t('menu.file')}">${t('menu.file')}</div>
-      <div class="menu-item" id="btn-mode" title="${t('menu.mode')}">${t('menu.mode')}</div>
-      <!-- 旧按钮保留但隐藏，避免破坏现有逻辑引用 -->
-      <div class="menu-item" id="btn-new" style="display:none;" title="${t('file.new')} (Ctrl+N)">${t('file.new')}</div>
-      <div class="menu-item" id="btn-save" style="display:none;" title="${t('file.save')} (Ctrl+S)">${t('file.save')}</div>
-      <div class="menu-item" id="btn-saveas" style="display:none;" title="${t('file.saveas')} (Ctrl+Shift+S)">${t('file.saveas')}</div>
-      <div class="menu-item" id="btn-toggle" style="display:none;" title="${t('mode.edit')}/${t('mode.read')} (Ctrl+E)">${t('mode.read')}</div>
-      <div class="menu-item" id="btn-theme" title="${t('menu.theme.tooltip')}">${t('menu.theme')}</div>
-      <div class="menu-item" id="btn-extensions" title="${t('menu.extensions')}">${t('menu.extensions')}</div>
+  <aside class="ribbon" id="ribbon">
+    <div class="ribbon-top">
+      <button class="ribbon-btn" id="btn-filetree" title="${t('lib.toggle')}">${ribbonIcons.folder}</button>
+      <button class="ribbon-btn" id="btn-open" title="${t('menu.file')}">${ribbonIcons.fileText}</button>
+      <button class="ribbon-btn" id="btn-mode" title="${t('menu.mode')}">${ribbonIcons.layout}</button>
+      <button class="ribbon-btn" id="btn-plugins" title="${t('menu.plugins')}">${ribbonIcons.box}</button>
+      <button class="ribbon-btn" id="btn-update" title="${t('menu.update')}">${ribbonIcons.refreshCw}</button>
+      <button class="ribbon-btn" id="btn-about" title="${t('menu.about')}">${ribbonIcons.info}</button>
     </div>
-    <div class="filename" id="filename">${t('filename.untitled')}</div>
-    <div class="window-controls" id="window-controls">
-      <button class="window-btn window-minimize" id="window-minimize" title="最小化">-</button>
-      <button class="window-btn window-maximize" id="window-maximize" title="最大化">+</button>
-      <button class="window-btn window-close" id="window-close" title="关闭">x</button>
+    <div class="ribbon-bottom">
+      <button class="ribbon-btn" id="btn-theme" title="${t('menu.theme.tooltip')}">${ribbonIcons.sun}</button>
+      <button class="ribbon-btn" id="btn-extensions" title="${t('menu.extensions')}">${ribbonIcons.package}</button>
+      <button class="ribbon-btn" id="btn-lang" title="${t('menu.language')}">${ribbonIcons.globe}</button>
     </div>
-  </div>
-  <div class="focus-trigger-zone" id="focus-trigger-zone"></div>
-  <div class="container">
-    <textarea id="editor" class="editor" spellcheck="false" placeholder="${t('editor.placeholder')}"></textarea>
-    <div id="preview" class="preview hidden"></div>
-    <div class="statusbar" id="status">${fmtStatus(1,1)}</div>
-    <div class="notification-container" id="notification-container"></div>
-    <div class="status-zoom" id="status-zoom"><span id="zoom-label">100%</span> <button id="zoom-reset" title="重置缩放">重置</button></div>
-  </div>
+  </aside>
+  <main class="main-content">
+    <div class="tabbar-row" id="tabbar-row">
+      <div class="tabbar-placeholder" id="tabbar-placeholder"></div>
+      <div class="filename" id="filename">${t('filename.untitled')}</div>
+      <div class="window-controls" id="window-controls">
+        <button class="window-btn window-minimize" id="window-minimize" title="最小化">-</button>
+        <button class="window-btn window-maximize" id="window-maximize" title="最大化">+</button>
+        <button class="window-btn window-close" id="window-close" title="关闭">x</button>
+      </div>
+    </div>
+    <div class="focus-trigger-zone" id="focus-trigger-zone"></div>
+    <div class="container">
+      <textarea id="editor" class="editor" spellcheck="false" placeholder="${t('editor.placeholder')}"></textarea>
+      <div id="preview" class="preview hidden"></div>
+      <div class="statusbar" id="status">${fmtStatus(1,1)}</div>
+      <div class="notification-container" id="notification-container"></div>
+      <div class="status-zoom" id="status-zoom"><span id="zoom-label">100%</span> <button id="zoom-reset" title="重置缩放">重置</button></div>
+    </div>
+    <!-- 旧按钮保留但隐藏，避免破坏现有逻辑引用 -->
+    <div class="menu-item" id="btn-new" style="display:none;" title="${t('file.new')} (Ctrl+N)">${t('file.new')}</div>
+    <div class="menu-item" id="btn-save" style="display:none;" title="${t('file.save')} (Ctrl+S)">${t('file.save')}</div>
+    <div class="menu-item" id="btn-saveas" style="display:none;" title="${t('file.saveas')} (Ctrl+Shift+S)">${t('file.saveas')}</div>
+    <div class="menu-item" id="btn-toggle" style="display:none;" title="${t('mode.edit')}/${t('mode.read')} (Ctrl+E)">${t('mode.read')}</div>
+  </main>
 `
 try { logInfo('打点:DOM就绪') } catch {}
 
@@ -2149,101 +2161,7 @@ function autoNewlineAfterInlineDollarInWysiwyg() {
   } catch {}
 }
 
-// 动态添加菜单栏补充项（库 / 关于 / 语言等）
-const menubar = document.querySelector('.menubar') as HTMLDivElement
-if (menubar) {
-  // 顶级“文件”按钮文案统一走 i18n
-  const btnOpen0 = document.getElementById('btn-open') as HTMLDivElement | null
-  if (btnOpen0) { btnOpen0.textContent = t('menu.file'); btnOpen0.title = t('menu.file') }
-
-  // 扩展按钮（如未在首屏模板中渲染，则此处补充）
-  try {
-    const exists = document.getElementById('btn-extensions') as HTMLDivElement | null
-    if (!exists) {
-      const extBtn = document.createElement('div')
-      extBtn.id = 'btn-extensions'
-      extBtn.className = 'menu-item'
-      extBtn.title = t('menu.extensions')
-      extBtn.textContent = t('menu.extensions')
-      menubar.appendChild(extBtn)
-    }
-  } catch {}
-
-  // “库”按钮：插入到“文件”按钮左侧
-  const libBtn = document.createElement('div')
-  libBtn.id = 'btn-library'
-  libBtn.className = 'menu-item'
-  libBtn.title = t('lib.menu')
-  libBtn.textContent = t('lib.menu')
-  const openBtnRef = document.getElementById('btn-open') as HTMLDivElement | null
-  if (openBtnRef && openBtnRef.parentElement === menubar) {
-    menubar.insertBefore(libBtn, openBtnRef)
-  } else {
-    menubar.insertBefore(libBtn, menubar.firstChild)
-  }
-
-  // 确保“新建”按钮紧随库按钮之后
-  try {
-    const newBtnRef = document.getElementById('btn-new') as HTMLDivElement | null
-    if (newBtnRef && newBtnRef.parentElement === menubar) {
-      menubar.insertBefore(newBtnRef, libBtn.nextSibling)
-    }
-  } catch {}
-
-  // 关于 / 更新按钮
-  const aboutBtn = document.createElement('div')
-  aboutBtn.id = 'btn-about'
-  aboutBtn.className = 'menu-item'
-  aboutBtn.title = t('menu.about')
-  aboutBtn.textContent = t('menu.about')
-  const updBtn = document.createElement('div')
-  updBtn.id = 'btn-update'
-  updBtn.className = 'menu-item'
-  updBtn.title = t('menu.update')
-  updBtn.textContent = t('menu.update')
-  menubar.appendChild(updBtn)
-  menubar.appendChild(aboutBtn)
-
-  // 语言切换按钮：移动到标题栏右侧（紧随文件名之后）
-  const langBtn = document.createElement('div')
-  langBtn.id = 'btn-lang'
-  langBtn.className = 'menu-item'
-  langBtn.title = t('menu.language')
-  langBtn.textContent = '🌍'
-  try {
-    const titlebar = document.querySelector('.titlebar') as HTMLDivElement | null
-    const extBtn = document.getElementById('btn-extensions') as HTMLDivElement | null
-    const themeBtn = document.getElementById('btn-theme') as HTMLDivElement | null
-    const fileNameEl = document.querySelector('.titlebar .filename') as HTMLDivElement | null
-    if (titlebar && extBtn) {
-      try { extBtn.remove() } catch {}
-      if (themeBtn) { try { themeBtn.remove() } catch {} }
-      if (fileNameEl && fileNameEl.parentElement === titlebar) {
-        // 顺序：主题 | 扩展 | 语言
-        titlebar.insertBefore(extBtn, fileNameEl.nextSibling)
-        if (themeBtn) titlebar.insertBefore(themeBtn, extBtn)
-        titlebar.insertBefore(langBtn, extBtn.nextSibling)
-      } else {
-        if (themeBtn) titlebar.appendChild(themeBtn)
-        titlebar.appendChild(extBtn)
-        titlebar.appendChild(langBtn)
-      }
-    } else if (titlebar) {
-      // 兜底：找不到扩展按钮时，将语言图标与主题放在文件名后
-      if (fileNameEl && fileNameEl.parentElement === titlebar) {
-        if (themeBtn) titlebar.insertBefore(themeBtn, fileNameEl.nextSibling)
-        titlebar.insertBefore(langBtn, (themeBtn || fileNameEl).nextSibling)
-      } else {
-        if (themeBtn) titlebar.appendChild(themeBtn)
-        titlebar.appendChild(langBtn)
-      }
-    } else {
-      // 再兜底：仍未获取到 titlebar，则临时放回 menubar 末尾
-      if (themeBtn) menubar.appendChild(themeBtn)
-      menubar.appendChild(langBtn)
-    }
-  } catch {}
-}
+// Ribbon 菜单按钮已在 HTML 模板中定义，无需动态插入
 const containerEl = document.querySelector('.container') as HTMLDivElement
 // Ctrl/Cmd + 滚轮：缩放/放大编辑、预览、所见模式字号；Shift + 滚轮：调整阅读宽度
 try {
@@ -2314,20 +2232,23 @@ wysiwygCaretEl.id = 'wysiwyg-caret'
   library.className = 'library hidden side-left'
   library.innerHTML = `
     <div class="lib-header">
-      <div class="lib-title-row">
-        <button class="lib-choose-btn" id="lib-choose">${t('lib.choose')}</button>
-        <div class="lib-name" id="lib-path"></div>
-        <button class="lib-toggle-btn" id="lib-toggle">&lt;</button>
+      <div class="lib-vault-row">
+        <button class="lib-vault-btn" id="btn-library" title="${t('lib.menu')}">
+          <span class="lib-vault-icon">${ribbonIcons.database}</span>
+          <span class="lib-vault-name" id="lib-path"></span>
+          <span class="lib-vault-arrow">${ribbonIcons.chevronDown}</span>
+        </button>
+        <button class="lib-search-btn" id="btn-search" title="搜索 (Ctrl+F)">${ribbonIcons.search}</button>
       </div>
-        <div class="lib-actions">
-          <button class="lib-action-btn active" id="lib-tab-files">${t('tab.files')}</button>
-          <button class="lib-action-btn" id="lib-tab-outline">${t('tab.outline')}</button>
-          <button class="lib-action-btn" id="lib-refresh">${t('lib.refresh')}</button>
-          <button class="lib-action-btn" id="lib-side">${t('lib.side.left')}</button>
-          <button class="lib-action-btn" id="lib-pin">${t('lib.pin.auto')}</button>
-        </div>
+      <div class="lib-actions">
+        <button class="lib-action-btn active" id="lib-tab-files">${t('tab.files')}</button>
+        <button class="lib-action-btn" id="lib-tab-outline">${t('tab.outline')}</button>
+        <button class="lib-action-btn" id="lib-refresh">${t('lib.refresh')}</button>
+        <button class="lib-action-btn" id="lib-side">${t('lib.side.left')}</button>
+        <button class="lib-action-btn" id="lib-pin">${t('lib.pin.auto')}</button>
       </div>
-      <div class="lib-tree" id="lib-tree"></div>
+    </div>
+    <div class="lib-tree" id="lib-tree"></div>
     <div class="lib-outline hidden" id="lib-outline"></div>
   `
   containerEl.appendChild(library)
@@ -6186,10 +6107,22 @@ function showTopMenu(anchor: HTMLElement, items: TopMenuItemSpec[]) {
     }
     for (const it of items) menu.appendChild(mkRow(it))
 
-    // 定位：锚点左下
+    // 定位：Ribbon 按钮右侧弹出
     const rc = anchor.getBoundingClientRect()
-    const left = Math.max(0, Math.min(rc.left, window.innerWidth - (menu.offsetWidth || 220)))
-    const top = Math.min(window.innerHeight - 10, rc.bottom)
+    const menuWidth = menu.offsetWidth || 220
+    const menuHeight = menu.offsetHeight || 200
+    // 优先右侧弹出，空间不足时左侧弹出
+    let left = rc.right + 4
+    if (left + menuWidth > window.innerWidth) {
+      left = rc.left - menuWidth - 4
+    }
+    left = Math.max(0, left)
+    // 垂直方向与按钮顶部对齐，超出屏幕时上移
+    let top = rc.top
+    if (top + menuHeight > window.innerHeight - 10) {
+      top = window.innerHeight - menuHeight - 10
+    }
+    top = Math.max(0, top)
     menu.style.left = left + 'px'
     menu.style.top = top + 'px'
     menu.style.display = 'block'
@@ -6328,17 +6261,16 @@ function showLangMenu() {
 async function refreshLibraryUiAndTree(refreshTree = true) {
   // 更新库名称显示
   try {
-    const elPath = document.getElementById('lib-path') as HTMLDivElement | null
-    if (elPath) {
-      const id = await getActiveLibraryId()
-      if (id) {
-        const libs = await getLibraries()
-        const cur = libs.find(x => x.id === id)
-        elPath.textContent = cur?.name || ''
-      } else {
-        elPath.textContent = ''
-      }
+    const id = await getActiveLibraryId()
+    let libName = ''
+    if (id) {
+      const libs = await getLibraries()
+      const cur = libs.find(x => x.id === id)
+      libName = cur?.name || ''
     }
+    // 更新库侧栏顶部的库名显示
+    const elPath = document.getElementById('lib-path') as HTMLSpanElement | null
+    if (elPath) elPath.textContent = libName || t('lib.menu')
   } catch {}
 
   if (!refreshTree) return
@@ -6359,9 +6291,116 @@ async function refreshLibraryUiAndTree(refreshTree = true) {
   } catch {}
 }
 
+// 快速文件搜索（Quick Switcher）
+let _quickSearchPanel: HTMLDivElement | null = null
+let _quickSearchInput: HTMLInputElement | null = null
+let _quickSearchResults: HTMLDivElement | null = null
+let _quickSearchFiles: LibEntry[] = []
+let _quickSearchSelected = 0
+
+async function showQuickSearch() {
+  // 创建面板（如果不存在）
+  if (!_quickSearchPanel) {
+    _quickSearchPanel = document.createElement('div')
+    _quickSearchPanel.className = 'quick-search-overlay'
+    _quickSearchPanel.innerHTML = `
+      <div class="quick-search-dialog">
+        <input type="text" class="quick-search-input" placeholder="搜索文件..." />
+        <div class="quick-search-results"></div>
+      </div>
+    `
+    document.body.appendChild(_quickSearchPanel)
+    _quickSearchInput = _quickSearchPanel.querySelector('.quick-search-input') as HTMLInputElement
+    _quickSearchResults = _quickSearchPanel.querySelector('.quick-search-results') as HTMLDivElement
+
+    // 点击遮罩关闭
+    _quickSearchPanel.addEventListener('click', (e) => {
+      if (e.target === _quickSearchPanel) hideQuickSearch()
+    })
+
+    // 输入过滤
+    _quickSearchInput?.addEventListener('input', () => {
+      _quickSearchSelected = 0
+      renderQuickSearchResults()
+    })
+
+    // 键盘导航
+    _quickSearchInput?.addEventListener('keydown', (e) => {
+      const items = _quickSearchResults?.querySelectorAll('.quick-search-item') || []
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        _quickSearchSelected = Math.min(_quickSearchSelected + 1, items.length - 1)
+        renderQuickSearchResults()
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        _quickSearchSelected = Math.max(_quickSearchSelected - 1, 0)
+        renderQuickSearchResults()
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const selected = items[_quickSearchSelected] as HTMLElement
+        if (selected) selected.click()
+      } else if (e.key === 'Escape') {
+        hideQuickSearch()
+      }
+    })
+  }
+
+  // 先显示面板，再异步加载文件
+  _quickSearchFiles = []
+  _quickSearchSelected = 0
+  if (_quickSearchInput) _quickSearchInput.value = ''
+  if (_quickSearchResults) _quickSearchResults.innerHTML = '<div class="quick-search-loading">加载中...</div>'
+  _quickSearchPanel.classList.add('show')
+  setTimeout(() => _quickSearchInput?.focus(), 50)
+
+  // 异步加载文件列表
+  const root = await getLibraryRoot()
+  if (!root) { hideQuickSearch(); showError('请先选择库目录'); return }
+  _quickSearchFiles = await listAllFiles(root)
+  renderQuickSearchResults()
+}
+
+function hideQuickSearch() {
+  _quickSearchPanel?.classList.remove('show')
+}
+
+function renderQuickSearchResults() {
+  if (!_quickSearchResults || !_quickSearchInput) return
+  const query = _quickSearchInput.value.toLowerCase().trim()
+  const root = _quickSearchFiles.length > 0 ? (_quickSearchFiles[0].path.split(/[\\/]/).slice(0, -1).join('/') + '/').replace(/\\/g, '/') : ''
+
+  // 过滤匹配的文件
+  let filtered = _quickSearchFiles
+  if (query) {
+    filtered = _quickSearchFiles.filter(f => f.name.toLowerCase().includes(query) || f.path.toLowerCase().includes(query))
+  }
+  filtered = filtered.slice(0, 20) // 最多显示 20 个
+
+  _quickSearchResults.innerHTML = filtered.map((f, i) => {
+    const relPath = f.path.replace(/\\/g, '/').replace(root, '')
+    const selected = i === _quickSearchSelected ? 'selected' : ''
+    return `<div class="quick-search-item ${selected}" data-path="${f.path.replace(/"/g, '&quot;')}">
+      <span class="quick-search-name">${f.name}</span>
+      <span class="quick-search-path">${relPath}</span>
+    </div>`
+  }).join('')
+
+  // 绑定点击事件
+  _quickSearchResults.querySelectorAll('.quick-search-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      const path = (el as HTMLElement).dataset.path
+      if (path) {
+        hideQuickSearch()
+        await openFile2(path)
+      }
+    })
+  })
+}
+
 // 库选择菜单：列出已保存库、切换/新增/重命名/删除
 async function showLibraryMenu() {
-  const anchor = document.getElementById('lib-choose') as HTMLButtonElement | null
+  // 优先使用 ribbon 顶部的库选择器按钮，回退到旧版 lib-choose
+  const anchor = (document.getElementById('btn-library') || document.getElementById('lib-choose')) as HTMLButtonElement | null
   if (!anchor) return
   try {
     const libs = await getLibraries()
@@ -6411,24 +6450,37 @@ function applyI18nUi() {
       ['btn-uploader', t('menu.uploader')],
       ['btn-extensions', t('menu.extensions')],
       ['btn-library', t('lib.menu')],
+      ['btn-filetree', t('lib.toggle')],
       ['btn-update', t('menu.update')],
       ['btn-about', t('menu.about')],
     ]
     for (const [id, text] of map) {
       const el = document.getElementById(id) as HTMLDivElement | null
-      if (el) { el.textContent = text; el.title = text }
+      if (el) {
+        // Ribbon 按钮和库 vault 按钮只更新 title，不覆盖 SVG 图标
+        if (el.classList.contains('ribbon-btn') || el.classList.contains('lib-vault-btn')) {
+          el.title = text
+        } else {
+          el.textContent = text
+          el.title = text
+        }
+      }
     }
-    // 主题与插件按钮：标题与提示分离
+    // 主题与插件按钮：标题与提示分离（Ribbon 按钮只更新 title）
     try {
       const themeBtn = document.getElementById('btn-theme') as HTMLDivElement | null
       if (themeBtn) {
-        themeBtn.textContent = t('menu.theme')
         themeBtn.title = t('menu.theme.tooltip')
+        if (!themeBtn.classList.contains('ribbon-btn')) {
+          themeBtn.textContent = t('menu.theme')
+        }
       }
       const pluginsBtn = document.getElementById('btn-plugins') as HTMLDivElement | null
       if (pluginsBtn) {
-        pluginsBtn.textContent = t('menu.plugins')
         pluginsBtn.title = t('menu.plugins.tooltip')
+        if (!pluginsBtn.classList.contains('ribbon-btn')) {
+          pluginsBtn.textContent = t('menu.plugins')
+        }
       }
     } catch {}
     // 文件名/状态/编辑器占位
@@ -7842,7 +7894,16 @@ function bindEvents() {
     } catch (e) { showError('新建文件失败', e) }
   }))
   if (btnRecent) btnRecent.addEventListener('click', guard(() => renderRecentPanel(true)))
+  // Ribbon 顶部库选择器：点击打开库切换菜单（参考 Obsidian vault 选择器）
   if (btnLibrary) btnLibrary.addEventListener('click', guard(async () => {
+    await showLibraryMenu()
+  }))
+  // 库侧栏搜索按钮：快速文件搜索
+  const btnSearch = document.getElementById('btn-search')
+  if (btnSearch) btnSearch.addEventListener('click', guard(() => showQuickSearch()))
+  // Ribbon 文件树切换按钮
+  const btnFiletree = document.getElementById('btn-filetree')
+  if (btnFiletree) btnFiletree.addEventListener('click', guard(async () => {
     const lib = document.getElementById('library')
     const showing = lib && !lib.classList.contains('hidden')
     if (showing) { showLibrary(false); return }
@@ -7851,8 +7912,18 @@ function bindEvents() {
     let root = await getLibraryRoot()
     if (!root) root = await pickLibraryRoot()
     try { await refreshLibraryUiAndTree(false) } catch {}
-    const treeEl = document.getElementById('lib-tree') as HTMLDivElement | null; if (treeEl && !fileTreeReady) { await fileTree.init(treeEl, { getRoot: getLibraryRoot, onOpenFile: async (p: string) => { await openFile2(p) }, onOpenNewFile: async (p: string) => { await openFile2(p); mode='edit'; preview.classList.add('hidden'); try { (editor as HTMLTextAreaElement).focus() } catch {} }, onMoved: async (src: string, dst: string) => { try { if (currentFilePath === src) { currentFilePath = dst as any; refreshTitle() } } catch {} } }); fileTreeReady = true } else if (treeEl) { await fileTree.refresh() }
-    // 应用持久化的排序偏好
+    const treeEl = document.getElementById('lib-tree') as HTMLDivElement | null
+    if (treeEl && !fileTreeReady) {
+      await fileTree.init(treeEl, {
+        getRoot: getLibraryRoot,
+        onOpenFile: async (p: string) => { await openFile2(p) },
+        onOpenNewFile: async (p: string) => { await openFile2(p); mode='edit'; preview.classList.add('hidden'); try { (editor as HTMLTextAreaElement).focus() } catch {} },
+        onMoved: async (src: string, dst: string) => { try { if (currentFilePath === src) { currentFilePath = dst as any; refreshTitle() } } catch {} }
+      })
+      fileTreeReady = true
+    } else if (treeEl) {
+      await fileTree.refresh()
+    }
     try { const s = await getLibrarySort(); fileTree.setSort(s); await fileTree.refresh() } catch {}
   }))
   // 非固定模式：点击库外空白自动隐藏

@@ -102,9 +102,86 @@ body {
 
 #app {
   display: flex;
-  flex-direction: column;
+  flex-direction: row; /* 水平布局：ribbon + main-content */
   overflow: hidden; /* 防止内容溢出影响布局 */
   animation: app-fadein 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Ribbon 左侧垂直图标菜单（参考 Obsidian） */
+.ribbon {
+  width: 44px;
+  min-width: 44px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--chrome-bg, var(--bg));
+  border-right: 1px solid var(--border);
+  -webkit-app-region: drag;
+  z-index: 100;
+}
+
+.ribbon-top,
+.ribbon-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.ribbon-btn {
+  -webkit-app-region: no-drag;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--fg);
+  opacity: 0.65;
+  transition: opacity 0.15s, background 0.15s;
+  margin: 2px 0;
+}
+
+.ribbon-btn:hover {
+  opacity: 1;
+  background: rgba(127, 127, 127, 0.1);
+}
+
+.ribbon-btn:active {
+  background: rgba(127, 127, 127, 0.18);
+}
+
+.ribbon-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
+}
+
+/* Ribbon 更新提示红点 */
+.ribbon-btn.has-update::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* 主内容区 */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 @keyframes app-fadein {
@@ -218,6 +295,34 @@ body[data-scrollbar-visible="true"] .library {
   background: rgba(37, 99, 235, 0.3);
 }
 
+/* 标签页栏行（替代原 titlebar） */
+.tabbar-row {
+  height: 36px;
+  min-height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  -webkit-app-region: drag;
+  background: var(--chrome-bg, var(--bg));
+  border-bottom: 1px solid var(--border);
+}
+
+.tabbar-placeholder {
+  flex: 1;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.tabbar-row .filename {
+  display: none; /* 隐藏文件名显示，标签页已包含文件名 */
+}
+
+/* window-controls 固定在右侧 */
+.tabbar-row .window-controls {
+  margin-left: auto;
+}
+
+/* 旧标题栏（兼容） */
 .titlebar {
     height: 36px;
     min-height: 36px;
@@ -260,6 +365,8 @@ body[data-scrollbar-visible="true"] .library {
   display: none;
   align-items: center;
   -webkit-app-region: no-drag;
+  margin-left: auto; /* 固定到最右侧 */
+  flex-shrink: 0;
 }
 
 /* Windows 平台：移除原生边框后默认显示窗口控制按钮 */
@@ -1329,14 +1436,99 @@ body > .block-menu { display: none !important; }
 .library.side-right.hidden {
   transform: translateX(100%);
 }
-.library .lib-header { position: sticky; top: 0; background: var(--chrome-panel-bg, var(--panel-bg)); border-bottom: none; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; z-index: 1; }
-.library .lib-title-row { display: flex; align-items: center; gap: 10px; padding-bottom: 2px; }
-.library .lib-choose-btn { -webkit-app-region: no-drag; cursor: pointer; border: none; background: transparent; color: var(--muted); padding: 4px 8px; font-size: 13px; flex-shrink: 0; font-family: inherit; }
-.library .lib-choose-btn:hover { color: var(--fg); }
-.library .lib-name { flex: 1; color: var(--fg); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 600; padding-left: 4px; opacity: 0.9; }
-.library .lib-toggle-btn { -webkit-app-region: no-drag; cursor: pointer; border: none; background: none; color: var(--fg); font-size: 18px; width: 30px; height: 30px; display: none; align-items: center; justify-content: center; border-radius: 4px; margin: 0 2px; padding: 0; line-height: 1; opacity: 0.5; font-family: monospace; flex-shrink: 0; }
-.library .lib-toggle-btn:hover { opacity: 0.8; }
-body.focus-mode .library .lib-toggle-btn { display: flex; }
+.library .lib-header { position: sticky; top: 0; background: var(--chrome-panel-bg, var(--panel-bg)); border-bottom: none; padding: 8px 8px 6px 8px; display: flex; flex-direction: column; gap: 6px; z-index: 1; }
+/* 库选择器行：Obsidian 风格 vault 按钮 + 搜索 */
+.library .lib-vault-row { display: flex; align-items: center; gap: 4px; }
+.library .lib-vault-btn { -webkit-app-region: no-drag; flex: 1; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: transparent; border: none; border-radius: 6px; cursor: pointer; color: var(--fg); font-size: 13px; font-weight: 500; text-align: left; min-width: 0; transition: background 0.15s; font-family: inherit; }
+.library .lib-vault-btn:hover { background: rgba(127, 127, 127, 0.1); }
+.library .lib-vault-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; opacity: 0.7; }
+.library .lib-vault-icon svg { width: 16px; height: 16px; }
+.library .lib-vault-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library .lib-vault-arrow { flex-shrink: 0; display: flex; align-items: center; opacity: 0.5; }
+.library .lib-vault-arrow svg { width: 12px; height: 12px; }
+.library .lib-search-btn { -webkit-app-region: no-drag; flex-shrink: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 6px; cursor: pointer; color: var(--fg); opacity: 0.6; transition: opacity 0.15s, background 0.15s; }
+.library .lib-search-btn:hover { opacity: 1; background: rgba(127, 127, 127, 0.1); }
+.library .lib-search-btn svg { width: 16px; height: 16px; }
+
+/* 快速文件搜索 Quick Switcher */
+.quick-search-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 9999;
+}
+.quick-search-overlay.show {
+  display: flex;
+}
+.quick-search-dialog {
+  width: 500px;
+  max-width: 90vw;
+  background: var(--chrome-panel-bg, var(--panel-bg));
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+.quick-search-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  font-size: 15px;
+  outline: none;
+  box-sizing: border-box;
+}
+.quick-search-input::placeholder {
+  color: var(--muted);
+}
+.quick-search-results {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.quick-search-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.quick-search-item:hover,
+.quick-search-item.selected {
+  background: rgba(127, 127, 127, 0.1);
+}
+.quick-search-item.selected {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+}
+.quick-search-item.selected .quick-search-path {
+  color: rgba(255, 255, 255, 0.7);
+}
+.quick-search-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+.quick-search-path {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-search-loading {
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .lib-float-toggle { -webkit-app-region: no-drag; cursor: pointer; border: none; background: none; color: var(--fg); font-size: 18px; width: 30px; height: 30px; display: none; align-items: center; justify-content: center; border-radius: 4px; padding: 0; line-height: 1; opacity: 0.5; font-family: monospace; position: fixed; top: 12px; left: 12px; z-index: 90; }
 .lib-float-toggle.side-left { left: 12px; right: auto; }
 .lib-float-toggle.side-right { left: auto; right: 12px; }
@@ -5151,6 +5343,60 @@ body.dark-mode .menubar .menu-btn:hover {
   background: rgba(255, 255, 255, 0.08) !important;
 }
 
+/* 夜间模式 - Ribbon */
+body.dark-mode .ribbon {
+  background: var(--chrome-bg, #0f1114) !important;
+  border-right-color: #2d3748 !important;
+}
+
+body.dark-mode .ribbon-btn {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .ribbon-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+body.dark-mode .ribbon-btn:active {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* 夜间模式 - 库侧栏 vault 选择器 */
+body.dark-mode .lib-vault-btn {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .lib-vault-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+body.dark-mode .lib-search-btn {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .lib-search-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* 夜间模式 - 快速搜索 */
+body.dark-mode .quick-search-dialog {
+  background: #1a1b1e !important;
+  border: 1px solid #2d3748;
+}
+
+body.dark-mode .quick-search-input {
+  color: #e5e7eb !important;
+  border-bottom-color: #2d3748 !important;
+}
+
+body.dark-mode .quick-search-item:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+body.dark-mode .quick-search-item.selected {
+  background: #3b82f6 !important;
+}
+
 /* 夜间模式 - 侧边栏/库管理 */
 body.dark-mode .sidebar,
   body.dark-mode .library-sidebar,
@@ -6195,13 +6441,20 @@ body.focus-mode.custom-titlebar-active .focus-trigger-zone {
 .tabbar {
     display: flex;
     align-items: center;
-    height: 32px;
-    background: var(--chrome-bg, var(--bg));
-  border-bottom: 1px solid var(--border);
+    height: 100%;
+    background: transparent;
+  border-bottom: none;
   padding: 0 4px;
   user-select: none;
   flex-shrink: 0;
   overflow: hidden;
+}
+
+/* 独立标签栏容器（旧布局兼容） */
+#tabbar-container .tabbar {
+  height: 32px;
+  background: var(--chrome-bg, var(--bg));
+  border-bottom: 1px solid var(--border);
 }
 
 .tabbar-tabs {
@@ -6215,6 +6468,8 @@ body.focus-mode.custom-titlebar-active .focus-trigger-zone {
   /* 隐藏滚动条但保持滚动功能 */
   scrollbar-width: none;
   -ms-overflow-style: none;
+  /* 禁用窗口拖拽，允许标签拖拽排序 */
+  -webkit-app-region: no-drag;
 }
 
 .tabbar-tabs::-webkit-scrollbar {
@@ -6224,27 +6479,44 @@ body.focus-mode.custom-titlebar-active .focus-trigger-zone {
 .tabbar-tab {
   display: flex;
   align-items: center;
-  height: 28px;
-  padding: 0 8px;
+  height: 32px;
+  padding: 0 12px;
   background: transparent;
-  border-radius: 4px 4px 0 0;
+  border-radius: 6px 6px 0 0;
   cursor: pointer;
   font-size: 13px;
-  color: rgba(127, 127, 127, 0.7);
+  color: var(--muted);
   gap: 6px;
   flex-shrink: 0;
-  max-width: 180px;
+  max-width: 200px;
   min-width: 80px;
   position: relative;
+  transition: background 0.15s, color 0.15s;
+  margin-right: 1px;
+  -webkit-app-region: no-drag;
 }
 
 .tabbar-tab:hover {
-  background: rgba(127, 127, 127, 0.06);
+  background: rgba(127, 127, 127, 0.08);
+  color: var(--fg);
 }
 
 .tabbar-tab.active {
-    background: var(--chrome-panel-bg, var(--panel-bg));
+  background: var(--chrome-panel-bg, var(--panel-bg));
   color: var(--fg);
+  font-weight: 500;
+}
+
+/* 激活标签底部高亮条 */
+.tabbar-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--accent, #3b82f6);
+  border-radius: 2px 2px 0 0;
 }
 
 .tabbar-tab-icon {
@@ -6316,6 +6588,7 @@ body.focus-mode.custom-titlebar-active .focus-trigger-zone {
   cursor: pointer;
   color: var(--muted);
   flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .tabbar-new-btn:hover {
@@ -6388,8 +6661,13 @@ body.focus-mode.custom-titlebar-active .focus-trigger-zone {
 }
 
 /* 夜间模式 - 标签栏 */
+body.dark-mode .tabbar-row {
+  background: var(--chrome-bg, #0b0c0e) !important;
+  border-bottom-color: #2d3748 !important;
+}
+
 body.dark-mode .tabbar {
-    background: var(--chrome-bg, #0b0c0e) !important;
+    background: transparent !important;
   }
 
 body.dark-mode .tabbar-tab.active {
@@ -6402,7 +6680,17 @@ body.focus-mode .tabbar {
   display: none;
 }
 
-/* 标签栏存在时，容器高度需要减去标签栏高度 */
+body.focus-mode .tabbar-row {
+  display: none;
+}
+
+/* 新布局：tabbar-row 内嵌标签页，容器高度计算 */
+.tabbar-row + .focus-trigger-zone + .container,
+.tabbar-row + .container {
+  height: calc(100% - 36px); /* 只有 tabbar-row 36px */
+}
+
+/* 旧布局兼容：独立标签栏容器 */
 #tabbar-container + .focus-trigger-zone + .container,
 #tabbar-container + .container {
   height: calc(100% - 36px - 32px); /* 标题栏36px + 标签栏32px */
@@ -6416,13 +6704,17 @@ body.focus-mode #tabbar-container + .container {
 
 /* ============ 便签模式控制按钮 ============ */
 
-/* 便签模式：完全隐藏侧边栏和切换按钮 */
+/* 便签模式：完全隐藏侧边栏、切换按钮、Ribbon 和标签栏 */
 body.sticky-note-mode #library,
 body.sticky-note-mode .library,
 body.sticky-note-mode #lib-toggle,
 body.sticky-note-mode .lib-toggle-btn,
 body.sticky-note-mode #lib-edge,
-body.sticky-note-mode .lib-float-toggle {
+body.sticky-note-mode .lib-float-toggle,
+body.sticky-note-mode #ribbon,
+body.sticky-note-mode .ribbon,
+body.sticky-note-mode #tabbar-row,
+body.sticky-note-mode .tabbar-row {
   display: none !important;
 }
 

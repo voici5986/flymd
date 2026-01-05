@@ -164,16 +164,25 @@ function showPluginDropdownInternal(anchor: HTMLElement, items: any[]) {
             const itemRect = this.getBoundingClientRect()
             const submenuRect = submenu.getBoundingClientRect()
             const viewportWidth = window.innerWidth
+            const viewportHeight = window.innerHeight
 
             // 检查子菜单是否会超出右边界
             const wouldOverflowRight = itemRect.right + submenuRect.width > viewportWidth - 10
-
             if (wouldOverflowRight) {
-              // 向左展开
               submenu.classList.add('expand-left')
             } else {
-              // 向右展开（默认）
               submenu.classList.remove('expand-left')
+            }
+
+            // 检查子菜单是否会超出下边界
+            const wouldOverflowBottom = itemRect.top + submenuRect.height > viewportHeight - 10
+            if (wouldOverflowBottom) {
+              // 向上调整：让子菜单底部与父菜单项底部对齐
+              submenu.style.top = 'auto'
+              submenu.style.bottom = '-4px'
+            } else {
+              submenu.style.top = '-4px'
+              submenu.style.bottom = 'auto'
             }
           })
         })
@@ -246,19 +255,32 @@ export function togglePluginDropdown(anchor: HTMLElement, items: any[]) {
 // 初始化"插件"菜单按钮
 export function initPluginsMenu() {
   try {
-    const bar = document.querySelector('.menubar')
-    if (!bar) return
-
     // 如果已存在则不重复创建
     if (_pluginsMenuBtn) return
 
-    // 创建"插件"菜单按钮
-    const pluginsBtn = document.createElement('div')
-    pluginsBtn.className = 'menu-item'
-    pluginsBtn.id = 'btn-plugins'
-    pluginsBtn.textContent = t('menu.plugins')
-    pluginsBtn.title = t('menu.plugins.tooltip')
-    pluginsBtn.style.display = 'none' // 默认隐藏，有插件时才显示
+    // 优先查找 ribbon 中已存在的按钮
+    let pluginsBtn = document.getElementById('btn-plugins') as HTMLDivElement | null
+
+    if (!pluginsBtn) {
+      // 回退：在 menubar 中创建（兼容旧布局）
+      const bar = document.querySelector('.menubar')
+      if (!bar) return
+
+      pluginsBtn = document.createElement('div')
+      pluginsBtn.className = 'menu-item'
+      pluginsBtn.id = 'btn-plugins'
+      pluginsBtn.textContent = t('menu.plugins')
+      pluginsBtn.title = t('menu.plugins.tooltip')
+      pluginsBtn.style.display = 'none' // 默认隐藏，有插件时才显示
+
+      // 插入到扩展按钮之前
+      const extBtn = bar.querySelector('#btn-extensions') as HTMLDivElement | null
+      if (extBtn) {
+        bar.insertBefore(pluginsBtn, extBtn)
+      } else {
+        bar.appendChild(pluginsBtn)
+      }
+    }
 
     // 点击展开下拉菜单
     pluginsBtn.addEventListener('click', (ev) => {
@@ -302,17 +324,9 @@ export function initPluginsMenu() {
           })
         }
 
-        togglePluginDropdown(pluginsBtn, items)
+        togglePluginDropdown(pluginsBtn!, items)
       } catch (e) { console.error(e) }
     })
-
-    // 插入到扩展按钮之前（按 id 寻址，避免受多语言影响）
-    const extBtn = bar.querySelector('#btn-extensions') as HTMLDivElement | null
-    if (extBtn) {
-      bar.insertBefore(pluginsBtn, extBtn)
-    } else {
-      bar.appendChild(pluginsBtn)
-    }
 
     _pluginsMenuBtn = pluginsBtn
     updatePluginsMenuButton()
@@ -342,10 +356,17 @@ export function removeFromPluginsMenu(pluginId: string) {
 function updatePluginsMenuButton() {
   if (!_pluginsMenuBtn) return
 
-  // 有菜单项时显示，无菜单项时隐藏
-  if (pluginsMenuItems.size > 0) {
+  // Ribbon 模式下始终显示，仅在旧 menubar 模式下才根据菜单项数量隐藏
+  const isRibbonBtn = _pluginsMenuBtn.classList.contains('ribbon-btn')
+  if (isRibbonBtn) {
+    // Ribbon 按钮始终显示
     _pluginsMenuBtn.style.display = ''
   } else {
-    _pluginsMenuBtn.style.display = 'none'
+    // 旧模式：有菜单项时显示，无菜单项时隐藏
+    if (pluginsMenuItems.size > 0) {
+      _pluginsMenuBtn.style.display = ''
+    } else {
+      _pluginsMenuBtn.style.display = 'none'
+    }
   }
 }

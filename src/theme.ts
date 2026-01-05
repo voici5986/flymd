@@ -741,7 +741,8 @@ function fillSwatches(panel: HTMLElement, prefs: ThemePrefs) {
 
 export function initThemeUI(): void {
   try {
-    const menu = document.querySelector('.menubar')
+    // 兼容新 ribbon 和旧 menubar 布局
+    const menu = document.querySelector('.ribbon') || document.querySelector('.menubar')
     const container = getContainer()
     if (!menu || !container) return
 

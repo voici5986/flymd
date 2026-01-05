@@ -114,6 +114,7 @@ const dict = {
     'tab.outline.short': '大纲',
 
     'lib.menu': '库',
+    'lib.toggle': '显示/隐藏文件树',
     'lib.choose': '库管理',
     'lib.refresh': '刷新',
     'lib.choose.short': '库管理',
@@ -505,6 +506,7 @@ const dict = {
     'tab.outline.short': 'Outl',
 
     'lib.menu': 'Library',
+    'lib.toggle': 'Show/Hide File Tree',
     'lib.choose': 'Manage',
     'lib.refresh': 'Refresh',
     'lib.choose.short': 'Manage',

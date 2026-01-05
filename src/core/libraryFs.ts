@@ -120,3 +120,31 @@ export async function listDirOnce(dir: string): Promise<LibEntry[]> {
   }
 }
 
+// 递归获取目录下所有支持的文档文件（用于快速搜索）
+export async function listAllFiles(dir: string, maxDepth = 10): Promise<LibEntry[]> {
+  const result: LibEntry[] = []
+  async function walk(d: string, depth: number) {
+    if (depth > maxDepth) return
+    try {
+      const entries = await readDir(d, { recursive: false } as any)
+      for (const it of ((entries as any[]) || [])) {
+        const p: string = typeof it?.path === 'string'
+          ? it.path
+          : d + (d.includes('\\') ? '\\' : '/') + (it?.name || '')
+        try {
+          const s = await stat(p)
+          const isDir = !!(s as any)?.isDirectory
+          const name = (it?.name || p.split(/[\\/]+/).pop() || '') as string
+          if (isDir) {
+            await walk(p, depth + 1)
+          } else if (isSupportedDoc(name)) {
+            result.push({ name, path: p, isDir: false })
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+  await walk(dir, 0)
+  return result
+}
+

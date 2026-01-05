@@ -224,25 +224,28 @@ async function confirmTabClose(tab: TabDocument): Promise<boolean> {
 export async function initTabSystem(): Promise<void> {
   if (initialized) return
 
-  // 确保 DOM 已就绪
+  // 确保 DOM 已就绪（兼容新 tabbar-row 和旧 titlebar 布局）
+  const tabbarRow = document.querySelector('.tabbar-row')
   const titlebar = document.querySelector('.titlebar')
   const container = document.querySelector('.container')
-  if (!titlebar || !container) {
+  if ((!tabbarRow && !titlebar) || !container) {
     console.warn('[Tabs] DOM not ready, retrying...')
     setTimeout(() => initTabSystem(), 100)
     return
   }
 
-  // 创建标签栏容器
-  const tabbarContainer = document.createElement('div')
-  tabbarContainer.id = 'tabbar-container'
-
-  // 插入到 titlebar 之后、focus-trigger-zone 或 container 之前
-  const focusTrigger = document.querySelector('.focus-trigger-zone')
-  if (focusTrigger) {
-    focusTrigger.before(tabbarContainer)
-  } else {
-    container.before(tabbarContainer)
+  // 优先使用 tabbar-placeholder，否则创建新容器
+  let tabbarContainer = document.getElementById('tabbar-placeholder') as HTMLElement | null
+  if (!tabbarContainer) {
+    tabbarContainer = document.createElement('div')
+    tabbarContainer.id = 'tabbar-container'
+    // 插入到 titlebar 之后、focus-trigger-zone 或 container 之前
+    const focusTrigger = document.querySelector('.focus-trigger-zone')
+    if (focusTrigger) {
+      focusTrigger.before(tabbarContainer)
+    } else {
+      container.before(tabbarContainer)
+    }
   }
 
   // 初始化 TabManager

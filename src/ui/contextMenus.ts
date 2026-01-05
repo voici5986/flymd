@@ -270,10 +270,24 @@ export async function showContextMenu(
           const itemRect = this.getBoundingClientRect()
           const submenuRect = submenu.getBoundingClientRect()
           const viewportWidth = window.innerWidth
+          const viewportHeight = window.innerHeight
+
+          // 水平方向调整
           const wouldOverflowRight =
             itemRect.right + submenuRect.width > viewportWidth - 10
           if (wouldOverflowRight) submenu.classList.add('expand-left')
           else submenu.classList.remove('expand-left')
+
+          // 垂直方向调整
+          const wouldOverflowBottom =
+            itemRect.top + submenuRect.height > viewportHeight - 10
+          if (wouldOverflowBottom) {
+            submenu.style.top = 'auto'
+            submenu.style.bottom = '-4px'
+          } else {
+            submenu.style.top = '-4px'
+            submenu.style.bottom = 'auto'
+          }
         })
       })
     })
