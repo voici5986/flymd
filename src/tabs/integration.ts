@@ -10,6 +10,7 @@ import { TabBar } from './TabBar'
 import { getTabDisplayName, type EditorMode, type TabDocument } from './types'
 import { TextareaUndoManager } from './TextareaUndoManager'
 import { FLYMD_PATH_DELETED_EVENT, type FlymdPathDeletedDetail } from '../core/pathEvents'
+import { initTabTransferReceiver } from './tabTransferReceiver'
 
 // 全局引用
 let tabBar: TabBar | null = null
@@ -292,6 +293,10 @@ export async function initTabSystem(): Promise<void> {
 
   // 监听编辑器变化，同步 dirty 状态
   setupDirtySync()
+
+  // 跨窗口拖拽接收端：收到其它窗口的标签后，在本窗口创建/激活标签
+  // 注意：不 await，避免阻塞标签系统主流程；失败（非 Tauri 环境）也无所谓
+  try { void initTabTransferReceiver({ tabManager, undoManager }) } catch {}
 
   // 启动文件路径同步监听（处理直接调用 openFile2 的情况）
   startPathSyncWatcher()

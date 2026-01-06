@@ -11,6 +11,8 @@
 
 import { TabManager } from './TabManager'
 import { TabDocument, getTabDisplayName } from './types'
+import { moveTabToWindowLabel } from './tabTransferSender'
+import { createEditorWebviewWindow, findWebviewWindowLabelAtScreenPoint, getCurrentWebviewWindowLabel } from '../windows/editorWindows'
 
 export interface TabBarOptions {
   container: HTMLElement
@@ -342,9 +344,9 @@ export class TabBar {
       if (!wasDragging) return
       this.suppressNextClick = true
 
-      // 拖出窗口后释放：在新实例中打开，成功后销毁原标签（失败则不动，避免丢数据）
+      // 拖出窗口后释放：优先投递到其它窗口；否则新建窗口（ACK 后关闭源标签，避免丢数据）
       if (draggedId && isOutsideWindow(e, 8)) {
-        void this.detachTabToNewInstance(draggedId)
+        void this.detachTabByDropPoint(draggedId, e)
         return
       }
 
@@ -568,6 +570,56 @@ export class TabBar {
     const ok = await this.openTabInNewInstance(tabId)
     if (!ok) return
     try { await this.closeTab(tabId) } catch {}
+  }
+
+  /**
+   * 拖拽“跨窗口移动标签”入口
+   *
+   * 策略：
+   * - 优先命中其它窗口：拖到窗口上 → 在目标窗口打开为标签（ACK 后关闭源标签）
+   * - 否则创建新窗口：拖到空白区域 → 新窗口打开为标签（ACK 后关闭源标签）
+   * - 兼容旧行为：按住 Alt 拖出 → 仍用系统关联打开“新进程实例”（老功能不被砍掉）
+   */
+  private async detachTabByDropPoint(tabId: string, e: PointerEvent): Promise<void> {
+    // 老行为保留：给用户留后门，避免“习惯被硬改”
+    if (e.altKey) {
+      await this.detachTabToNewInstance(tabId)
+      return
+    }
+
+    const myLabel = await getCurrentWebviewWindowLabel()
+    const targetLabel = await findWebviewWindowLabelAtScreenPoint(e.screenX, e.screenY, {
+      excludeLabel: myLabel || undefined,
+      margin: 8,
+    })
+
+    // 1) 命中其它窗口：直接投递
+    if (targetLabel) {
+      const r = await moveTabToWindowLabel(this.tabManager, tabId, targetLabel)
+      if (!r.ok && r.message) {
+        // 不动源标签，避免丢数据
+        try { alert('拖拽失败：' + r.message) } catch {}
+      }
+      return
+    }
+
+    // 2) 没命中：创建新窗口再投递
+    const created = await createEditorWebviewWindow()
+    if (!created?.label) {
+      // 创建失败：兜底回到旧的“新进程打开”行为
+      await this.detachTabToNewInstance(tabId)
+      return
+    }
+
+    const r = await moveTabToWindowLabel(this.tabManager, tabId, created.label, {
+      // 新窗口首包更容易丢，稍微给它多一点时间
+      timeoutMs: 9000,
+      retries: 18,
+      retryDelayMs: 260,
+    })
+    if (!r.ok && r.message) {
+      try { alert('拖拽失败：' + r.message) } catch {}
+    }
   }
 
   /**

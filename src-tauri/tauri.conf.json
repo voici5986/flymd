@@ -32,10 +32,12 @@
           "identifier": "main-fs-user-files",
           "description": "允许 main 窗口访问用户目录与常见目录的文件系统读写，并使用文件对话框与存储",
           "windows": [
-            "main"
+            "main",
+            "main-*"
           ],
           "permissions": [
             "core:default",
+            "core:webview:allow-create-webview-window",
             "core:window:allow-close",
             "core:window:allow-destroy",
             "core:window:allow-set-title",

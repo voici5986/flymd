@@ -354,6 +354,20 @@ export class TabManager {
   }
 
   /**
+   * 强制将指定标签的状态应用到编辑器（即使该标签已经是当前活跃标签）
+   *
+   * 场景：跨窗口拖入时，我们会先 createNewTab，再把远端传来的 content/dirty/mode 写入标签对象；
+   * 由于 switchToTab(tabId===active) 会直接 return，需要一个“无条件恢复”的入口。
+   */
+  async applyTabState(tabId: string): Promise<boolean> {
+    const targetTab = this.findTabById(tabId)
+    if (!targetTab || !this.hooks) return false
+    await this.restoreTabState(targetTab)
+    this.emit({ type: 'tab-updated', tab: targetTab })
+    return true
+  }
+
+  /**
    * 关闭标签
    * 返回 true 表示成功关闭，false 表示被取消（如有未保存内容）
    */
