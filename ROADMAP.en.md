@@ -2,6 +2,11 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v0.9.8
+- Added: KaTeX mhchem enabled — supports chemical macros `\ce{...}` / `\pu{...}` (consistent across Preview and WYSIWYG)
+- Improved: Built-in “AI Novel Engine” plugin upgraded to v0.6.2: clearer character-state constraints (hidden/dead/pinned), more focused RAG query steering, plus stricter continuity rules and a writing checklist
+- Changed: Extension manager — removed the “Standalone display” checkbox on extension cards (no longer supported in the new UI)
+
 ## Update v0.9.6
 - Added: Multi-window support — drag a tab out to create a new window; drag back to reopen as a new tab
 - Added: “Ghost window” UI hint while dragging to create a new window
