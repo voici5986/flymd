@@ -92,9 +92,9 @@ function postProcessMarkdown(md: string): string {
   // 3. 清理块级元素边界的过多空行（保留最多 2 个换行）
   result = result.replace(/\n{3,}/g, '\n\n')
 
-  // 4. 移除行内强调符号周围的换行：**\ntext\n** → **text**
-  result = result.replace(/(\*\*|__|~~|`)\s*\n\s*/g, '$1')
-  result = result.replace(/\s*\n\s*(\*\*|__|~~|`)/g, '$1')
+  // 4. 清理强调标记产生的“断行包裹”：**\ntext\n** → **text**
+  // 注意：不能用“遇到标记就删换行”的粗暴正则；那会吞掉段落/代码块边界，甚至把围栏代码块 ``` 黏到上一行。
+  result = result.replace(/(\*\*|__|~~)\s*\n\s*([^\n]+?)\s*\n\s*\1/g, '$1$2$1')
 
   return result
 }
