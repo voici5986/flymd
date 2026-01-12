@@ -27,6 +27,9 @@ function s3gText(zh, en) {
   return s3gGetLocale() === 'en' ? en : zh
 }
 
+// S3/R2 本地历史分页：超过 9 条就翻页显示，避免一次性渲染太多导致 UI/预览交互不稳定
+const S3G_PAGE_SIZE = 9
+
 let _panel = null
 let _listRoot = null
 let _loadingEl = null
@@ -43,6 +46,14 @@ let _albumRefreshBtnEl = null
 let _loadMoreBtnEl = null
 let _imglaPage = 1
 let _imglaAlbumId = ''
+
+// S3/R2 分页状态（ImgLa 仍沿用“加载更多”）
+let _page = 1
+let _pageTotal = 1
+let _pagerEl = null
+let _pagePrevBtnEl = null
+let _pageNextBtnEl = null
+let _pageLabelEl = null
 
 // 悬浮预览层：鼠标悬浮缩略图时展示大图，避免改动现有布局
 let _previewRoot = null
@@ -204,6 +215,7 @@ function s3gApplyModeUi(mode) {
   if (_albumSelectEl) _albumSelectEl.style.display = showAlbum ? 'block' : 'none'
   if (_albumRefreshBtnEl) _albumRefreshBtnEl.style.display = showAlbum ? 'block' : 'none'
   if (_loadMoreBtnEl) _loadMoreBtnEl.style.display = showAlbum ? 'block' : 'none'
+  if (_pagerEl) _pagerEl.style.display = showAlbum ? 'none' : 'flex'
 }
 
 function s3gGetSelectedImglaAlbumId() {
@@ -438,6 +450,62 @@ function ensurePanel(context) {
   footer.style.justifyContent = 'center'
   footer.style.padding = '6px 0 2px 0'
 
+  // S3/R2 分页条：默认隐藏，renderList 会根据数量决定是否展示
+  const pager = document.createElement('div')
+  pager.style.display = 'none'
+  pager.style.alignItems = 'center'
+  pager.style.gap = '8px'
+  pager.style.width = '100%'
+  pager.style.justifyContent = 'center'
+  _pagerEl = pager
+
+  const prevBtn = document.createElement('button')
+  prevBtn.textContent = s3gText('上一页', 'Prev')
+  prevBtn.style.cursor = 'pointer'
+  prevBtn.style.border = '1px solid rgba(255,255,255,0.12)'
+  prevBtn.style.borderRadius = '6px'
+  prevBtn.style.padding = '4px 10px'
+  prevBtn.style.background = 'rgba(0,0,0,0.2)'
+  prevBtn.style.color = 'inherit'
+  prevBtn.style.fontSize = '12px'
+  prevBtn.onclick = () => {
+    if (_mode !== 's3') return
+    if (_page <= 1) return
+    _page = _page - 1
+    s3gHidePreview()
+    renderList(_records)
+  }
+  _pagePrevBtnEl = prevBtn
+
+  const pageLabel = document.createElement('div')
+  pageLabel.style.fontSize = '12px'
+  pageLabel.style.opacity = '0.85'
+  pageLabel.style.whiteSpace = 'nowrap'
+  _pageLabelEl = pageLabel
+
+  const nextBtn = document.createElement('button')
+  nextBtn.textContent = s3gText('下一页', 'Next')
+  nextBtn.style.cursor = 'pointer'
+  nextBtn.style.border = '1px solid rgba(255,255,255,0.12)'
+  nextBtn.style.borderRadius = '6px'
+  nextBtn.style.padding = '4px 10px'
+  nextBtn.style.background = 'rgba(0,0,0,0.2)'
+  nextBtn.style.color = 'inherit'
+  nextBtn.style.fontSize = '12px'
+  nextBtn.onclick = () => {
+    if (_mode !== 's3') return
+    if (_page >= (_pageTotal || 1)) return
+    _page = _page + 1
+    s3gHidePreview()
+    renderList(_records)
+  }
+  _pageNextBtnEl = nextBtn
+
+  pager.appendChild(prevBtn)
+  pager.appendChild(pageLabel)
+  pager.appendChild(nextBtn)
+  footer.appendChild(pager)
+
   const loadMoreBtn = document.createElement('button')
   loadMoreBtn.textContent = s3gText('加载更多', 'Load more')
   loadMoreBtn.style.cursor = 'pointer'
@@ -466,10 +534,29 @@ function ensurePanel(context) {
   return panel
 }
 
+function s3gUpdatePager(totalCount) {
+  if (!_pagerEl || !_pageLabelEl || !_pagePrevBtnEl || !_pageNextBtnEl) return
+  if (_mode !== 's3') {
+    _pagerEl.style.display = 'none'
+    return
+  }
+  const total = typeof totalCount === 'number' && totalCount > 0 ? totalCount : 0
+  const pages = Math.max(1, Math.ceil(total / S3G_PAGE_SIZE))
+  _pageTotal = pages
+  if (_page < 1) _page = 1
+  if (_page > pages) _page = pages
+  // 只有一页就别占地方了
+  _pagerEl.style.display = pages > 1 ? 'flex' : 'none'
+  _pageLabelEl.textContent = s3gText('第 ', 'Page ') + String(_page) + s3gText(' / ', ' / ') + String(pages)
+  _pagePrevBtnEl.disabled = _page <= 1
+  _pageNextBtnEl.disabled = _page >= pages
+}
+
 function renderList(records) {
   if (!_listRoot) return
   _listRoot.innerHTML = ''
   _records = Array.isArray(records) ? records.slice() : []
+  s3gUpdatePager(_records.length)
 
   if (!_records.length) {
     const empty = document.createElement('div')
@@ -481,7 +568,12 @@ function renderList(records) {
     return
   }
 
-  for (const rec of _records) {
+  // S3/R2：超过 9 条时只渲染当前页，避免一次渲染过多
+  const view = (_mode === 's3' && _records.length > S3G_PAGE_SIZE)
+    ? _records.slice((_page - 1) * S3G_PAGE_SIZE, _page * S3G_PAGE_SIZE)
+    : _records
+
+  for (const rec of view) {
     const card = document.createElement('div')
     card.style.borderRadius = '6px'
     card.style.border = '1px solid rgba(255,255,255,0.06)'
@@ -705,6 +797,8 @@ async function refreshList(context) {
 
     const list = await context.invoke('flymd_list_uploaded_images')
     if (Array.isArray(list)) {
+      // S3/R2：每次刷新回到第一页（避免删除/新增导致页码越界）
+      _page = 1
       // 兼容：若历史中包含 ImgLa 记录（bucket/provider），在 S3/R2 模式下不显示
       const filtered = list.filter((r) => {
         try {
@@ -979,6 +1073,12 @@ export function deactivate() {
   _loadMoreBtnEl = null
   _imglaPage = 1
   _imglaAlbumId = ''
+  _page = 1
+  _pageTotal = 1
+  _pagerEl = null
+  _pagePrevBtnEl = null
+  _pageNextBtnEl = null
+  _pageLabelEl = null
   _previewRoot = null
   _previewImg = null
   _previewCaption = null
