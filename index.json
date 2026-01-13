@@ -130,6 +130,19 @@
     },
     {
       "homepage": "https://github.com/flyhunterl/flymd",
+      "name": "编辑器增强",
+      "description": "编辑器增强：在空行输入“/”启用指令，快速插入内容",
+      "author": "xxtui",
+      "id": "editor-enhancer",
+      "featured": true,
+      "category": "编辑增强",
+      "install": {
+        "ref": "https://raw.githubusercontent.com/flyhunterl/flymd/main/public/plugins/editor-enhancer/manifest.json",
+        "type": "manifest"
+      }
+    },
+    {
+      "homepage": "https://github.com/flyhunterl/flymd",
       "name": "协同编辑",
       "description": "连接协同服务器的简单多人协同插件",
       "author": "flyMD",
