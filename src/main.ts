@@ -1259,7 +1259,7 @@ app.innerHTML = `
     <div class="ribbon-bottom">
       <button class="ribbon-btn" id="btn-theme" title="${t('menu.theme.tooltip')}">${ribbonIcons.settings}</button>
       <button class="ribbon-btn" id="btn-extensions" title="${t('menu.extensions')}">${ribbonIcons.grid}</button>
-      <button class="ribbon-btn" id="btn-lang" title="${t('menu.language')}">${ribbonIcons.globe}</button>
+      <button class="ribbon-btn" id="btn-lang" title="${t('menu.language')}">${ribbonIcons.type}</button>
     </div>
   </aside>
   <main class="main-content">
