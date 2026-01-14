@@ -12,6 +12,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { readFile, writeFile, mkdir, exists, remove, BaseDirectory } from '@tauri-apps/plugin-fs'
 import { homeDir, desktopDir, join } from '@tauri-apps/api/path'
 import { t } from './i18n'
+import { getPasteUrlTitleFetchEnabled, setPasteUrlTitleFetchEnabled } from './core/pasteUrlTitle'
 import { getContentFontSize, setContentFontSize } from './core/uiZoom'
 export type MdStyleId = 'standard' | 'github' | 'notion' | 'journal' | 'card' | 'docs' | 'typora' | 'obsidian' | 'bear' | 'minimalist'
 
@@ -560,6 +561,13 @@ function createPanel(): HTMLDivElement {
           <span class="theme-toggle-text">${t('theme.wysiwygHtmlTable')}</span>
           <div class="theme-toggle-switch">
             <input type="checkbox" id="wysiwyg-html-table-toggle" class="theme-toggle-input" />
+            <span class="theme-toggle-slider"></span>
+          </div>
+        </label>
+        <label class="theme-toggle-label theme-toggle-third theme-toggle-boxed" for="paste-url-title-toggle" title="${t('theme.pasteUrlTitleFetch.tip')}">
+          <span class="theme-toggle-text">${t('theme.pasteUrlTitleFetch')}</span>
+          <div class="theme-toggle-switch">
+            <input type="checkbox" id="paste-url-title-toggle" class="theme-toggle-input" />
             <span class="theme-toggle-slider"></span>
           </div>
         </label>
@@ -1435,6 +1443,7 @@ export function initThemeUI(): void {
     const wysiwygDefaultToggle = panel.querySelector('#wysiwyg-default-toggle') as HTMLInputElement | null
     const sourcemodeDefaultToggle = panel.querySelector('#sourcemode-default-toggle') as HTMLInputElement | null
     const wysiwygHtmlTableToggle = panel.querySelector('#wysiwyg-html-table-toggle') as HTMLInputElement | null
+    const pasteUrlTitleToggle = panel.querySelector('#paste-url-title-toggle') as HTMLInputElement | null
 
     const WYSIWYG_DEFAULT_KEY = 'flymd:wysiwyg:default'
     const SOURCEMODE_DEFAULT_KEY = 'flymd:sourcemode:default'
@@ -1535,6 +1544,14 @@ export function initThemeUI(): void {
       wysiwygHtmlTableToggle.checked = getWysiwygHtmlTableToMd()
       wysiwygHtmlTableToggle.addEventListener('change', () => {
         setWysiwygHtmlTableToMd(wysiwygHtmlTableToggle.checked)
+      })
+    }
+
+    // 粘贴 URL：自动抓取网页标题（Ctrl+V），Ctrl+Shift+V 可临时禁用抓取
+    if (pasteUrlTitleToggle) {
+      pasteUrlTitleToggle.checked = getPasteUrlTitleFetchEnabled()
+      pasteUrlTitleToggle.addEventListener('change', () => {
+        setPasteUrlTitleFetchEnabled(pasteUrlTitleToggle.checked)
       })
     }
 

@@ -10,6 +10,7 @@ import './style.css'
 import './mobile.css'  // 移动端样式
 import { initThemeUI, applySavedTheme, updateChromeColorsForMode } from './theme'
 import { t, fmtStatus, getLocalePref, setLocalePref, getLocale, tLocale } from './i18n'
+import { getPasteUrlTitleFetchEnabled } from './core/pasteUrlTitle'
 // KaTeX 样式改为按需动态加载（首次检测到公式时再加载）
 // markdown-it 和 DOMPurify 改为按需动态 import，类型仅在编译期引用
 import type MarkdownIt from 'markdown-it'
@@ -8526,6 +8527,7 @@ function bindEvents() {
       const plainText = dt.getData('text/plain') || dt.getData('text') || ''
       const plainTrim = plainText.trim()
       const pasteCombo = _lastPasteCombo
+      const urlTitleFetchEnabled = getPasteUrlTitleFetchEnabled()
       // 使用一次即清空，避免状态污染后续粘贴
       _lastPasteCombo = null
 
@@ -8592,7 +8594,7 @@ function bindEvents() {
       } catch {}
 
       // 1b) Ctrl+V 且仅有单个 URL：插入占位提示 [正在抓取title]，异步抓取网页标题后替换为 [标题](url)
-      if (pasteCombo === 'normal') {
+      if (pasteCombo === 'normal' && urlTitleFetchEnabled) {
         try {
           const url = plainTrim
           // 仅在剪贴板内容是“单行 http/https URL”时触发，避免误伤普通文本

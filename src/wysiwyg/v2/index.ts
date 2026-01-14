@@ -15,6 +15,7 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import { upload, uploadConfig } from '@milkdown/plugin-upload'
 import { uploader } from './plugins/paste'
 import { protectExcelDollarRefs, unprotectExcelDollarRefs } from '../../utils/excelFormula'
+import { getPasteUrlTitleFetchEnabled } from '../../core/pasteUrlTitle'
 import { mermaidPlugin } from './plugins/mermaid'
 import { mathInlineViewPlugin, mathBlockViewPlugin } from './plugins/math'
 import { htmlMediaPlugin } from './plugins/htmlMedia'
@@ -374,7 +375,7 @@ export async function enableWysiwygV2(root: HTMLElement, initialMd: string, onCh
               pasteCombo = (v === 'normal' || v === 'plain') ? v : null
               ;(window as any).__flymdLastPasteCombo = null
             } catch {}
-            if (pasteCombo === 'normal' && plainTrim && /^https?:\/\/[^\s]+$/i.test(plainTrim)) {
+            if (pasteCombo === 'normal' && getPasteUrlTitleFetchEnabled() && plainTrim && /^https?:\/\/[^\s]+$/i.test(plainTrim)) {
               ev.preventDefault()
               void handleWysiwygPasteUrl(plainTrim)
             }
