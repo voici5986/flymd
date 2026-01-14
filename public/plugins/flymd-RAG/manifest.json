@@ -12,5 +12,4 @@
   },
   "homepage": "https://github.com/flyhunterl/flymd",
   "main": "main.js",
-  "minHostVersion": "0.3.0"
 }
