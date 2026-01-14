@@ -17,6 +17,11 @@ async function waitForFonts(doc: Document, timeoutMs = 8000): Promise<void> {
   } catch {}
 }
 
+// 导出性能参数：默认“尽快完成”，不要被坏图床拖 20s+。
+const EXPORT_WAIT_ORIG_IMAGES_MS = 1200
+const EXPORT_WAIT_CLONE_IMAGES_MS = 2500
+const EXPORT_FETCH_REMOTE_IMAGE_MS = 6000
+
 async function waitForImagesIn(root: ParentNode, timeoutMs = 20000): Promise<void> {
   const imgs = Array.from(root.querySelectorAll?.('img') || []) as HTMLImageElement[]
   if (!imgs.length) return
@@ -134,8 +139,11 @@ async function inlineCrossOriginImages(root: ParentNode, timeoutMs = 20000): Pro
   if (!targets.length) return []
 
   const objectUrls: string[] = []
+  const cache = new Map<string, string>()
   await runWithConcurrency(targets, 4, async ({ img, src }) => {
-    const u = await fetchRemoteAsObjectUrl(src, timeoutMs)
+    const cached = cache.get(src)
+    const u = cached != null ? cached : await fetchRemoteAsObjectUrl(src, timeoutMs)
+    if (cached == null) cache.set(src, u || '')
     if (!u) return
     try { img.setAttribute('src', u) } catch { try { (img as any).src = u } catch {} }
     objectUrls.push(u)
@@ -387,7 +395,8 @@ export async function exportPdf(el: HTMLElement, opt?: any): Promise<Uint8Array>
   try {
     const doc = el.ownerDocument || document
     await waitForFonts(doc)
-    await waitForImagesIn(el)
+    // 原预览里的图片加载失败/超时很常见（尤其是图床/CORS/离线），导出不应该在这里卡死。
+    await waitForImagesIn(el, Math.max(0, Number(opt?.waitOrigImagesMs ?? EXPORT_WAIT_ORIG_IMAGES_MS) || 0))
     // 再等一帧，让布局把最终尺寸吃进去
     await nextFrame()
   } catch {}
@@ -569,9 +578,9 @@ export async function exportPdf(el: HTMLElement, opt?: any): Promise<Uint8Array>
   let mount: HTMLDivElement | null = null
   try {
     // 关键：跨域图床如果没给 CORS 头，html2canvas 会直接报错并跳过图片；这里把它们内联为 blob: 同源资源
-    try { blobUrls.push(...(await inlineCrossOriginImages(clone, 20000))) } catch {}
+    try { blobUrls.push(...(await inlineCrossOriginImages(clone, Math.max(0, Number(opt?.fetchRemoteImageMs ?? EXPORT_FETCH_REMOTE_IMAGE_MS) || 0)))) } catch {}
     try {
-      await waitForImagesIn(clone, 20000)
+      await waitForImagesIn(clone, Math.max(0, Number(opt?.waitCloneImagesMs ?? EXPORT_WAIT_CLONE_IMAGES_MS) || 0))
       await nextFrame()
     } catch {}
 
@@ -628,8 +637,19 @@ export async function exportPdf(el: HTMLElement, opt?: any): Promise<Uint8Array>
 
     try {
       await waitForFonts(document)
-      await waitForImagesIn(exportRoot)
+      await waitForImagesIn(exportRoot, Math.max(0, Number(opt?.waitCloneImagesMs ?? EXPORT_WAIT_CLONE_IMAGES_MS) || 0))
       await nextFrame()
+    } catch {}
+
+    // 性能兜底：长文档用较低 scale，避免“导出很慢/内存爆炸”；短文档保持清晰度。
+    try {
+      const baseScale = Number((options as any)?.html2canvas?.scale ?? 2) || 2
+      const r = exportRoot.getBoundingClientRect?.()
+      const h = Number(r?.height || 0) || 0
+      let cap = baseScale
+      if (h > 22000) cap = Math.min(cap, 1.25)
+      else if (h > 12000) cap = Math.min(cap, 1.5)
+      ;(options as any).html2canvas = { ...(options as any).html2canvas, scale: cap }
     } catch {}
 
     const avoidCss = collectAvoidRangesCss(exportRoot)
