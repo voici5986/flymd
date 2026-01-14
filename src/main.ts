@@ -17,6 +17,7 @@ import type MarkdownIt from 'markdown-it'
 import type { LocalePref } from './i18n'
 // WYSIWYG: 锚点插件与锚点同步（用于替换纯比例同步）
 import { enableWysiwygV2, disableWysiwygV2, wysiwygV2ToggleBold, wysiwygV2ToggleItalic, wysiwygV2ApplyLink, wysiwygV2GetSelectedText, wysiwygV2FindNext, wysiwygV2FindPrev, wysiwygV2ReplaceOne as wysiwygV2ReplaceOneSel, wysiwygV2ReplaceAllInDoc, wysiwygV2ReplaceAll, wysiwygV2HandleListTab } from './wysiwyg/v2/index'
+import { setWysiwygPreload } from './wysiwyg/v2/silentTransition'
 // Tauri 插件（v2）
 // Tauri 对话框：使用 ask 提供原生确认，避免浏览器 confirm 在关闭事件中失效
 import { open, save, ask } from '@tauri-apps/plugin-dialog'
@@ -495,6 +496,8 @@ let mode: Mode = 'edit'
 // 所见即所得开关（Overlay 模式）
 let wysiwyg = false
 let wysiwygV2Active = false
+// 打开文档后自动切所见：用于取消过期的后台任务（避免快速连点导致“晚到的切换”覆盖新文档）
+let _autoWysiwygAfterOpenSeq = 0
 // 模式切换时的滚动位置缓存（百分比 0-1）
 let lastScrollPercent = 0
 let _wysiwygRaf = 0
@@ -1890,74 +1893,121 @@ async function saveImageToLocalAndGetPath(file: File, fname: string, force?: boo
   )
 }
 
-async function setWysiwygEnabled(enable: boolean) {
+async function buildWysiwygV2FromTextarea(): Promise<HTMLDivElement | null> {
+  console.log('[WYSIWYG] buildWysiwygV2FromTextarea, editor.value length:', (editor.value || '').length)
+  let root = document.getElementById('md-wysiwyg-root') as HTMLDivElement | null
+  if (!root) {
+    root = document.createElement('div')
+    root.id = 'md-wysiwyg-root'
+    const host = document.querySelector('.container') as HTMLDivElement | null
+    if (host) host.appendChild(root)
+  }
+  // 确保 .scrollView 滚动容器存在（所见模式的实际滚动宿主）
+  let scrollView = root.querySelector('.scrollView') as HTMLDivElement | null
+  if (!scrollView) {
+    scrollView = document.createElement('div')
+    scrollView.className = 'scrollView'
+    // 清空 root 并添加 scrollView
+    root.innerHTML = ''
+    root.appendChild(scrollView)
+  }
+  // 给 scrollView 一个占位提示，避免用户误以为空白（即使在“后台预热”时也无害）
+  try { if (scrollView) scrollView.textContent = '正在加载所见编辑器…' } catch {}
+
+  // 调用 enableWysiwygV2 来创建/更新编辑器（会自动处理清理和重建）
+  const __st = (editor as HTMLTextAreaElement).selectionStart >>> 0
+  let __mdInit = (editor as HTMLTextAreaElement).value
+  // 保留原有换行补两个空格的逻辑（行首/行尾软换行处理）
+  try {
+    if (__st > 0 && __mdInit[__st - 1] === '\n' && (__st < 2 || __mdInit[__st - 2] !== '\n')) {
+      const before = __mdInit.slice(0, __st - 1)
+      const after = __mdInit.slice(__st - 1)
+      if (!/  $/.test(before)) { __mdInit = before + '  ' + after }
+    }
+  } catch {}
+  // 剥离 YAML Front Matter：所见模式只编辑正文，但保存时拼回头部，保证文件内容零破坏
+  const fmSplit = splitYamlFrontMatter(__mdInit)
+  currentFrontMatter = fmSplit.frontMatter
+  const __mdInitBody = fmSplit.body
+  await enableWysiwygV2(scrollView!, __mdInitBody, (mdNext) => {
+    try {
+      const bodyNext = String(mdNext || '').replace(/\u2003/g, '&emsp;')
+      const fm = currentFrontMatter || ''
+      const combined = fm ? fm + bodyNext : bodyNext
+      if (combined !== editor.value) {
+        editor.value = combined
+        dirty = true
+        refreshTitle()
+        refreshStatus()
+        // 通用“内容变更钩子”：供插件在所见模式内容落盘后执行额外逻辑
+        try {
+          const hook = (window as any).flymdPiclistAutoUpload
+          if (typeof hook === 'function') hook()
+        } catch {}
+      }
+    } catch {}
+  })
+  wysiwygV2Active = true
+  // root.display 由 CSS/调用方控制；这里仅保证节点存在
+  try { if (root) (root as HTMLElement).style.display = 'block' } catch {}
+  return root
+}
+
+type SetWysiwygOptions = {
+  // 打开文档后的自动切换：先在后台创建编辑器，准备好再一次性切入，避免“源码闪一下”
+  background?: boolean
+  // 后台任务完成前可能已经打开了另一个文档；此时不允许提交 UI 切换
+  shouldCommit?: () => boolean
+}
+
+async function setWysiwygEnabled(enable: boolean, opts?: SetWysiwygOptions) {
   try {
     if (wysiwyg === enable) return
     saveScrollPosition()  // 保存当前滚动位置到全局缓存
-    wysiwyg = enable
     const container = document.querySelector('.container') as HTMLDivElement | null
     // 旧所见模式已移除：不要再添加 .wysiwyg，否则容器会被隐藏
     if (container) container.classList.remove('wysiwyg')
-    // 先进入 loading 状态：不隐藏编辑器，避免空白期
-    if (container && wysiwyg) { mode = 'edit'; container.classList.add('wysiwyg-v2'); container.classList.add('wysiwyg-v2-loading') }
-    if (container && !wysiwyg) { container.classList.remove('wysiwyg-v2-loading'); container.classList.remove('wysiwyg-v2') }
-  if (wysiwyg) {
+
+    if (!enable) {
+      wysiwyg = false
+      if (container) { container.classList.remove('wysiwyg-v2-loading'); container.classList.remove('wysiwyg-v2'); }
+    } else if (!opts?.background) {
+      // 先进入 loading 状态：不隐藏编辑器，避免空白期（手动切换入口保持原行为）
+      wysiwyg = true
+      if (container) { mode = 'edit'; container.classList.add('wysiwyg-v2'); container.classList.add('wysiwyg-v2-loading') }
+    } else {
+      // 后台预热：不改全局 wysiwyg、不改 .wysiwyg-v2，保持当前视图直到编辑器准备好
+      setWysiwygPreload(container, true)
+    }
+
+  if (enable) {
       // 优先启用 V2：真实所见编辑视图
       try {
-        console.log('[WYSIWYG] Enabling V2, editor.value length:', (editor.value || '').length)
-        let root = document.getElementById('md-wysiwyg-root') as HTMLDivElement | null
-        if (!root) {
-          root = document.createElement('div')
-          root.id = 'md-wysiwyg-root'
-          const host = document.querySelector('.container') as HTMLDivElement | null
-          if (host) host.appendChild(root)
-        }
-        // 确保 .scrollView 滚动容器存在（所见模式的实际滚动宿主）
-        let scrollView = root.querySelector('.scrollView') as HTMLDivElement | null
-        if (!scrollView) {
-          scrollView = document.createElement('div')
-          scrollView.className = 'scrollView'
-          // 清空 root 并添加 scrollView
-          root.innerHTML = ''
-          root.appendChild(scrollView)
-        }
-        // 给 scrollView 一个占位提示，避免用户误以为空白
-        try { if (scrollView) scrollView.textContent = '正在加载所见编辑器…' } catch {}
-        // 调用 enableWysiwygV2 来创建/更新编辑器（会自动处理清理和重建）
-        const __st = (editor as HTMLTextAreaElement).selectionStart >>> 0
-        let __mdInit = (editor as HTMLTextAreaElement).value
-        // 保留原有换行补两个空格的逻辑（行首/行尾软换行处理）
-        try {
-          if (__st > 0 && __mdInit[__st - 1] === '\n' && (__st < 2 || __mdInit[__st - 2] !== '\n')) {
-            const before = __mdInit.slice(0, __st - 1)
-            const after = __mdInit.slice(__st - 1)
-            if (!/  $/.test(before)) { __mdInit = before + '  ' + after }
-          }
-        } catch {}
-        // 剥离 YAML Front Matter：所见模式只编辑正文，但保存时拼回头部，保证文件内容零破坏
-        const fmSplit = splitYamlFrontMatter(__mdInit)
-        currentFrontMatter = fmSplit.frontMatter
-        const __mdInitBody = fmSplit.body
-        await enableWysiwygV2(scrollView!, __mdInitBody, (mdNext) => {
-          try {
-            const bodyNext = String(mdNext || '').replace(/\u2003/g, '&emsp;')
-            const fm = currentFrontMatter || ''
-            const combined = fm ? fm + bodyNext : bodyNext
-            if (combined !== editor.value) {
-              editor.value = combined
-              dirty = true
-              refreshTitle()
-              refreshStatus()
-              // 通用“内容变更钩子”：供插件在所见模式内容落盘后执行额外逻辑
-              try {
-                const hook = (window as any).flymdPiclistAutoUpload
-                if (typeof hook === 'function') hook()
-              } catch {}
+        const root = await buildWysiwygV2FromTextarea()
+
+        if (opts?.background) {
+          // 后台预热过程中，可能已经切换到别的文档；此时不允许提交 UI
+          const ok = (() => {
+            try { return opts?.shouldCommit ? !!opts.shouldCommit() : true } catch { return false }
+          })()
+          if (!ok) {
+            setWysiwygPreload(container, false)
+            // 清理：仅在“仍未进入所见”的情况下才销毁实例，避免打断用户手动切换
+            if (!wysiwyg) {
+              try { await disableWysiwygV2() } catch {}
+              wysiwygV2Active = false
             }
-          } catch {}
-        })
-        wysiwygV2Active = true
-        if (container) { container.classList.remove('wysiwyg-v2-loading'); container.classList.add('wysiwyg-v2'); }
+            return
+          }
+          // 一次性切入：现在才更新全局状态与容器 class，避免用户看到一次“源码/预览闪一下”
+          wysiwyg = true
+          mode = 'edit'
+          setWysiwygPreload(container, false)
+          if (container) { container.classList.remove('wysiwyg-v2-loading'); container.classList.add('wysiwyg-v2'); }
+        } else {
+          if (container) { container.classList.remove('wysiwyg-v2-loading'); container.classList.add('wysiwyg-v2'); }
+        }
+
         // 所见模式启用后应用当前缩放
         try { applyUiZoom() } catch {}
         // 更新外圈UI颜色（标题栏、侧栏等）跟随所见模式背景
@@ -1998,6 +2048,7 @@ async function setWysiwygEnabled(enable: boolean) {
           const container2 = document.querySelector('.container') as HTMLDivElement | null
           container2?.classList.remove('wysiwyg-v2-loading')
           container2?.classList.remove('wysiwyg-v2')
+          setWysiwygPreload(container2, false)
         } catch {}
       }
       // 进入所见模式时，清理一次延迟标记，避免历史状态影响
@@ -4209,6 +4260,16 @@ async function openFile2(preset?: unknown) {
 
     // 记录当前是否处于所见模式，以便在打开新文档后按需恢复
     const wasWysiwyg = !!wysiwyg
+    // 递增序号：用于取消过期的“打开后自动切所见”后台任务
+    const openSeq = ++_autoWysiwygAfterOpenSeq
+
+    // 检查“默认所见模式”设置，并结合之前是否处于所见模式，决定打开后是否应处于所见
+    let wysiwygDefault = false
+    try {
+      const WYSIWYG_DEFAULT_KEY = 'flymd:wysiwyg:default'
+      wysiwygDefault = localStorage.getItem(WYSIWYG_DEFAULT_KEY) === 'true'
+    } catch {}
+    const shouldEnableWysiwyg = wysiwygDefault || wasWysiwyg
 
     // 若当前有未保存更改，且目标文件不同，则先询问是否保存
     if (dirty && selectedPath && selectedPath !== currentFilePath) {
@@ -4290,36 +4351,44 @@ async function openFile2(preset?: unknown) {
     refreshTitle()
     refreshStatus()
 
-    // 若之前处于所见模式，先关闭所见（包括 V2），避免跨文档复用同一 Milkdown 实例导致状态错乱
+    // 若打开前处于所见模式：先退出所见，但强制落到“预览”而不是“源码”，避免用户看到一次源码闪烁
     if (wasWysiwyg) {
+      try { mode = 'preview' } catch {}
+      try { preview.classList.remove('hidden') } catch {}
       try { await setWysiwygEnabled(false) } catch {}
     }
 
-    // 打开后默认进入预览模式
-    await switchToPreviewAfterOpen()
-
-    // 检查“默认所见模式”设置，并结合之前是否处于所见模式，决定是否自动重新启用
-    try {
-      const WYSIWYG_DEFAULT_KEY = 'flymd:wysiwyg:default'
-      const wysiwygDefault = localStorage.getItem(WYSIWYG_DEFAULT_KEY) === 'true'
-      const shouldEnableWysiwyg = wysiwygDefault || wasWysiwyg
-      if (shouldEnableWysiwyg && !wysiwyg) {
-        // 延迟一小段时间，确保预览已渲染，再切换到所见 V2
-        setTimeout(async () => {
-          try {
-            await setWysiwygEnabled(true)
-            console.log('[WYSIWYG] 打开文档后自动启用所见模式', { wysiwygDefault, wasWysiwyg })
-          } catch (e) {
-            console.error('[WYSIWYG] 打开文档后启用所见模式失败:', e)
-          }
-        }, 100)
-      }
-    } catch (e) {
-      console.error('[WYSIWYG] 检查默认所见模式设置失败:', e)
+    // 打开后视图策略：若最终会进入所见，则中间态强制用预览（更接近所见，且不会露出 textarea）
+    if (shouldEnableWysiwyg) {
+      mode = 'preview'
+      try { preview.classList.remove('hidden') } catch {}
+      try { await renderPreview() } catch (e) { try { showError('预览渲染失败', e) } catch {} }
+      try { syncToggleButton() } catch {}
+    } else {
+      // 打开后默认进入预览/源码（尊重“默认源码模式”设置）
+      await switchToPreviewAfterOpen()
     }
 
     // 恢复上次阅读/编辑位置（编辑器光标/滚动与预览滚动）
     await restoreDocPosIfAny(selectedPath)
+
+    // 默认所见/上次所见：后台无感切入（准备好再一次性切换）
+    if (shouldEnableWysiwyg && !wysiwyg) {
+      setTimeout(() => {
+        void (async () => {
+          try {
+            await setWysiwygEnabled(true, {
+              background: true,
+              shouldCommit: () => _autoWysiwygAfterOpenSeq === openSeq && currentFilePath === selectedPath && !wysiwyg,
+            })
+            console.log('[WYSIWYG] 打开文档后自动启用所见模式（后台无感）', { wysiwygDefault, wasWysiwyg })
+          } catch (e) {
+            console.error('[WYSIWYG] 打开文档后启用所见模式失败:', e)
+          }
+        })()
+      }, 0)
+    }
+
     await pushRecent(currentFilePath)
     await renderRecentPanel(false)
     logInfo('文件打开成功', { path: selectedPath, size: content.length })

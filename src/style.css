@@ -1006,6 +1006,13 @@ body.compact-titlebar .window-btn.window-close:hover {
 .container.wysiwyg-v2 .editor { display: none; }
 .container.wysiwyg-v2-loading .editor { display: block; }
 .container.wysiwyg-v2 .preview { display: none !important; }
+
+/* 所见模式无感切换：后台预热/探测/忙碌态（仅影响打开/自动切换时序，不改变功能） */
+.container.wysiwyg-v2-preload #md-wysiwyg-root {
+  display: block !important;
+  opacity: 0;
+  pointer-events: none;
+}
 /* 所见模式覆盖渲染容器：在 ProseMirror 之上渲染 Mermaid/KaTeX 预览 */
 #md-wysiwyg-root .overlay-host { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 #md-wysiwyg-root .overlay-host .ov-mermaid,
