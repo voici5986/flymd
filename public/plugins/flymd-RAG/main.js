@@ -7,6 +7,8 @@
 // - 索引落盘：默认 AppLocalData/flymd/plugin-data/<pluginId>/<libraryKey>/（可在设置里改索引存储目录）
 
 const CFG_KEY = 'flysmart.byLibrary'
+// 库ID 回退映射：当库根目录不可写（移动端常见）时，用 ctx.storage 记住 root->id，避免每次启动都“换库”导致配置失效
+const LIB_ID_MAP_KEY = 'flysmart.libraryIdByRoot'
 const SCHEMA_VERSION = 1
 const META_FILE = 'meta.json'
 const VEC_FILE = 'vectors.f32'
@@ -69,6 +71,10 @@ let FLYSMART_CACHE = {
   meta: null,
   vectors: null, // Float32Array
 }
+
+// rootKey -> libraryId（进程内缓存），避免频繁读写 storage/文件
+const FLYSMART_LIBID_CACHE = new Map()
+const FLYSMART_LIBID_INFLIGHT = new Map()
 
 let FLYSMART_DIALOG = null
 let FLYSMART_STATUS_HOOK = null // (status)=>void，用于设置窗口实时刷新
@@ -764,6 +770,15 @@ async function getLibraryRootRequired(ctx) {
 async function getStableLibraryId(ctx, root) {
   const base = String(root || '').trim()
   if (!base) throw new Error('库根目录为空')
+  const rootKey = normalizePathForKey(base)
+  if (rootKey) {
+    const cached = FLYSMART_LIBID_CACHE.get(rootKey)
+    if (cached) return cached
+    const inflight = FLYSMART_LIBID_INFLIGHT.get(rootKey)
+    if (inflight) return await inflight
+  }
+
+  const task = (async () => {
   const sep = base.includes('\\') ? '\\' : '/'
   const metaDir = base + sep + LIBRARY_META_DIR.replace(/\//g, sep)
   const file = metaDir + sep + 'library-id.json'
@@ -782,6 +797,18 @@ async function getStableLibraryId(ctx, root) {
       }
     }
   } catch {}
+
+  // 回退：库根不可写/不可读时（安卓常见），用 ctx.storage 持久化 root->id，保证同一库的配置能稳定命中
+  if (!id) {
+    try {
+      if (ctx && ctx.storage && typeof ctx.storage.get === 'function' && rootKey) {
+        const raw = await ctx.storage.get(LIB_ID_MAP_KEY)
+        const map = raw && typeof raw === 'object' ? raw : {}
+        const hit = map && typeof map[rootKey] === 'string' ? String(map[rootKey]).trim() : ''
+        if (hit) id = hit
+      }
+    } catch {}
+  }
   if (!id) {
     // 生成新的随机ID（简单 uuid 风格即可）
     const rnd = () => Math.random().toString(16).slice(2)
@@ -795,7 +822,37 @@ async function getStableLibraryId(ctx, root) {
       }
     } catch {}
   }
+
+  // best-effort：无论文件是否可写，都把映射写进 storage；否则移动端会“每次启动都换ID”，配置永远保存不住
+  try {
+    if (
+      ctx &&
+      ctx.storage &&
+      typeof ctx.storage.get === 'function' &&
+      typeof ctx.storage.set === 'function' &&
+      rootKey &&
+      id
+    ) {
+      const raw = await ctx.storage.get(LIB_ID_MAP_KEY)
+      const map = raw && typeof raw === 'object' ? raw : {}
+      if (map[rootKey] !== id) {
+        map[rootKey] = id
+        await ctx.storage.set(LIB_ID_MAP_KEY, map)
+      }
+    }
+  } catch {}
+
   return id
+  })()
+
+  if (rootKey) FLYSMART_LIBID_INFLIGHT.set(rootKey, task)
+  try {
+    const id = await task
+    if (rootKey && id) FLYSMART_LIBID_CACHE.set(rootKey, id)
+    return id
+  } finally {
+    if (rootKey) FLYSMART_LIBID_INFLIGHT.delete(rootKey)
+  }
 }
 
 async function getLibraryKey(ctx) {
