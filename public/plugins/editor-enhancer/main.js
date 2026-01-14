@@ -302,14 +302,85 @@ const BUILTIN_ITEMS = [
         trigger: '/date',
         templateFn: () => formatDate(),
     },
-    {
-        id: 'builtin-time',
-        category: 'meta',
-        labelZh: '时间',
-        labelEn: 'Time',
-        trigger: '/time',
-        templateFn: () => formatTime(),
+  {
+    id: 'builtin-time',
+    category: 'meta',
+    labelZh: '时间',
+    labelEn: 'Time',
+    trigger: '/time',
+    templateFn: () => formatTime(),
+  },
+  {
+    id: 'builtin-datetime',
+    category: 'meta',
+    labelZh: '日期时间',
+    labelEn: 'Date Time',
+    trigger: '/datetime',
+    templateFn: () => {
+      const date = formatDate()
+      const time = formatTime()
+      return date && time ? `${date} ${time}` : date || time
     },
+  },
+]
+
+const SURROUND_BUILTIN_ITEMS = [
+  {
+    id: 'surround-bold',
+    category: 'content',
+    labelZh: '加粗',
+    labelEn: 'Bold',
+    template: '**{{selection}}**',
+  },
+  {
+    id: 'surround-italic',
+    category: 'content',
+    labelZh: '斜体',
+    labelEn: 'Italic',
+    template: '*{{selection}}*',
+  },
+  {
+    id: 'surround-strike',
+    category: 'content',
+    labelZh: '删除线',
+    labelEn: 'Strikethrough',
+    template: '~~{{selection}}~~',
+  },
+  {
+    id: 'surround-inline-code',
+    category: 'content',
+    labelZh: '行内代码',
+    labelEn: 'Inline Code',
+    template: '`{{selection}}`',
+  },
+  {
+    id: 'surround-link',
+    category: 'content',
+    labelZh: '链接',
+    labelEn: 'Link',
+    template: '[{{selection}}]({{cursor}})',
+  },
+  {
+    id: 'surround-image',
+    category: 'content',
+    labelZh: '图片',
+    labelEn: 'Image',
+    template: '![{{selection}}]({{cursor}})',
+  },
+  {
+    id: 'surround-quote',
+    category: 'blocks',
+    labelZh: '引用',
+    labelEn: 'Quote',
+    template: '> {{selection}}',
+  },
+  {
+    id: 'surround-code-block',
+    category: 'blocks',
+    labelZh: '代码块',
+    labelEn: 'Code Block',
+    template: '```\n{{selection}}\n```',
+  },
 ]
 
 const CATEGORY_LABELS = {
@@ -328,11 +399,15 @@ const CATEGORY_ORDER = ['suggested', 'basic', 'content', 'lists', 'blocks', 'adv
 const SUGGEST_WINDOW_MS = 10 * 24 * 60 * 60 * 1000
 
 const DEFAULT_CFG = {
-    slash: {
-        enabled: true,
-        modeSource: true,
-        customItems: [],
-    },
+  slash: {
+    enabled: true,
+    modeSource: true,
+    customItems: [],
+  },
+  surround: {
+    enabled: true,
+    customItems: [],
+  },
 }
 
 const state = {
@@ -345,12 +420,13 @@ const state = {
     open: false,
     selected: 0,
     filtered: [],
-    activeToken: null,
-    composing: false,
-    skipKeyup: false,
-    cleanup: [],
-    modeHandler: null,
-    outsideHandler: null,
+  activeToken: null,
+  composing: false,
+  skipKeyup: false,
+  cleanup: [],
+  modeHandler: null,
+  outsideHandler: null,
+  surroundMenuDisposer: null,
 }
 
 function deepClone(obj) {
@@ -421,10 +497,10 @@ function getSuggestedItems(items, query) {
 }
 
 function normalizeCustomItems(items) {
-    const out = []
-    const seen = new Set()
-    const builtin = getBuiltinTriggersLower()
-    for (const raw of items || []) {
+  const out = []
+  const seen = new Set()
+  const builtin = getBuiltinTriggersLower()
+  for (const raw of items || []) {
         const label = normText(raw && raw.label)
         const trigger = normText(raw && raw.trigger)
         const template = String((raw && raw.template) || '')
@@ -443,17 +519,40 @@ function normalizeCustomItems(items) {
             category: 'custom',
         })
     }
-    return out
+  return out
+}
+
+function normalizeSurroundItems(items) {
+  const out = []
+  const seen = new Set()
+  for (const raw of items || []) {
+    const label = normText(raw && raw.label)
+    const template = String((raw && raw.template) || '')
+    if (!label || !template) continue
+    const key = label.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      id: normText(raw && raw.id) || `surround-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      label,
+      template,
+      category: 'custom',
+    })
+  }
+  return out
 }
 
 function normalizeConfig(raw) {
-    const base = deepClone(DEFAULT_CFG)
-    const cfg = raw && typeof raw === 'object' ? raw : {}
-    const slash = cfg.slash && typeof cfg.slash === 'object' ? cfg.slash : {}
-    base.slash.enabled = slash.enabled !== false
-    base.slash.modeSource = slash.modeSource !== false
-    base.slash.customItems = normalizeCustomItems(slash.customItems)
-    return base
+  const base = deepClone(DEFAULT_CFG)
+  const cfg = raw && typeof raw === 'object' ? raw : {}
+  const slash = cfg.slash && typeof cfg.slash === 'object' ? cfg.slash : {}
+  const surround = cfg.surround && typeof cfg.surround === 'object' ? cfg.surround : {}
+  base.slash.enabled = slash.enabled !== false
+  base.slash.modeSource = slash.modeSource !== false
+  base.slash.customItems = normalizeCustomItems(slash.customItems)
+  base.surround.enabled = surround.enabled !== false
+  base.surround.customItems = normalizeSurroundItems(surround.customItems)
+  return base
 }
 
 async function loadConfig(ctx) {
@@ -507,7 +606,23 @@ function getAllItems(cfg) {
         if (CATEGORY_ORDER.includes(cat)) continue
         if (group && group.length) list.push(...group)
     }
-    return list
+  return list
+}
+
+function getAllSurroundItems(cfg) {
+  const custom = (cfg && cfg.surround && cfg.surround.customItems) || []
+  const list = []
+  for (const it of SURROUND_BUILTIN_ITEMS) {
+    list.push({
+      ...it,
+      label: eeText(it.labelZh, it.labelEn),
+      builtin: true,
+    })
+  }
+  for (const it of custom) {
+    list.push({ ...it, builtin: false })
+  }
+  return list
 }
 
 function ensureStyle() {
@@ -523,9 +638,10 @@ function ensureStyle() {
         `#${MENU_ID} .ee-slash-group{padding:8px 16px 4px;color:var(--muted,#6b7280);font-size:11px;text-transform:uppercase;letter-spacing:.04em;background:rgba(127,127,127,.08);}`,
         `#${MENU_ID} .ee-slash-group.suggested{background:rgba(37,99,235,.12);color:var(--fg,#111);}`,
         `#${MENU_ID} .ee-slash-title{font-size:13px;font-weight:600;}`,
-        `#${MENU_ID} .ee-slash-detail{font-size:11px;color:var(--muted,#6b7280);}`,
-        `#${MENU_ID} .ee-slash-hint{padding:6px 12px;color:var(--muted,#6b7280);font-size:11px;border-top:1px solid var(--border,#e5e7eb);margin-top:4px;}`,
-        `#${SETTINGS_OVERLAY_ID}{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:90030;}`,
+    `#${MENU_ID} .ee-slash-detail{font-size:11px;color:var(--muted,#6b7280);}`,
+    `#${MENU_ID} .ee-slash-hint{padding:6px 12px;color:var(--muted,#6b7280);font-size:11px;border-top:1px solid var(--border,#e5e7eb);margin-top:4px;}`,
+    `.context-menu-submenu .context-menu-group{background:rgba(127,127,127,.08);border-top:1px solid var(--border,#e5e7eb);border-bottom:1px solid var(--border,#e5e7eb);}`,
+    `#${SETTINGS_OVERLAY_ID}{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:90030;}`,
         `#${SETTINGS_OVERLAY_ID}.hidden{display:none;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-settings-dialog{width:720px;max-width:calc(100% - 40px);height:min(620px, 90vh);max-height:90vh;background:var(--bg,#fff);color:var(--fg,#111);border-radius:10px;border:1px solid var(--border,#e5e7eb);box-shadow:0 14px 36px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden;font-size:13px;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-settings-header{padding:10px 14px;border-bottom:1px solid var(--border,#e5e7eb);font-weight:600;font-size:14px;}`,
@@ -535,7 +651,9 @@ function ensureStyle() {
         `#${SETTINGS_OVERLAY_ID} .ee-nav-btn{border:1px solid transparent;border-radius:10px;background:transparent;padding:8px 10px;text-align:left;font-size:13px;color:var(--fg,#111);cursor:pointer;transition:all .15s;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-nav-btn:hover{background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.2);}`,
         `#${SETTINGS_OVERLAY_ID} .ee-nav-btn.active{background:#2563eb;color:#fff;border-color:#2563eb;box-shadow:0 6px 16px rgba(37,99,235,.18);}`,
-        `#${SETTINGS_OVERLAY_ID} .ee-settings-panel{flex:1;min-width:0;padding:12px 14px;overflow:auto;display:flex;flex-direction:column;gap:14px;}`,
+    `#${SETTINGS_OVERLAY_ID} .ee-settings-panel{flex:1;min-width:0;padding:12px 14px;overflow:auto;display:flex;flex-direction:column;gap:14px;}`,
+    `#${SETTINGS_OVERLAY_ID} .ee-tab{display:none;}`,
+    `#${SETTINGS_OVERLAY_ID} .ee-tab.active{display:flex;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-settings-intro{border:1px solid var(--border,#e5e7eb);border-radius:10px;background:rgba(127,127,127,.05);padding:10px;display:flex;flex-direction:column;gap:6px;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-settings-intro-title{font-weight:600;font-size:13px;color:var(--fg,#111);}`,
         `#${SETTINGS_OVERLAY_ID} .ee-settings-intro-item{font-size:12px;color:var(--muted,#6b7280);line-height:1.5;}`,
@@ -555,7 +673,8 @@ function ensureStyle() {
         `#${SETTINGS_OVERLAY_ID} .ee-settings-toggle{display:flex;align-items:center;gap:6px;font-size:12px;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-settings-toggle input{margin:0;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-settings-items{display:flex;flex-direction:column;gap:6px;}`,
-        `#${SETTINGS_OVERLAY_ID} .ee-item-row{display:grid;grid-template-columns:120px 150px 1fr auto;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:rgba(127,127,127,.04);}`,
+    `#${SETTINGS_OVERLAY_ID} .ee-item-row{display:grid;grid-template-columns:120px 150px 1fr auto;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:rgba(127,127,127,.04);}`,
+    `#${SETTINGS_OVERLAY_ID} .ee-item-row.compact{grid-template-columns:150px 1fr auto;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-item-row.builtin{opacity:.7;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-item-label{font-weight:600;font-size:12px;}`,
         `#${SETTINGS_OVERLAY_ID} .ee-item-trigger{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-size:12px;}`,
@@ -865,14 +984,22 @@ function getSelectionText() {
 }
 
 function getTemplateVars() {
-    const date = formatDate()
-    const time = formatTime()
-    return {
-        date,
-        time,
-        datetime: date && time ? `${date} ${time}` : date || time,
-        selection: getSelectionText(),
-    }
+  const date = formatDate()
+  const time = formatTime()
+  return {
+    date,
+    time,
+    datetime: date && time ? `${date} ${time}` : date || time,
+    selection: getSelectionText(),
+  }
+}
+
+function getTemplateVarsWithSelection(selectionText) {
+  const vars = getTemplateVars()
+  if (typeof selectionText === 'string') {
+    vars.selection = selectionText
+  }
+  return vars
 }
 
 function expandTemplate(template, vars) {
@@ -912,8 +1039,8 @@ function buildInsertText(template, before, after, cursorOffset) {
 }
 
 function buildTableTemplate(rows, cols) {
-    const r = Math.max(1, Math.min(20, Number(rows) || 1))
-    const c = Math.max(1, Math.min(12, Number(cols) || 1))
+  const r = Math.max(1, Math.min(20, Number(rows) || 1))
+  const c = Math.max(1, Math.min(12, Number(cols) || 1))
     const headers = []
     for (let i = 0; i < c; i++) {
         headers.push(eeText(`列${i + 1}`, `Col ${i + 1}`))
@@ -926,7 +1053,33 @@ function buildTableTemplate(rows, cols) {
         if (i === 0) cells[0] = '{{cursor}}'
         rowsOut.push(`| ${cells.join(' | ')} |`)
     }
-    return [headerLine, dividerLine, ...rowsOut].join('\n')
+  return [headerLine, dividerLine, ...rowsOut].join('\n')
+}
+
+function getEditorEl() {
+  if (state.editor) return state.editor
+  try {
+    const el = document.getElementById('editor')
+    if (el) return el
+  } catch {}
+  return null
+}
+
+function applyTemplateAtRange(start, end, template, selectionText) {
+  if (!state.ctx) return
+  const vars = getTemplateVarsWithSelection(selectionText)
+  const expanded = expandTemplate(template, vars)
+  try {
+    state.ctx.replaceRange(start, end, expanded.text)
+  } catch {}
+  const ed = getEditorEl()
+  if (ed && expanded.cursorOffset != null) {
+    const pos = start + expanded.cursorOffset
+    try {
+      ed.selectionStart = pos
+      ed.selectionEnd = pos
+    } catch {}
+  }
 }
 
 async function runSelected() {
@@ -1053,22 +1206,73 @@ function bindSourceListeners() {
 }
 
 function detachSourceListeners() {
-    for (const fn of state.cleanup) {
-        try { fn() } catch {}
-    }
-    state.cleanup = []
+  for (const fn of state.cleanup) {
+    try { fn() } catch {}
+  }
+  state.cleanup = []
     state.editor = null
     closeMenu()
 
-    if (state.outsideHandler) {
-        document.removeEventListener('mousedown', state.outsideHandler)
-        state.outsideHandler = null
+  if (state.outsideHandler) {
+    document.removeEventListener('mousedown', state.outsideHandler)
+    state.outsideHandler = null
+  }
+}
+
+function disposeSurroundMenu() {
+  if (state.surroundMenuDisposer) {
+    try { state.surroundMenuDisposer() } catch {}
+    state.surroundMenuDisposer = null
+  }
+}
+
+function buildSurroundMenuChildren(items) {
+  const out = []
+  let lastCategory = null
+  for (const item of items) {
+    const cat = item.category || 'custom'
+    if (lastCategory !== null && cat !== lastCategory) {
+      out.push({ type: 'divider' })
     }
+    lastCategory = cat
+    out.push({
+      label: item.label || '',
+      onClick: (ctx) => {
+        if (!state.ctx) return
+        const sel = typeof state.ctx.getSelection === 'function' ? state.ctx.getSelection() : null
+        const text = (ctx && typeof ctx.selectedText === 'string') ? ctx.selectedText : (sel && sel.text) || ''
+        if (!sel || typeof sel.start !== 'number' || typeof sel.end !== 'number') return
+        if (!text) {
+          state.ctx.ui.notice(eeText('请先选中要包裹的文本', 'Select text to surround'), 'err', 1800)
+          return
+        }
+        applyTemplateAtRange(sel.start, sel.end, item.template || '', text)
+      },
+    })
+  }
+  return out
+}
+
+function registerSurroundMenu() {
+  disposeSurroundMenu()
+  if (!state.ctx || typeof state.ctx.addContextMenuItem !== 'function') return
+  if (!state.cfg || !state.cfg.surround || !state.cfg.surround.enabled) return
+  const items = getAllSurroundItems(state.cfg)
+  if (!items.length) return
+  const children = buildSurroundMenuChildren(items)
+  if (!children.length) return
+  state.surroundMenuDisposer = state.ctx.addContextMenuItem({
+    label: eeText('用...包裹', 'Surround With'),
+    icon: '🧩',
+    condition: (ctx) => ctx && ctx.mode === 'edit' && !!(ctx.selectedText && ctx.selectedText.length > 0),
+    children,
+  })
 }
 
 function applyConfig() {
-    detachSourceListeners()
-    if (isSourceEnabled()) bindSourceListeners()
+  detachSourceListeners()
+  if (isSourceEnabled()) bindSourceListeners()
+  registerSurroundMenu()
 }
 
 function removeSettingsOverlay() {
@@ -1289,11 +1493,12 @@ export async function activate(context) {
 }
 
 export async function deactivate() {
-    detachSourceListeners()
-    if (state.modeHandler) {
-        window.removeEventListener('flymd:mode:changed', state.modeHandler)
-        state.modeHandler = null
-    }
+  detachSourceListeners()
+  disposeSurroundMenu()
+  if (state.modeHandler) {
+    window.removeEventListener('flymd:mode:changed', state.modeHandler)
+    state.modeHandler = null
+  }
     removeSettingsOverlay()
     removeModalOverlay()
     if (state.menuEl) {
@@ -1343,19 +1548,40 @@ export async function openSettings(context) {
     navTitle.textContent = eeText('配置', 'Settings')
     nav.appendChild(navTitle)
 
-    const navBtn = document.createElement('button')
-    navBtn.type = 'button'
-    navBtn.className = 'ee-nav-btn active'
-    navBtn.textContent = eeText('Slash 配置项', 'Slash Settings')
-    nav.appendChild(navBtn)
+  const navBtnSlash = document.createElement('button')
+  navBtnSlash.type = 'button'
+  navBtnSlash.className = 'ee-nav-btn active'
+  navBtnSlash.textContent = eeText('Slash 配置项', 'Slash Settings')
+  nav.appendChild(navBtnSlash)
 
-    const panel = document.createElement('div')
-    panel.className = 'ee-settings-panel'
-    body.appendChild(panel)
+  const navBtnSurround = document.createElement('button')
+  navBtnSurround.type = 'button'
+  navBtnSurround.className = 'ee-nav-btn'
+  navBtnSurround.textContent = eeText('用...包裹', 'Surround With')
+  nav.appendChild(navBtnSurround)
 
-    const intro = document.createElement('div')
-    intro.className = 'ee-settings-intro'
-    panel.appendChild(intro)
+  const panelSlash = document.createElement('div')
+  panelSlash.className = 'ee-settings-panel ee-tab active'
+  body.appendChild(panelSlash)
+
+  const panelSurround = document.createElement('div')
+  panelSurround.className = 'ee-settings-panel ee-tab'
+  body.appendChild(panelSurround)
+
+  const setActiveTab = (tab) => {
+    const isSlash = tab === 'slash'
+    navBtnSlash.classList.toggle('active', isSlash)
+    navBtnSurround.classList.toggle('active', !isSlash)
+    panelSlash.classList.toggle('active', isSlash)
+    panelSurround.classList.toggle('active', !isSlash)
+  }
+
+  navBtnSlash.addEventListener('click', () => setActiveTab('slash'))
+  navBtnSurround.addEventListener('click', () => setActiveTab('surround'))
+
+  const intro = document.createElement('div')
+  intro.className = 'ee-settings-intro'
+  panelSlash.appendChild(intro)
 
     const introTitle = document.createElement('div')
     introTitle.className = 'ee-settings-intro-title'
@@ -1379,7 +1605,7 @@ export async function openSettings(context) {
 
     const slashSection = document.createElement('div')
     slashSection.className = 'ee-settings-section'
-    panel.appendChild(slashSection)
+  panelSlash.appendChild(slashSection)
 
     const slashTitle = document.createElement('div')
     slashTitle.className = 'ee-settings-title'
@@ -1417,7 +1643,7 @@ export async function openSettings(context) {
 
     const itemsSection = document.createElement('div')
     itemsSection.className = 'ee-settings-section'
-    panel.appendChild(itemsSection)
+  panelSlash.appendChild(itemsSection)
 
     const itemsTitle = document.createElement('div')
     itemsTitle.className = 'ee-settings-title'
@@ -1426,10 +1652,10 @@ export async function openSettings(context) {
 
     const templateNote = document.createElement('div')
     templateNote.className = 'ee-settings-note'
-    templateNote.textContent = eeText(
-        '模板变量：{{cursor}} 光标位置，{{date}} {{time}} {{datetime}} 当前时间，{{selection}} 选中文本。',
-        'Template vars: {{cursor}} caret, {{date}} {{time}} {{datetime}} current time, {{selection}} selection.',
-    )
+  templateNote.textContent = eeText(
+    '模板变量：{{cursor}} 光标位置，{{date}} {{time}} {{datetime}} 当前时间。',
+    'Template vars: {{cursor}} caret, {{date}} {{time}} {{datetime}} current time.',
+  )
     itemsSection.appendChild(templateNote)
 
     const itemsWrap = document.createElement('div')
@@ -1648,11 +1874,250 @@ export async function openSettings(context) {
         }
     }
 
-    renderItems()
+  renderItems()
 
-    const footer = document.createElement('div')
-    footer.className = 'ee-settings-footer'
-    dialog.appendChild(footer)
+  const surroundSection = document.createElement('div')
+  surroundSection.className = 'ee-settings-section'
+  panelSurround.appendChild(surroundSection)
+
+  const surroundTitle = document.createElement('div')
+  surroundTitle.className = 'ee-settings-title'
+  surroundTitle.textContent = eeText('用...包裹', 'Surround With')
+  surroundSection.appendChild(surroundTitle)
+
+  const surroundToggleRow = document.createElement('div')
+  surroundToggleRow.className = 'ee-settings-row'
+  surroundSection.appendChild(surroundToggleRow)
+
+  const surroundEnabled = document.createElement('label')
+  surroundEnabled.className = 'ee-settings-toggle'
+  const surroundInput = document.createElement('input')
+  surroundInput.type = 'checkbox'
+  surroundInput.checked = !!draft.surround.enabled
+  surroundInput.addEventListener('change', () => {
+    draft.surround.enabled = surroundInput.checked
+  })
+  surroundEnabled.appendChild(surroundInput)
+  surroundEnabled.appendChild(document.createTextNode(eeText('启用用...包裹', 'Enable surround menu')))
+  surroundToggleRow.appendChild(surroundEnabled)
+
+  const surroundItemsSection = document.createElement('div')
+  surroundItemsSection.className = 'ee-settings-section'
+  panelSurround.appendChild(surroundItemsSection)
+
+  const surroundItemsTitle = document.createElement('div')
+  surroundItemsTitle.className = 'ee-settings-title'
+  surroundItemsTitle.textContent = eeText('包裹模板', 'Surround Templates')
+  surroundItemsSection.appendChild(surroundItemsTitle)
+
+  const surroundNote = document.createElement('div')
+  surroundNote.className = 'ee-settings-note'
+  surroundNote.textContent = eeText(
+    '模板变量：{{selection}} 为选中文本，{{cursor}} 为光标位置，{{date}} {{time}} {{datetime}} 为当前时间。',
+    'Template vars: {{selection}} selected text, {{cursor}} caret, {{date}} {{time}} {{datetime}} current time.',
+  )
+  surroundItemsSection.appendChild(surroundNote)
+
+  const surroundItemsWrap = document.createElement('div')
+  surroundItemsWrap.className = 'ee-settings-items'
+  surroundItemsSection.appendChild(surroundItemsWrap)
+
+  const surroundEditorBox = document.createElement('div')
+  surroundEditorBox.className = 'ee-item-editor hidden'
+  surroundItemsSection.appendChild(surroundEditorBox)
+
+  const surroundEditorTitle = document.createElement('div')
+  surroundEditorTitle.style.fontWeight = '600'
+  surroundEditorTitle.textContent = eeText('新增模板', 'Add Template')
+  surroundEditorBox.appendChild(surroundEditorTitle)
+
+  const surroundLabel = document.createElement('input')
+  surroundLabel.className = 'ee-input'
+  surroundLabel.placeholder = eeText('名称', 'Label')
+  surroundEditorBox.appendChild(buildSettingsRow(eeText('名称', 'Label'), surroundLabel))
+
+  const surroundTemplate = document.createElement('textarea')
+  surroundTemplate.className = 'ee-textarea'
+  surroundTemplate.placeholder = eeText('包裹模板', 'Template')
+  surroundEditorBox.appendChild(buildSettingsRow(eeText('模板', 'Template'), surroundTemplate))
+
+  const surroundActions = document.createElement('div')
+  surroundActions.style.display = 'flex'
+  surroundActions.style.gap = '8px'
+  surroundEditorBox.appendChild(surroundActions)
+
+  const surroundSave = document.createElement('button')
+  surroundSave.className = 'ee-btn primary'
+  surroundSave.textContent = eeText('保存模板', 'Save template')
+  surroundActions.appendChild(surroundSave)
+
+  const surroundCancel = document.createElement('button')
+  surroundCancel.className = 'ee-btn'
+  surroundCancel.textContent = eeText('取消', 'Cancel')
+  surroundActions.appendChild(surroundCancel)
+
+  let surroundEditingId = null
+
+  function hideSurroundEditor() {
+    surroundEditorBox.classList.add('hidden')
+    surroundEditingId = null
+  }
+
+  function showSurroundEditor(item) {
+    surroundEditingId = item && item.id ? item.id : null
+    surroundEditorTitle.textContent = surroundEditingId ? eeText('编辑模板', 'Edit Template') : eeText('新增模板', 'Add Template')
+    surroundLabel.value = (item && item.label) || ''
+    surroundTemplate.value = (item && item.template) || ''
+    surroundEditorBox.classList.remove('hidden')
+  }
+
+  surroundCancel.addEventListener('click', () => hideSurroundEditor())
+
+  surroundSave.addEventListener('click', () => {
+    const label = normText(surroundLabel.value)
+    const template = String(surroundTemplate.value || '')
+    if (!label || !template) {
+      context.ui.notice(eeText('名称和模板为必填', 'Label and template are required'), 'err', 2000)
+      return
+    }
+    if (surroundEditingId) {
+      const idx = draft.surround.customItems.findIndex((it) => it.id === surroundEditingId)
+      if (idx >= 0) {
+        draft.surround.customItems[idx] = { id: surroundEditingId, label, template }
+      }
+    } else {
+      const id = `surround-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      draft.surround.customItems.push({ id, label, template })
+    }
+    renderSurroundItems()
+    hideSurroundEditor()
+  })
+
+  const surroundAddBtn = document.createElement('button')
+  surroundAddBtn.className = 'ee-btn'
+  surroundAddBtn.textContent = eeText('新增模板', 'Add template')
+  surroundAddBtn.addEventListener('click', () => showSurroundEditor(null))
+  surroundItemsSection.appendChild(surroundAddBtn)
+
+  function renderSurroundItems() {
+    surroundItemsWrap.innerHTML = ''
+    const allItems = getAllSurroundItems(draft)
+    const grouped = new Map()
+    for (const item of allItems) {
+      const cat = item.category || 'custom'
+      if (!grouped.has(cat)) grouped.set(cat, [])
+      grouped.get(cat).push(item)
+    }
+    const orderedCategories = [
+      ...CATEGORY_ORDER.filter((cat) => grouped.has(cat)),
+      ...Array.from(grouped.keys()).filter((cat) => !CATEGORY_ORDER.includes(cat)),
+    ]
+
+    function makeRow(item) {
+      const row = document.createElement('div')
+      row.className = 'ee-item-row compact' + (item.builtin ? ' builtin' : '')
+
+      const label = document.createElement('div')
+      label.className = 'ee-item-label'
+      label.textContent = item.label || ''
+
+      const tpl = document.createElement('div')
+      tpl.className = 'ee-item-template'
+      tpl.textContent = item.template || ''
+
+      const actions = document.createElement('div')
+      actions.className = 'ee-item-actions'
+
+      const editBtn = document.createElement('button')
+      editBtn.className = 'ee-btn'
+      editBtn.textContent = eeText('编辑', 'Edit')
+      editBtn.disabled = !!item.builtin
+      editBtn.addEventListener('click', () => {
+        if (item.builtin) return
+        showSurroundEditor(item)
+      })
+
+      const delBtn = document.createElement('button')
+      delBtn.className = 'ee-btn danger'
+      delBtn.textContent = eeText('删除', 'Delete')
+      delBtn.disabled = !!item.builtin
+      delBtn.addEventListener('click', () => {
+        if (item.builtin) return
+        void (async () => {
+          const ok = await showConfirmDialog({
+            title: eeText('删除模板', 'Delete Template'),
+            message: eeText('确认删除该模板？', 'Delete this template?'),
+            okText: eeText('删除', 'Delete'),
+            cancelText: eeText('取消', 'Cancel'),
+          })
+          if (!ok) return
+          draft.surround.customItems = draft.surround.customItems.filter((it) => it.id !== item.id)
+          renderSurroundItems()
+        })()
+      })
+
+      actions.appendChild(editBtn)
+      actions.appendChild(delBtn)
+
+      row.appendChild(label)
+      row.appendChild(tpl)
+      row.appendChild(actions)
+
+      return row
+    }
+
+    for (const cat of orderedCategories) {
+      const items = grouped.get(cat) || []
+      if (!items.length) continue
+      const group = document.createElement('div')
+      group.className = 'ee-group collapsed'
+
+      const header = document.createElement('div')
+      header.className = 'ee-group-header'
+
+      const headLeft = document.createElement('div')
+      headLeft.className = 'ee-group-head'
+
+      const title = document.createElement('div')
+      title.className = 'ee-group-title'
+      title.textContent = getCategoryLabel(cat)
+
+      const meta = document.createElement('div')
+      meta.className = 'ee-group-meta'
+      meta.textContent = eeText(`${items.length} 项`, `${items.length} items`)
+
+      headLeft.appendChild(title)
+      headLeft.appendChild(meta)
+
+      const toggle = document.createElement('div')
+      toggle.className = 'ee-group-toggle'
+      toggle.textContent = '>'
+
+      header.appendChild(headLeft)
+      header.appendChild(toggle)
+      group.appendChild(header)
+
+      const bodyEl = document.createElement('div')
+      bodyEl.className = 'ee-group-body'
+      for (const item of items) {
+        bodyEl.appendChild(makeRow(item))
+      }
+      group.appendChild(bodyEl)
+
+      header.addEventListener('click', () => {
+        const collapsed = group.classList.toggle('collapsed')
+        toggle.textContent = collapsed ? '>' : 'v'
+      })
+
+      surroundItemsWrap.appendChild(group)
+    }
+  }
+
+  renderSurroundItems()
+
+  const footer = document.createElement('div')
+  footer.className = 'ee-settings-footer'
+  dialog.appendChild(footer)
 
     const cancelBtn = document.createElement('button')
     cancelBtn.className = 'ee-btn'

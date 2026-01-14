@@ -1,7 +1,7 @@
 {
   "id": "editor-enhancer",
   "name": "编辑器增强",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "xxtui",
   "description": "编辑器增强：在空行输入“/”启用指令，快速插入内容",
   "i18n": {
