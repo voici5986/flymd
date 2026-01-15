@@ -61,9 +61,10 @@ let _albumSelectEl = null
 let _albumRefreshBtnEl = null
 let _loadMoreBtnEl = null
 let _imglaPage = 1
+let _imglaHasMore = true
 let _imglaAlbumId = ''
 
-// S3/R2 分页状态（ImgLa 仍沿用“加载更多”）
+// 分页状态：统一按 9 条本地分页渲染；ImgLa/Lsky 在需要时再拉下一页远端数据
 let _page = 1
 let _pageTotal = 1
 let _pagerEl = null
@@ -316,7 +317,7 @@ function s3gNormalizeUploader(raw) {
   if (provider === 'imgla') {
     return {
       provider: 'imgla',
-      baseUrl: 'https://www.imgla.net',
+      baseUrl: String(raw.imglaBaseUrl || raw.baseUrl || 'https://www.imgla.net').trim().replace(/\/+$/, ''),
       token: String(raw.imglaToken || raw.token || '').trim(),
       albumId: raw.imglaAlbumId != null ? raw.imglaAlbumId : raw.albumId,
     }
@@ -339,7 +340,8 @@ function s3gApplyModeUi(mode) {
   if (_albumSelectEl) _albumSelectEl.style.display = showAlbum ? 'block' : 'none'
   if (_albumRefreshBtnEl) _albumRefreshBtnEl.style.display = showAlbum ? 'block' : 'none'
   if (_loadMoreBtnEl) _loadMoreBtnEl.style.display = showAlbum ? 'block' : 'none'
-  if (_pagerEl) _pagerEl.style.display = showAlbum ? 'none' : 'flex'
+  // 统一分页：两个模式都用分页条，避免一次渲染过多导致预览交互不稳定
+  if (_pagerEl) _pagerEl.style.display = 'flex'
 }
 
 function s3gGetSelectedImglaAlbumId() {
@@ -572,7 +574,9 @@ function ensurePanel(context) {
       const ls = typeof localStorage !== 'undefined' ? localStorage : null
       if (ls) ls.setItem('flymd.imgla.albumId', _imglaAlbumId || '')
     } catch {}
+    _page = 1
     _imglaPage = 1
+    _imglaHasMore = true
     void refreshList(_ctx)
   }
   _albumSelectEl = albumSelect
@@ -593,7 +597,9 @@ function ensurePanel(context) {
     albumRefreshBtn.style.padding = '4px 10px'
   }
   albumRefreshBtn.onclick = () => {
+    _page = 1
     _imglaPage = 1
+    _imglaHasMore = true
     void refreshList(_ctx)
   }
   _albumRefreshBtnEl = albumRefreshBtn
@@ -639,7 +645,7 @@ function ensurePanel(context) {
   footer.style.justifyContent = 'center'
   footer.style.padding = '6px 0 2px 0'
 
-  // S3/R2 分页条：默认隐藏，renderList 会根据数量决定是否展示
+  // 分页条：统一按 9 条本地分页渲染；ImgLa/Lsky 在需要时再拉下一页远端数据
   const pager = document.createElement('div')
   pager.style.display = 'none'
   pager.style.alignItems = 'center'
@@ -658,10 +664,9 @@ function ensurePanel(context) {
   prevBtn.style.color = 'inherit'
   prevBtn.style.fontSize = '12px'
   prevBtn.onclick = () => {
-    if (_mode !== 's3') return
+    s3gHidePreview()
     if (_page <= 1) return
     _page = _page - 1
-    s3gHidePreview()
     renderList(_records)
   }
   _pagePrevBtnEl = prevBtn
@@ -682,11 +687,7 @@ function ensurePanel(context) {
   nextBtn.style.color = 'inherit'
   nextBtn.style.fontSize = '12px'
   nextBtn.onclick = () => {
-    if (_mode !== 's3') return
-    if (_page >= (_pageTotal || 1)) return
-    _page = _page + 1
-    s3gHidePreview()
-    renderList(_records)
+    void s3gNextPage(_ctx)
   }
   _pageNextBtnEl = nextBtn
 
@@ -765,20 +766,27 @@ function ensurePanel(context) {
 
 function s3gUpdatePager(totalCount) {
   if (!_pagerEl || !_pageLabelEl || !_pagePrevBtnEl || !_pageNextBtnEl) return
-  if (_mode !== 's3') {
-    _pagerEl.style.display = 'none'
-    return
-  }
   const total = typeof totalCount === 'number' && totalCount > 0 ? totalCount : 0
   const pages = Math.max(1, Math.ceil(total / S3G_PAGE_SIZE))
   _pageTotal = pages
   if (_page < 1) _page = 1
   if (_page > pages) _page = pages
-  // 只有一页就别占地方了
-  _pagerEl.style.display = pages > 1 ? 'flex' : 'none'
-  _pageLabelEl.textContent = s3gText('第 ', 'Page ') + String(_page) + s3gText(' / ', ' / ') + String(pages)
+
+  const show = pages > 1 || (_mode === 'imgla' && (_imglaHasMore || _page > 1))
+  _pagerEl.style.display = show ? 'flex' : 'none'
+
+  _pageLabelEl.textContent =
+    pages > 1
+      ? s3gText('第 ', 'Page ') + String(_page) + s3gText(' / ', ' / ') + String(pages)
+      : s3gText('第 ', 'Page ') + String(_page)
+
   _pagePrevBtnEl.disabled = _page <= 1
-  _pageNextBtnEl.disabled = _page >= pages
+  const canNext = _page < pages || (_mode === 'imgla' && _imglaHasMore)
+  _pageNextBtnEl.disabled = !canNext
+
+  if (_loadMoreBtnEl) {
+    _loadMoreBtnEl.disabled = !(_mode === 'imgla' && _imglaHasMore)
+  }
 }
 
 function renderList(records) {
@@ -797,8 +805,8 @@ function renderList(records) {
     return
   }
 
-  // S3/R2：超过 9 条时只渲染当前页，避免一次渲染过多
-  const view = (_mode === 's3' && _records.length > S3G_PAGE_SIZE)
+  // 超过 9 条就只渲染当前页，避免一次渲染过多导致预览交互不稳定
+  const view = (_records.length > S3G_PAGE_SIZE)
     ? _records.slice((_page - 1) * S3G_PAGE_SIZE, _page * S3G_PAGE_SIZE)
     : _records
 
@@ -994,6 +1002,99 @@ async function copyUrl(url) {
   }
 }
 
+function s3gMergeUniqueRecords(prev, next) {
+  const a = Array.isArray(prev) ? prev : []
+  const b = Array.isArray(next) ? next : []
+  if (!a.length) return b.slice()
+  if (!b.length) return a.slice()
+  const seen = new Set()
+  for (const r of a) {
+    if (!r) continue
+    const id = r.id != null ? String(r.id) : ''
+    if (id) seen.add(id)
+  }
+  const out = a.slice()
+  for (const r of b) {
+    if (!r) continue
+    const id = r.id != null ? String(r.id) : ''
+    if (id && seen.has(id)) continue
+    if (id) seen.add(id)
+    out.push(r)
+  }
+  return out
+}
+
+async function loadMoreImgla(context, opts) {
+  if (_mode !== 'imgla') return 0
+  if (!context || !context.invoke) return 0
+  if (!_imglaHasMore) return 0
+
+  const noRender = !!(opts && opts.noRender)
+  const manageLoading = !(opts && opts.keepLoading)
+  if (manageLoading && _loadingEl) _loadingEl.style.display = 'block'
+
+  try {
+    const raw = await s3gGetUploaderRawConfig()
+    const cfg = s3gNormalizeUploader(raw || {})
+    const baseUrl = String(cfg.baseUrl || '').trim()
+    const token = String(cfg.token || '').trim()
+    if (!baseUrl || !token) return 0
+
+    const nextRemotePage = (_imglaPage || 1) + 1
+    const albumIdStr = s3gGetSelectedImglaAlbumId()
+    const albumNum = albumIdStr ? parseInt(albumIdStr, 10) : 0
+    const list = await context.invoke('flymd_imgla_list_images', {
+      req: {
+        baseUrl,
+        token,
+        albumId: albumNum > 0 ? albumNum : undefined,
+        page: nextRemotePage,
+      },
+    })
+    const arr = Array.isArray(list) ? list : []
+    if (!arr.length) {
+      _imglaHasMore = false
+      if (!noRender) renderList(_records)
+      context.ui &&
+        context.ui.notice &&
+        context.ui.notice(s3gText('没有更多图片了', 'No more images'), 'ok', 1600)
+      return 0
+    }
+
+    _imglaPage = nextRemotePage
+    const before = Array.isArray(_records) ? _records.length : 0
+    _records = s3gMergeUniqueRecords(_records, arr)
+    const added = Math.max(0, _records.length - before)
+    if (!noRender) renderList(_records)
+    return added
+  } catch (e) {
+    console.warn('[s3-gallery] 加载更多失败', e)
+    const msg = e && e.message ? String(e.message) : String(e || '未知错误')
+    context.ui &&
+      context.ui.notice &&
+      context.ui.notice(s3gText('加载更多失败：', 'Load more failed: ') + msg, 'err', 2200)
+    return 0
+  } finally {
+    if (manageLoading && _loadingEl) _loadingEl.style.display = 'none'
+  }
+}
+
+async function s3gNextPage(context) {
+  s3gHidePreview()
+  if (_page < (_pageTotal || 1)) {
+    _page = _page + 1
+    renderList(_records)
+    return
+  }
+  if (_mode !== 'imgla') return
+  if (!_imglaHasMore) return
+  const added = await loadMoreImgla(context, { noRender: true, keepLoading: true })
+  if (added > 0) {
+    _page = _page + 1
+  }
+  renderList(_records)
+}
+
 async function refreshList(context) {
   if (!context || !context.invoke) return
   if (_loadingEl) _loadingEl.style.display = 'block'
@@ -1005,7 +1106,7 @@ async function refreshList(context) {
     if (cfg.provider === 'imgla') {
       const baseUrl = String(cfg.baseUrl || '').trim()
       const token = String(cfg.token || '').trim()
-      if (!token) {
+      if (!baseUrl || !token) {
         renderList([])
         context.ui &&
           context.ui.notice &&
@@ -1017,7 +1118,9 @@ async function refreshList(context) {
         return
       }
 
+      _page = 1
       _imglaPage = 1
+      _imglaHasMore = true
       await s3gLoadImglaAlbums(context, cfg)
       _imglaAlbumId = s3gGetSelectedImglaAlbumId()
       const albumNum = _imglaAlbumId ? parseInt(_imglaAlbumId, 10) : 0
@@ -1029,12 +1132,9 @@ async function refreshList(context) {
           page: 1,
         },
       })
-      if (Array.isArray(list)) {
-        renderList(list)
-        if (_loadMoreBtnEl) _loadMoreBtnEl.disabled = list.length === 0
-      } else {
-        renderList([])
-      }
+      const arr = Array.isArray(list) ? list : []
+      if (!arr.length) _imglaHasMore = false
+      renderList(arr)
       return
     }
 
@@ -1077,49 +1177,6 @@ async function refreshList(context) {
       )
   } finally {
     if (_loadingEl) _loadingEl.style.display = 'none'
-  }
-}
-
-async function loadMoreImgla(context) {
-  if (_mode !== 'imgla') return
-  if (!context || !context.invoke) return
-  const raw = await s3gGetUploaderRawConfig()
-  const cfg = s3gNormalizeUploader(raw || {})
-  const baseUrl = String(cfg.baseUrl || '').trim()
-  const token = String(cfg.token || '').trim()
-  if (!baseUrl || !token) return
-
-  const nextPage = (_imglaPage || 1) + 1
-  const albumIdStr = s3gGetSelectedImglaAlbumId()
-  const albumNum = albumIdStr ? parseInt(albumIdStr, 10) : 0
-  try {
-    if (_loadMoreBtnEl) _loadMoreBtnEl.disabled = true
-    const list = await context.invoke('flymd_imgla_list_images', {
-      req: {
-        baseUrl,
-        token,
-        albumId: albumNum > 0 ? albumNum : undefined,
-        page: nextPage,
-      },
-    })
-    const arr = Array.isArray(list) ? list : []
-    if (!arr.length) {
-      context.ui &&
-        context.ui.notice &&
-        context.ui.notice(
-          s3gText('没有更多图片了', 'No more images'),
-          'ok',
-          1600,
-        )
-      return
-    }
-    _imglaPage = nextPage
-    const merged = Array.isArray(_records) ? _records.concat(arr) : arr
-    renderList(merged)
-  } catch (e) {
-    console.warn('[s3-gallery] 加载更多失败', e)
-  } finally {
-    if (_loadMoreBtnEl) _loadMoreBtnEl.disabled = false
   }
 }
 
@@ -1198,11 +1255,14 @@ async function deleteRecord(context, rec) {
           'ok',
           2200,
         )
+      s3gHidePreview()
       _records = _records.filter((r) => {
         const rk = r && (r.remote_key || r.remoteKey || 0)
         const n = typeof rk === 'number' ? rk : parseInt(String(rk || ''), 10)
         return n !== remoteKey
       })
+      const pages = Math.max(1, Math.ceil((_records.length || 0) / S3G_PAGE_SIZE))
+      if (_page > pages) _page = pages
       renderList(_records)
     } catch (e) {
       console.error('[s3-gallery] 删除 ImgLa 图片失败', e)
@@ -1331,6 +1391,7 @@ export function deactivate() {
   _albumRefreshBtnEl = null
   _loadMoreBtnEl = null
   _imglaPage = 1
+  _imglaHasMore = true
   _imglaAlbumId = ''
   _page = 1
   _pageTotal = 1
