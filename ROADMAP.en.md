@@ -2,6 +2,15 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v1.1.8
+- Added: Online announcements (fetches announcement JSON in background; shows bottom-right notifications with link action)
+- Added: Reading mode context menu “Copy as rich text (embed images)” to copy images as content instead of markup
+- Improved: Reduced flicker when entering WYSIWYG mode by hiding the intermediate first-frame render
+- Updated: editor-enhancer v0.1.3 (Slash/Wrap command updates; Diary/Meeting templates added)
+- Updated: AI Novel Engine v0.6.6 (improved index backup/restore)
+- Updated: Image Gallery v0.1.6 (improved ImgLa/Lsky compatibility and paging/load-more; custom baseUrl supported)
+- Updated: Typecho Post Manager v0.1.5 (added image-host migration)
+
 ## Update v1.1.7
 - Added: Toggle to auto-fetch page title when pasting URLs (use `Ctrl+Shift+V` to temporarily bypass)
 - Added: ASP (Additional Suffix Plugin) API — plugins can register custom file suffix rules (type/icon/open behavior)
