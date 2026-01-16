@@ -39,6 +39,7 @@ import { openUploaderDialog as openUploaderDialogInternal, testUploaderConnectiv
 import { uploadImageFromContextMenu } from './uploader/manualImageUpload'
 import { transcodeToWebpIfNeeded } from './utils/image'
 import { protectExcelDollarRefs } from './utils/excelFormula'
+import { guessSyncedDocImageAbsPath } from './utils/localImagePath'
 import {
   copySelectionAsRichHtmlWithEmbeddedImages,
   hasSelectionInside,
@@ -2793,6 +2794,7 @@ wysiwygCaretEl.id = 'wysiwyg-caret'
               <span class="trk"></span><span class="kn"></span>
             </label>
             <div class="upl-hint" id="upl-hint-alwaysLocal">${t('upl.hint.alwaysLocal')}</div>
+            <div class="upl-hint" id="upl-hint-webdavDragImport">${t('upl.hint.webdavDragImport')}</div>
           </div>
 
           <div class="upl-group" data-upl-provider="s3">
@@ -3433,15 +3435,35 @@ async function renderPreview(opts?: RenderPreviewOptions) {
           }
           abs = base.includes('\\') ? stack.join('\\') : '/' + stack.join('/')
         }
-        // 先监听错误，若 asset: 加载失败则回退为 data: URL
-        let triedFallback = false
+        // 若图片路径来自其他设备（WebDAV 同步后常见）：旧绝对路径会失效。
+        // 这里在加载失败时，尝试把它映射到“当前文档同目录 images/”下的同名文件。
+        let triedRemap = false
+        let triedDataFallback = false
         const onError = async () => {
-          if (triedFallback) return
-          triedFallback = true
+          try {
+            if (!triedRemap && currentFilePath) {
+              const remapped = guessSyncedDocImageAbsPath(currentFilePath, abs)
+              triedRemap = true
+              if (remapped && remapped !== abs) {
+                try {
+                  if (typeof exists === 'function' && (await exists(remapped as any))) {
+                    abs = remapped
+                    const u2 = typeof convertFileSrc === 'function' ? convertFileSrc(remapped) : remapped
+                    try { (el as any).setAttribute('data-abs-path', remapped) } catch {}
+                    el.addEventListener('error', onError, { once: true })
+                    el.src = u2
+                    return
+                  }
+                } catch {}
+              }
+            }
+          } catch {}
+          // 仍失败：回退为 data: URL（用于某些环境 asset: 也无法加载的情况）
+          if (triedDataFallback) return
+          triedDataFallback = true
           try {
             if (typeof readFile !== 'function') return
             const bytes = await readFile(abs as any)
-            // 通过 Blob+FileReader 转 data URL，避免手写 base64
             const mime = (() => {
               const m = (abs || '').toLowerCase().match(/\.([a-z0-9]+)$/)
               switch (m?.[1]) {
@@ -9145,7 +9167,13 @@ function bindEvents() {
               // Always-save-local: prefer local images folder for dropped files
               try {
                 const alwaysLocal = await getAlwaysSaveLocalImages()
-                if (alwaysLocal) {
+                let forceLocal = !!alwaysLocal
+                // WebDAV 同步开启时：拖入本地图片默认导入到当前文档 images/，避免“库外绝对路径”导致跨设备不可见
+                try {
+                  const cfg = await getWebdavSyncConfig()
+                  if (cfg && (cfg as any).enabled) forceLocal = true
+                } catch {}
+                if (forceLocal) {
                   const partsLocal: string[] = []
                   if (isTauriRuntime() && currentFilePath) {
                     const base = currentFilePath.replace(/[\\/][^\\/]*$/, '')

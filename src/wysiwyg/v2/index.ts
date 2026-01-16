@@ -16,6 +16,7 @@ import { upload, uploadConfig } from '@milkdown/plugin-upload'
 import { uploader } from './plugins/paste'
 import { protectExcelDollarRefs, unprotectExcelDollarRefs } from '../../utils/excelFormula'
 import { getPasteUrlTitleFetchEnabled } from '../../core/pasteUrlTitle'
+import { guessSyncedDocImageAbsPath } from '../../utils/localImagePath'
 import { mermaidPlugin } from './plugins/mermaid'
 import { mathInlineViewPlugin, mathBlockViewPlugin } from './plugins/math'
 import { htmlMediaPlugin } from './plugins/htmlMedia'
@@ -163,9 +164,40 @@ function rewriteLocalImagesToAsset() {
     const host = (host0?.querySelector('.ProseMirror') as HTMLElement | null) || host0
     if (!host) return
 
-    const toDataUrl = async (abs: string): Promise<string | null> => {
+    const getCurrentFilePath = async (): Promise<string | null> => {
       try {
-        const bytes = await readFile(abs as any)
+        const fn = (window as any).flymdGetCurrentFilePath
+        const v = typeof fn === 'function' ? await fn() : null
+        return typeof v === 'string' && v ? v : null
+      } catch { return null }
+    }
+
+    const toDataUrl = async (
+      abs0: string
+    ): Promise<{ dataUrl: string; absPath: string } | null> => {
+      try {
+        let abs = abs0
+        let bytes: Uint8Array | null = null
+        try {
+          bytes = (await readFile(abs as any)) as any
+        } catch {
+          bytes = null
+        }
+        if (!bytes) {
+          const cur = await getCurrentFilePath()
+          if (cur) {
+            const remapped = guessSyncedDocImageAbsPath(cur, abs0)
+            if (remapped && remapped !== abs0) {
+              try {
+                bytes = (await readFile(remapped as any)) as any
+                abs = remapped
+              } catch {
+                bytes = null
+              }
+            }
+          }
+        }
+        if (!bytes) return null
         const mime = (() => {
           const m = (abs || '').toLowerCase().match(/\.([a-z0-9]+)$/)
           switch (m?.[1]) {
@@ -182,7 +214,7 @@ function rewriteLocalImagesToAsset() {
           }
         })()
         const blob = new Blob([bytes], { type: mime })
-        return await new Promise<string>((resolve, reject) => {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
           try {
             const fr = new FileReader()
             fr.onerror = () => reject(fr.error || new Error('读取图片失败'))
@@ -190,6 +222,7 @@ function rewriteLocalImagesToAsset() {
             fr.readAsDataURL(blob)
           } catch (e) { reject(e as any) }
         })
+        return { dataUrl, absPath: abs }
       } catch { return null }
     }
 
@@ -203,9 +236,10 @@ function rewriteLocalImagesToAsset() {
         const abs = toLocalAbsFromSrc(raw)
         if (!abs) return
         void (async () => {
-          const dataUrl = await toDataUrl(abs)
-          if (dataUrl) {
-            if (imgEl.src !== dataUrl) imgEl.src = dataUrl
+          const r = await toDataUrl(abs)
+          if (r?.dataUrl) {
+            try { imgEl.setAttribute('data-abs-path', r.absPath) } catch {}
+            if (imgEl.src !== r.dataUrl) imgEl.src = r.dataUrl
           }
         })()
       } catch {}
