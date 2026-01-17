@@ -1757,8 +1757,8 @@ async function showTranslateConfirmDialog(context, cfg, fileName, pages) {
     const tipToken = document.createElement('div')
     tipToken.className = 'pdf2doc-settings-desc'
     tipToken.textContent = pdf2docText(
-      '可添加多个密钥：余额不会在服务器端合并，但插件会自动轮换使用；添加/停用/删除会自动保存；丢失密钥可通过我的订单找回',
-      'You can add multiple tokens. They are not merged on the server, but the plugin will rotate them automatically. Add/enable/disable/remove will be saved automatically. If you lose a token, retrieve it from your orders.'
+      '可添加多个余额密钥，支持叠加：丢失密钥可通过我的订单找回',
+      'Multiple balance keys can be added and stacked: lost keys can be retrieved through My Orders'
     )
     boxToken.appendChild(tipToken)
 
