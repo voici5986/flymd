@@ -221,6 +221,21 @@ const _katexHtmlCache = new Map<string, string>()
 const KATEX_HTML_CACHE_MAX = 1500
 const KATEX_HTML_CACHE_MAX_LATEX_LEN = 512
 let _renderPreviewSeq = 0
+const DEBUG_RENDER = false
+
+// 大文档渲染期间，任何“后台工作”（KaTeX、索引等）都不该抢 UI。
+// 用一个时间戳粗暴判断：用户刚操作过，就先别在主线程上继续干重活。
+let _lastUserInputAt = 0
+function markUserInput() {
+  try { _lastUserInputAt = Date.now() } catch {}
+}
+try {
+  window.addEventListener('pointerdown', markUserInput, { capture: true, passive: true })
+  window.addEventListener('wheel', markUserInput, { capture: true, passive: true })
+  window.addEventListener('keydown', markUserInput, { capture: true, passive: true } as any)
+  window.addEventListener('contextmenu', markUserInput, { capture: true, passive: true })
+  window.addEventListener('scroll', markUserInput, { capture: true, passive: true })
+} catch {}
 
 async function getKatexMod(): Promise<any> {
   if (_katexMod) return _katexMod
@@ -230,6 +245,14 @@ async function getKatexMod(): Promise<any> {
 
 function nowMs(): number {
   try { return (performance && typeof performance.now === 'function') ? performance.now() : Date.now() } catch { return Date.now() }
+}
+
+function isInputPendingCompat(): boolean {
+  try {
+    const fn = (navigator as any)?.scheduling?.isInputPending
+    if (typeof fn === 'function') return !!fn.call((navigator as any).scheduling)
+  } catch {}
+  return false
 }
 
 async function yieldToUi(): Promise<void> {
@@ -271,31 +294,59 @@ async function renderKatexPlaceholders(root: HTMLElement, forPrint?: boolean, se
     }
   } catch {}
 
-  // 打印/导出：必须一次性渲染完；交互预览：切片渲染避免卡顿。
-  const timeSlice = !forPrint
-  const budgetMs = 12
-  let sliceStart = nowMs()
-
-  for (let i = 0; i < nodes.length; i++) {
-    if (typeof seq === 'number' && seq !== _renderPreviewSeq) return
-    const el = nodes[i]
-    const latex = el.getAttribute('data-math') || ''
-    const displayMode = el.classList.contains('md-math-block')
-    try {
-      el.innerHTML = renderKatexToHtmlCached(katexMod, latex, displayMode)
-    } catch {
-      // 失败就退回纯文本：宁可丑一点，也别吞内容。
-      try { el.textContent = latex } catch {}
-    }
-    if (timeSlice) {
-      const t = nowMs()
-      if ((t - sliceStart) > budgetMs) {
-        await yieldToUi()
-        if (typeof seq === 'number' && seq !== _renderPreviewSeq) return
-        sliceStart = nowMs()
+  // 打印/导出：必须一次性渲染完。
+  if (forPrint) {
+    for (let i = 0; i < nodes.length; i++) {
+      if (typeof seq === 'number' && seq !== _renderPreviewSeq) return
+      const el = nodes[i]
+      const latex = el.getAttribute('data-math') || ''
+      const displayMode = el.classList.contains('md-math-block')
+      try {
+        el.innerHTML = renderKatexToHtmlCached(katexMod, latex, displayMode)
+      } catch {
+        try { el.textContent = latex } catch {}
       }
     }
+    return
   }
+
+  // 交互预览：把渲染放到空闲时段，并在有输入待处理时主动让路。
+  // 这能显著改善“右键菜单/按钮点击很久才响应”的问题。
+  const ric: any = (globalThis as any).requestIdleCallback
+  const maxPerSlice = 12
+  let i = 0
+
+  await new Promise<void>((resolve) => {
+    const step = (deadline?: any) => {
+      if (typeof seq === 'number' && seq !== _renderPreviewSeq) { resolve(); return }
+      // 用户刚操作过（滚动/右键/点击/按键），先别抢 UI。
+      try { if ((Date.now() - (_lastUserInputAt || 0)) < 120) { if (typeof ric === 'function') ric(step, { timeout: 200 }); else setTimeout(() => step(undefined), 50); return } } catch {}
+      const budget = (() => {
+        try { return deadline && typeof deadline.timeRemaining === 'function' ? (deadline.timeRemaining() || 0) : 0 } catch { return 0 }
+      })()
+      const endAt = nowMs() + Math.max(3, Math.min(6, budget || 4))
+      let n = 0
+      while (i < nodes.length && n < maxPerSlice) {
+        if (typeof seq === 'number' && seq !== _renderPreviewSeq) { resolve(); return }
+        if (isInputPendingCompat()) break
+        const el = nodes[i++]
+        const latex = el.getAttribute('data-math') || ''
+        const displayMode = el.classList.contains('md-math-block')
+        try {
+          el.innerHTML = renderKatexToHtmlCached(katexMod, latex, displayMode)
+        } catch {
+          try { el.textContent = latex } catch {}
+        }
+        n++
+        if (nowMs() >= endAt) break
+      }
+      if (i >= nodes.length) { resolve(); return }
+      if (typeof ric === 'function') ric(step, { timeout: 200 })
+      else setTimeout(() => step(undefined), 16)
+    }
+    if (typeof ric === 'function') ric(step, { timeout: 200 })
+    else setTimeout(() => step(undefined), 0)
+  })
 }
 
 const KATEX_CRITICAL_STYLE_ID = 'flymd-katex-critical-style'
@@ -3169,7 +3220,7 @@ type RenderPreviewOptions = {
 // 渲染预览（带安全消毒）
 async function renderPreview(opts?: RenderPreviewOptions) {
   const seq = ++_renderPreviewSeq
-  console.log('=== 开始渲染预览 ===')
+  try { if (DEBUG_RENDER) console.log('=== 开始渲染预览 ===') } catch {}
   // 首次预览开始打点
   try { if (!(renderPreview as any)._firstLogged) { (renderPreview as any)._firstLogged = true; logInfo('打点:首次预览开始') } } catch {}
   try { if ((currentFilePath || '').toLowerCase().endsWith('.pdf')) return } catch {}
@@ -3302,7 +3353,7 @@ async function renderPreview(opts?: RenderPreviewOptions) {
       katexCssLoaded = true
     }
   } catch {}
-  console.log('Markdown 渲染后的 HTML 片段:', html.substring(0, 500))
+  try { if (DEBUG_RENDER) console.log('Markdown 渲染后的 HTML 片段:', html.substring(0, 500)) } catch {}
 
   // 方案 A：占位符机制不需要 DOMPurify
   // KaTeX 占位符（data-math 属性）是安全的，后续会用 KaTeX.render() 替换
@@ -3327,7 +3378,7 @@ async function renderPreview(opts?: RenderPreviewOptions) {
     } catch {}
     try {
       const codeBlocks = buf.querySelectorAll('pre > code.language-mermaid') as NodeListOf<HTMLElement>
-      try { console.log('[预处理] language-mermaid 代码块数量:', codeBlocks.length) } catch {}
+      try { if (DEBUG_RENDER) console.log('[预处理] language-mermaid 代码块数量:', codeBlocks.length) } catch {}
       codeBlocks.forEach((code) => {
         try {
           const pre = code.parentElement as HTMLElement
@@ -3341,7 +3392,7 @@ async function renderPreview(opts?: RenderPreviewOptions) {
     } catch {}
     try {
       const preMermaid = buf.querySelectorAll('pre.mermaid')
-      try { console.log('[预处理] pre.mermaid 元素数量:', preMermaid.length) } catch {}
+      try { if (DEBUG_RENDER) console.log('[预处理] pre.mermaid 元素数量:', preMermaid.length) } catch {}
       preMermaid.forEach((pre) => {
         try {
           const text = pre.textContent || ''
@@ -3354,7 +3405,7 @@ async function renderPreview(opts?: RenderPreviewOptions) {
     } catch {}
     try {
       const nodes = Array.from(buf.querySelectorAll('.mermaid')) as HTMLElement[]
-      try { console.log('[预处理] 准备渲染 Mermaid 节点:', nodes.length) } catch {}
+      try { if (DEBUG_RENDER) console.log('[预处理] 准备渲染 Mermaid 节点:', nodes.length) } catch {}
       if (nodes.length > 0) {
         let mermaid: any
         try { mermaid = (await import('mermaid')).default } catch (e1) { try { mermaid = (await import('mermaid/dist/mermaid.esm.mjs')).default } catch (e2) { throw e2 } }
@@ -3406,7 +3457,10 @@ async function renderPreview(opts?: RenderPreviewOptions) {
       } catch {}
       try { decorateCodeBlocks(mdHost) } catch {}
       // 公式多的文档（例如 solag.md）这里是主要性能瓶颈：切片渲染避免 UI “假死”。
-      try { await renderKatexPlaceholders(buf, !!opts?.forPrint, seq) } catch {}
+      try {
+        if (opts?.forPrint) await renderKatexPlaceholders(buf, true, seq)
+        else { void renderKatexPlaceholders(buf, false, seq) }
+      } catch {}
       // 便签模式：为待办项添加推送和提醒按钮，并自动调整窗口高度
       try { if (stickyNoteMode) { addStickyTodoButtons(); scheduleAdjustStickyHeight() } } catch {}
       // 预览更新后自动刷新大纲（节流由内部逻辑与渲染频率保障）
