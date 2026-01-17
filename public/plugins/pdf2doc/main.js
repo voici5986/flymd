@@ -2310,8 +2310,11 @@ export async function activate(context) {
 
             if (result.format === 'markdown' && result.markdown) {
               const baseName = file && file.name ? file.name.replace(/\.pdf$/i, '') : 'document'
+              const safeBaseName = String(baseName || '')
+                .replace(/[\\/:*?"<>|]+/g, '_')
+                .trim() || 'document'
               const localized = await localizeMarkdownImages(context, result.markdown, {
-                baseName
+                baseName: safeBaseName
               })
 
               // 解析 PDF（通过文件选择）时，同时：
@@ -2320,7 +2323,7 @@ export async function activate(context) {
               let savedPath = ''
               if (typeof context.saveMarkdownToCurrentFolder === 'function') {
                 try {
-                  const mdFileName = baseName + ' (PDF 解析).md'
+                  const mdFileName = '解析' + safeBaseName + '.md'
                   savedPath = await context.saveMarkdownToCurrentFolder({
                     fileName: mdFileName,
                     content: localized,
@@ -2603,13 +2606,16 @@ export async function activate(context) {
 
             if (result.format === 'markdown' && result.markdown) {
               const baseName = fileName ? fileName.replace(/\.pdf$/i, '') : 'document'
+              const safeBaseName = String(baseName || '')
+                .replace(/[\\/:*?"<>|]+/g, '_')
+                .trim() || 'document'
               const localized = await localizeMarkdownImages(context, result.markdown, {
-                baseName
+                baseName: safeBaseName
               })
               let savedPath = ''
               if (typeof context.saveMarkdownToCurrentFolder === 'function') {
                 try {
-                  const mdFileName = baseName + ' (PDF 解析).md'
+                  const mdFileName = '解析' + safeBaseName + '.md'
                   savedPath = await context.saveMarkdownToCurrentFolder({
                     fileName: mdFileName,
                     content: localized,
