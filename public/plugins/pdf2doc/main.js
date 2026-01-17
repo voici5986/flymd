@@ -2,7 +2,10 @@
 
 // 默认后端 API 根地址
 const DEFAULT_API_BASE = 'https://flymd.llingfei.com/pdf/'
+// 兼容标记（用于后端强制升级闸门；这不是插件真实版本号）
+const PDF2DOC_COMPAT_VERSION = '1.2.0'
 const PDF2DOC_STYLE_ID = 'pdf2doc-settings-style'
+const PDF2DOC_PROGRESS_Z_INDEX = 90020
 
 // 轻量多语言：跟随宿主（flymd.locale），默认用系统语言
 const PDF2DOC_LOCALE_LS_KEY = 'flymd.locale'
@@ -115,6 +118,52 @@ function maskApiTokenForDisplay(token) {
   return t.slice(0, 4) + '…' + t.slice(-4)
 }
 
+// 解析取消：做“软取消”，保证 UI 能立刻停下来；网络请求若不支持中断，仍可能在后台继续跑。
+function createPdf2DocCancelledError(message) {
+  const e = new Error(message || pdf2docText('已终止解析', 'Parsing cancelled'))
+  e._pdf2docCancelled = true
+  return e
+}
+
+function isPdf2DocCancelledError(err) {
+  return !!(err && typeof err === 'object' && err._pdf2docCancelled === true)
+}
+
+function createPdf2DocCancelSource() {
+  let cancelled = false
+  let resolveCancel = null
+  const promise = new Promise(resolve => {
+    resolveCancel = resolve
+  })
+  return {
+    get cancelled() { return cancelled },
+    cancel() {
+      if (cancelled) return
+      cancelled = true
+      try { if (resolveCancel) resolveCancel(true) } catch {}
+    },
+    promise
+  }
+}
+
+// 关键点：对“被 race 掉的 promise”提前加上 catch，避免取消后出现 unhandled rejection。
+async function awaitPdf2DocWithCancel(promise, cancelSource) {
+  if (!cancelSource) return await promise
+  if (cancelSource.cancelled) throw createPdf2DocCancelledError()
+
+  const guarded = Promise.resolve(promise).then(
+    (v) => ({ ok: true, v }),
+    (e) => ({ ok: false, e })
+  )
+  const winner = await Promise.race([
+    guarded,
+    cancelSource.promise.then(() => ({ cancelled: true }))
+  ])
+  if (winner && winner.cancelled) throw createPdf2DocCancelledError()
+  if (!winner || winner.ok !== true) throw (winner && winner.e ? winner.e : new Error('未知错误'))
+  return winner.v
+}
+
 async function fetchTotalRemainPages(context, cfg) {
   try {
     if (!context || !context.http || typeof context.http.fetch !== 'function') return null
@@ -129,7 +178,8 @@ async function fetchTotalRemainPages(context, cfg) {
     if (!primaryToken) return null
 
     const headers = {
-      Authorization: 'Bearer ' + primaryToken
+      Authorization: 'Bearer ' + primaryToken,
+      'X-PDF2DOC-Version': PDF2DOC_COMPAT_VERSION
     }
     if (enabledTokens.length > 1) {
       headers['X-Api-Tokens'] = JSON.stringify(enabledTokens)
@@ -160,6 +210,11 @@ function showQuotaRiskDialog(context, pdfPages, remainPages) {
       return
     }
 
+    const hasPdfPages =
+      typeof pdfPages === 'number' &&
+      Number.isFinite(pdfPages) &&
+      pdfPages > 0
+
     const overlay = document.createElement('div')
     overlay.style.cssText =
       'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:90030;'
@@ -177,12 +232,40 @@ function showQuotaRiskDialog(context, pdfPages, remainPages) {
     body.style.cssText = 'padding:14px 16px;font-size:13px;line-height:1.6;'
 
     const msg = document.createElement('div')
-    const safeRemain = typeof remainPages === 'number' && remainPages > 0 ? remainPages : 0
-    const pct = safeRemain > 0 ? Math.round((pdfPages / safeRemain) * 100) : 999
-    const pctColor = pct > 50 ? '#dc2626' : (pct <= 40 ? '#16a34a' : '#b45309')
-    const pctText = safeRemain > 0 ? `${pct}%` : pdf2docText('未知', 'unknown')
-    const compareText =
-      safeRemain <= 0
+
+    // remainPages 可能查询失败（null/undefined/NaN），不要把它误当成 0 去吓用户。
+    const hasRemain =
+      typeof remainPages === 'number' &&
+      Number.isFinite(remainPages) &&
+      remainPages >= 0
+    const safeRemain = hasRemain && remainPages > 0 ? remainPages : 0
+    const pct =
+      hasPdfPages && hasRemain && safeRemain > 0
+        ? Math.round((pdfPages / safeRemain) * 100)
+        : 0
+    const pctColor = !hasRemain
+      ? '#b45309'
+      : pct > 50
+        ? '#dc2626'
+        : (pct <= 40 ? '#16a34a' : '#b45309')
+    const pctText =
+      hasPdfPages && hasRemain && safeRemain > 0
+        ? `${pct}%`
+        : pdf2docText('未知', 'unknown')
+    const remainText = hasRemain ? String(remainPages) : pdf2docText('未知', 'unknown')
+    const pdfText = hasPdfPages ? String(pdfPages) : pdf2docText('未知', 'unknown')
+
+    const compareText = !hasPdfPages
+      ? pdf2docText(
+          '当前 PDF 页数未知（无法进行页数对比）',
+          'PDF page count unknown (cannot compare pages)'
+        )
+      : !hasRemain
+      ? pdf2docText(
+          '当前剩余解析页数未知（查询失败或未配置）',
+          'Remaining parse pages unknown (query failed or not configured)'
+        )
+      : safeRemain <= 0
         ? pdf2docText(
             '当前剩余解析页数为 0（不足以开始解析）',
             'Remaining parse pages: 0 (not enough to start)'
@@ -196,7 +279,13 @@ function showQuotaRiskDialog(context, pdfPages, remainPages) {
               '按原 PDF 页数，余额足够覆盖，但实际计费页数可能更高',
               'Balance covers the original PDF pages, but billable pages may be higher'
             )
-    const compareColor = safeRemain <= 0 || safeRemain < pdfPages ? '#dc2626' : '#16a34a'
+
+    const compareColor = !hasPdfPages
+      ? '#b45309'
+      : !hasRemain
+      ? '#b45309'
+      : (safeRemain <= 0 || safeRemain < pdfPages ? '#dc2626' : '#16a34a')
+
     const pctLine = pdf2docText(
       `当前解析页数约为剩余页数的 <span style="color:${pctColor};font-weight:600;">${pctText}</span>`,
       `Estimated ratio: <span style="color:${pctColor};font-weight:600;">${pctText}</span> of remaining pages`
@@ -212,8 +301,8 @@ function showQuotaRiskDialog(context, pdfPages, remainPages) {
     const warnHtml = `<span style="color:#dc2626;font-weight:600;">${warnLine}</span>`
     const recommendHtml = `<span style="color:#6b7280;">${recommendLine}</span>`
     msg.innerHTML = pdf2docText(
-      `当前 PDF 页数：<strong>${pdfPages}</strong> 页<br>剩余解析页数：<strong>${remainPages}</strong> 页<br><span style="color:${compareColor};font-weight:600;">${compareText}</span><br>${pctLine}<br>${recommendHtml}<br><br>${warnHtml}`,
-      `PDF pages: <strong>${pdfPages}</strong><br>Remaining parse pages: <strong>${remainPages}</strong><br><span style="color:${compareColor};font-weight:600;">${compareText}</span><br>${pctLine}<br>${recommendHtml}<br><br>${warnHtml}`
+      `当前 PDF 页数：<strong>${pdfText}</strong> 页<br>剩余解析页数：<strong>${remainText}</strong> 页<br><span style="color:${compareColor};font-weight:600;">${compareText}</span><br>${pctLine}<br>${recommendHtml}<br><br>${warnHtml}`,
+      `PDF pages: <strong>${pdfText}</strong><br>Remaining parse pages: <strong>${remainText}</strong><br><span style="color:${compareColor};font-weight:600;">${compareText}</span><br>${pctLine}<br>${recommendHtml}<br><br>${warnHtml}`
     )
     body.appendChild(msg)
 
@@ -267,14 +356,16 @@ function showQuotaRiskDialog(context, pdfPages, remainPages) {
 }
 
 async function confirmQuotaRiskBeforeParse(context, cfg, pdfBytes, pdfPagesHint) {
-  try {
-    if (!context || typeof context.getPdfPageCount !== 'function') return true
+  // 这是“用户明确要求每次都弹一次”的确认框：即使查询失败也要尽量弹（弹不出来才放行）。
+  const canShow = typeof document !== 'undefined'
+  if (!canShow) return true
 
-    const remain = await fetchTotalRemainPages(context, cfg)
-    if (typeof remain !== 'number') return true
-
-    let pdfPages = typeof pdfPagesHint === 'number' ? pdfPagesHint : 0
-    if (!pdfPages) {
+  let pdfPages = null
+  const hint = typeof pdfPagesHint === 'number' ? pdfPagesHint : NaN
+  if (Number.isFinite(hint) && hint > 0) {
+    pdfPages = hint
+  } else if (context && typeof context.getPdfPageCount === 'function') {
+    try {
       // 注意：宿主实现可能会通过 IPC 传输 ArrayBuffer，导致原 buffer 被“转移/分离”变成 0 字节。
       // 这里用副本去取页数，避免影响后续真正上传解析的 bytes。
       let bytesForCount = pdfBytes
@@ -288,23 +379,38 @@ async function confirmQuotaRiskBeforeParse(context, cfg, pdfBytes, pdfPagesHint)
         bytesForCount = pdfBytes
       }
       const n = await context.getPdfPageCount(bytesForCount)
-      pdfPages = typeof n === 'number' ? n : parseInt(String(n || '0'), 10) || 0
-    }
-    if (!pdfPages) return true
-
-    if (pdfPages > remain * 0.5) {
-      const ret = await showQuotaRiskDialog(context, pdfPages, remain)
-      const action = ret && ret.action ? ret.action : 'cancel'
-      if (action === 'recharge') {
-        try { await openSettings(context) } catch {}
-        return false
+      const pages = typeof n === 'number' ? n : parseInt(String(n || '0'), 10) || 0
+      if (Number.isFinite(pages) && pages > 0) {
+        pdfPages = pages
       }
-      if (action === 'cancel') return false
+    } catch {
+      pdfPages = null
     }
+  }
 
+  let remain = null
+  try {
+    // 以前是“超过剩余额度 50% 才提示”，现在改成：每次解析前都提示一次（用户要求）。
+    const remainRaw = await fetchTotalRemainPages(context, cfg)
+    remain =
+      typeof remainRaw === 'number' && Number.isFinite(remainRaw) && remainRaw >= 0
+        ? remainRaw
+        : null
+  } catch {
+    remain = null
+  }
+
+  try {
+    const ret = await showQuotaRiskDialog(context, pdfPages, remain)
+    const action = ret && ret.action ? ret.action : 'cancel'
+    if (action === 'recharge') {
+      try { await openSettings(context) } catch {}
+      return false
+    }
+    if (action === 'cancel') return false
     return true
   } catch {
-    // 风险提示失败不应阻断主流程
+    // UI 弹窗失败不应阻断主流程
     return true
   }
 }
@@ -397,7 +503,7 @@ function pickImageFile() {
 }
 
 
-async function uploadAndParsePdfFile(context, cfg, file, output) {
+async function uploadAndParsePdfFile(context, cfg, file, output, cancelSource) {
   let apiUrl = (cfg.apiBaseUrl || DEFAULT_API_BASE).trim()
   
   if (apiUrl.endsWith('/pdf')) {
@@ -420,19 +526,22 @@ async function uploadAndParsePdfFile(context, cfg, file, output) {
   const xApiTokens = candidates.length > 1 ? JSON.stringify(candidates) : ''
 
   const requestOnce = async (token) => {
+    if (cancelSource && cancelSource.cancelled) throw createPdf2DocCancelledError()
     const headers = {
-      Authorization: 'Bearer ' + token
+      Authorization: 'Bearer ' + token,
+      'X-PDF2DOC-Version': PDF2DOC_COMPAT_VERSION
     }
     if (xApiTokens) headers['X-Api-Tokens'] = xApiTokens
 
     let res
     try {
-      res = await context.http.fetch(apiUrl, {
+      res = await awaitPdf2DocWithCancel(context.http.fetch(apiUrl, {
         method: 'POST',
         headers,
         body: form
-      })
+      }), cancelSource)
     } catch (e) {
+      if (isPdf2DocCancelledError(e)) throw e
       throw new Error(
         pdf2docText(
           '网络请求失败：' + (e && e.message ? e.message : String(e)),
@@ -443,8 +552,10 @@ async function uploadAndParsePdfFile(context, cfg, file, output) {
 
     let data = null
     try {
-      data = await res.json()
+      if (cancelSource && cancelSource.cancelled) throw createPdf2DocCancelledError()
+      data = await awaitPdf2DocWithCancel(res.json(), cancelSource)
     } catch (e) {
+      if (isPdf2DocCancelledError(e)) throw e
       const statusText = 'HTTP ' + res.status
       throw new Error(
         pdf2docText(
@@ -472,10 +583,12 @@ async function uploadAndParsePdfFile(context, cfg, file, output) {
   let lastErr = null
   for (const token of candidates) {
     try {
+      if (cancelSource && cancelSource.cancelled) throw createPdf2DocCancelledError()
       // eslint-disable-next-line no-await-in-loop
       return await requestOnce(token)
     } catch (e) {
       lastErr = e
+      if (isPdf2DocCancelledError(e)) throw e
       if (!isLikelyTokenOrQuotaError(e)) throw e
     }
   }
@@ -483,7 +596,7 @@ async function uploadAndParsePdfFile(context, cfg, file, output) {
 }
 
 // 上传并解析图片文件，仅支持输出 Markdown
-async function uploadAndParseImageFile(context, cfg, file) {
+async function uploadAndParseImageFile(context, cfg, file, cancelSource) {
   let apiUrl = (cfg.apiBaseUrl || DEFAULT_API_BASE).trim()
 
   if (apiUrl.endsWith('/pdf')) {
@@ -504,19 +617,22 @@ async function uploadAndParseImageFile(context, cfg, file) {
   const xApiTokens = candidates.length > 1 ? JSON.stringify(candidates) : ''
 
   const requestOnce = async (token) => {
+    if (cancelSource && cancelSource.cancelled) throw createPdf2DocCancelledError()
     const headers = {
-      Authorization: 'Bearer ' + token
+      Authorization: 'Bearer ' + token,
+      'X-PDF2DOC-Version': PDF2DOC_COMPAT_VERSION
     }
     if (xApiTokens) headers['X-Api-Tokens'] = xApiTokens
 
     let res
     try {
-      res = await context.http.fetch(apiUrl, {
+      res = await awaitPdf2DocWithCancel(context.http.fetch(apiUrl, {
         method: 'POST',
         headers,
         body: form
-      })
+      }), cancelSource)
     } catch (e) {
+      if (isPdf2DocCancelledError(e)) throw e
       throw new Error(
         pdf2docText(
           '网络请求失败：' + (e && e.message ? e.message : String(e)),
@@ -527,8 +643,10 @@ async function uploadAndParseImageFile(context, cfg, file) {
 
     let data = null
     try {
-      data = await res.json()
+      if (cancelSource && cancelSource.cancelled) throw createPdf2DocCancelledError()
+      data = await awaitPdf2DocWithCancel(res.json(), cancelSource)
     } catch (e) {
+      if (isPdf2DocCancelledError(e)) throw e
       const statusText = 'HTTP ' + res.status
       throw new Error(
         pdf2docText(
@@ -562,10 +680,12 @@ async function uploadAndParseImageFile(context, cfg, file) {
   let lastErr = null
   for (const token of candidates) {
     try {
+      if (cancelSource && cancelSource.cancelled) throw createPdf2DocCancelledError()
       // eslint-disable-next-line no-await-in-loop
       return await requestOnce(token)
     } catch (e) {
       lastErr = e
+      if (isPdf2DocCancelledError(e)) throw e
       if (!isLikelyTokenOrQuotaError(e)) throw e
     }
   }
@@ -573,7 +693,7 @@ async function uploadAndParseImageFile(context, cfg, file) {
 }
 
 
-async function parsePdfBytes(context, cfg, bytes, filename, output) {
+async function parsePdfBytes(context, cfg, bytes, filename, output, cancelSource) {
   // bytes: Uint8Array | ArrayBuffer | number[]
   const arr = bytes instanceof Uint8Array
     ? bytes
@@ -585,11 +705,11 @@ async function parsePdfBytes(context, cfg, bytes, filename, output) {
     ? filename.trim()
     : 'document.pdf'
     const file = new File([blob], name, { type: 'application/pdf' })
-    return await uploadAndParsePdfFile(context, cfg, file, output)
+    return await uploadAndParsePdfFile(context, cfg, file, output, cancelSource)
   }
 
 // 解析图片二进制为 Markdown
-async function parseImageBytes(context, cfg, bytes, filename) {
+async function parseImageBytes(context, cfg, bytes, filename, cancelSource) {
   const arr = bytes instanceof Uint8Array
     ? bytes
     : (bytes instanceof ArrayBuffer
@@ -607,7 +727,7 @@ async function parseImageBytes(context, cfg, bytes, filename) {
     ? filename.trim()
     : 'image.jpg'
   const file = new File([blob], name, { type: mime })
-  return await uploadAndParseImageFile(context, cfg, file)
+  return await uploadAndParseImageFile(context, cfg, file, cancelSource)
 }
 
 // 将 Markdown 中的远程图片下载到当前文档目录并改写为本地相对路径
@@ -1173,7 +1293,8 @@ async function showTranslateConfirmDialog(context, cfg, fileName, pages) {
         const enabledTokens = getEnabledApiTokens(cfg).map(it => it.token).filter(Boolean)
         const primaryToken = getPrimaryApiToken(cfg)
         const headers = {
-          Authorization: 'Bearer ' + (primaryToken || '')
+          Authorization: 'Bearer ' + (primaryToken || ''),
+          'X-PDF2DOC-Version': PDF2DOC_COMPAT_VERSION
         }
         if (enabledTokens.length > 1) {
           headers['X-Api-Tokens'] = JSON.stringify(enabledTokens)
@@ -1302,12 +1423,287 @@ async function showTranslateConfirmDialog(context, cfg, fileName, pages) {
      '.pdf2doc-token-item{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}',
      '.pdf2doc-token-item .token{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;}',
      '.pdf2doc-token-item .quota{font-size:11px;color:var(--muted);margin-left:auto;}',
-     '.pdf2doc-token-item .btn-mini{padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px;}'
-   ].join('\n')
+     '.pdf2doc-token-item .btn-mini{padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px;}',
+     // 解析进度遮罩（不可关闭；失败后才允许关闭）
+     '.pdf2doc-progress-overlay{position:fixed;inset:0;background:rgba(255,255,255,.86);display:flex;align-items:center;justify-content:center;z-index:' +
+       PDF2DOC_PROGRESS_Z_INDEX +
+       ';}',
+     '.pdf2doc-progress-dialog{width:320px;max-width:calc(100% - 40px);background:rgba(255,255,255,.92);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.08);padding:22px 18px 16px;color:#111827;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}',
+     '.pdf2doc-progress-icon{display:flex;align-items:center;justify-content:center;margin-bottom:10px;}',
+     '.pdf2doc-progress-icon .doc{width:24px;height:30px;border:2px solid #111827;border-radius:2px;position:relative;background:#fff;}',
+     '.pdf2doc-progress-icon .doc:before{content:\"\";position:absolute;top:0;right:0;width:8px;height:8px;border-left:2px solid #111827;border-bottom:2px solid #111827;background:#fff;}',
+     '.pdf2doc-progress-icon .doc:after{content:\"\";position:absolute;left:4px;right:4px;top:12px;height:2px;background:#3b82f6;animation:pdf2docScan 1.2s ease-in-out infinite;}',
+     '.pdf2doc-progress-bars{display:flex;gap:10px;align-items:center;justify-content:center;margin:6px 0 12px;}',
+     '.pdf2doc-progress-bars span{width:26px;height:3px;background:#111827;border-radius:999px;opacity:.2;transform:translateY(0);animation:pdf2docBars 1.1s infinite ease-in-out;}',
+     '.pdf2doc-progress-bars span:nth-child(2){animation-delay:.18s}',
+     '.pdf2doc-progress-bars span:nth-child(3){animation-delay:.36s}',
+     '@keyframes pdf2docBars{0%,100%{opacity:.15;transform:translateY(0)}50%{opacity:.9;transform:translateY(-3px)}}',
+    '@keyframes pdf2docScan{0%{top:12px;opacity:1}50%{top:22px;opacity:1}51%{opacity:0}100%{top:12px;opacity:0}}',
+     '.pdf2doc-progress-title{text-align:center;font-weight:700;font-size:16px;letter-spacing:.2px;margin:0 0 6px;}',
+      '.pdf2doc-progress-sub{text-align:center;font-size:12px;color:#374151;line-height:1.4;margin:0 0 10px;}',
+      '.pdf2doc-progress-error{display:none;margin-top:8px;font-size:12px;line-height:1.45;color:#b91c1c;word-break:break-word;white-space:pre-wrap;}',
+      '.pdf2doc-progress-error.show{display:block;}',
+      '.pdf2doc-progress-cancel{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:6px;}',
+      '.pdf2doc-progress-cancel.hide{display:none;}',
+      '.pdf2doc-progress-cancel-btn{padding:7px 18px;border-radius:8px;border:none;background:linear-gradient(135deg,#fee2e2 0%,#fecaca 100%);color:#b91c1c;cursor:pointer;font-size:12px;font-weight:500;box-shadow:0 1px 3px rgba(185,28,28,.15);transition:all .2s ease;}',
+      '.pdf2doc-progress-cancel-btn:hover{background:linear-gradient(135deg,#fecaca 0%,#fca5a5 100%);box-shadow:0 2px 6px rgba(185,28,28,.25);transform:translateY(-1px);}',
+      '.pdf2doc-progress-cancel-btn:active{transform:translateY(0);box-shadow:0 1px 2px rgba(185,28,28,.2);}',
+      '.pdf2doc-progress-cancel-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none;}',
+      '.pdf2doc-progress-cancel-tip{font-size:12px;color:#6b7280;line-height:1.4;text-align:center;max-width:360px;}',
+      '.pdf2doc-progress-actions{display:none;justify-content:center;margin-top:12px;}',
+      '.pdf2doc-progress-actions.show{display:flex;}',
+      '.pdf2doc-progress-btn{padding:6px 16px;border-radius:10px;border:1px solid rgba(0,0,0,.12);background:#fff;color:#111827;cursor:pointer;font-size:12px;}'
+    ].join('\n')
    const style = document.createElement('style')
    style.id = PDF2DOC_STYLE_ID
    style.textContent = css
     document.head.appendChild(style)
+  }
+
+  // 打开一个“不可关闭”的解析进度遮罩；成功自动关闭，失败显示错误并允许关闭。
+  // 这不是“真进度”，只显示计时器，用来告诉用户“别急，程序还活着”。
+  let __pdf2docActiveProgress__ = null
+  function openPdf2DocProgressOverlay(opt) {
+    if (typeof document === 'undefined') return null
+    ensureSettingsStyle()
+
+    // 同一时间只允许一个遮罩，避免重入导致屏幕被盖两层。
+    try {
+      if (__pdf2docActiveProgress__ && typeof __pdf2docActiveProgress__.close === 'function') {
+        __pdf2docActiveProgress__.close()
+      }
+    } catch {}
+    __pdf2docActiveProgress__ = null
+
+    const output = opt && opt.output === 'docx' ? 'docx' : 'markdown'
+
+    const overlay = document.createElement('div')
+    overlay.className = 'pdf2doc-progress-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'pdf2doc-progress-dialog'
+    overlay.appendChild(dialog)
+
+    const icon = document.createElement('div')
+    icon.className = 'pdf2doc-progress-icon'
+    icon.innerHTML = '<div class="doc" aria-hidden="true"></div>'
+    dialog.appendChild(icon)
+
+    const bars = document.createElement('div')
+    bars.className = 'pdf2doc-progress-bars'
+    bars.innerHTML = '<span></span><span></span><span></span>'
+    dialog.appendChild(bars)
+
+    const title = document.createElement('div')
+    title.className = 'pdf2doc-progress-title'
+    dialog.appendChild(title)
+
+    const sub = document.createElement('div')
+    sub.className = 'pdf2doc-progress-sub'
+    dialog.appendChild(sub)
+
+    const error = document.createElement('div')
+    error.className = 'pdf2doc-progress-error'
+    dialog.appendChild(error)
+
+    const cancelWrap = document.createElement('div')
+    cancelWrap.className = 'pdf2doc-progress-cancel'
+    const btnCancel = document.createElement('button')
+    btnCancel.type = 'button'
+    btnCancel.className = 'pdf2doc-progress-cancel-btn'
+    btnCancel.textContent = pdf2docText('终止解析', 'Cancel parsing')
+    const cancelTip = document.createElement('div')
+    cancelTip.className = 'pdf2doc-progress-cancel-tip'
+    cancelTip.textContent = pdf2docText('已解析的内容会正常扣除页数', 'Parsed content will still be billed')
+    cancelWrap.appendChild(btnCancel)
+    cancelWrap.appendChild(cancelTip)
+    dialog.appendChild(cancelWrap)
+
+    const actions = document.createElement('div')
+    actions.className = 'pdf2doc-progress-actions'
+    const btnClose = document.createElement('button')
+    btnClose.type = 'button'
+    btnClose.className = 'pdf2doc-progress-btn'
+    btnClose.textContent = pdf2docText('关闭', 'Close')
+    actions.appendChild(btnClose)
+    dialog.appendChild(actions)
+
+    const state = {
+      stage: 'parsing', // uploading|parsing|finalizing|post
+      startedAt: Date.now(),
+      closable: false,
+      closed: false,
+      cancelRequested: false,
+      timer: null,
+      onKeyDown: null
+    }
+
+    const fmtElapsed = () => {
+      const sec = Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000))
+      const mm = Math.floor(sec / 60)
+      const ss = sec % 60
+      const m2 = String(mm).padStart(2, '0')
+      const s2 = String(ss).padStart(2, '0')
+      return `${m2}:${s2}`
+    }
+
+    const render = () => {
+      if (state.closed) return
+      const st = String(state.stage || 'parsing')
+      if (st === 'cancelled') {
+        title.textContent = pdf2docText('已终止解析', 'Parsing cancelled')
+        sub.textContent = pdf2docText(
+          `已用时 ${fmtElapsed()}`,
+          `Elapsed ${fmtElapsed()}`
+        )
+        return
+      }
+      if (st === 'uploading') {
+        title.textContent = pdf2docText('上传中', 'Uploading')
+        sub.textContent = pdf2docText(
+          `正在上传文件（已用时 ${fmtElapsed()}）`,
+          `Uploading file (elapsed ${fmtElapsed()})`
+        )
+        return
+      }
+      if (st === 'post') {
+        title.textContent = pdf2docText('整理中', 'Finishing')
+        sub.textContent = pdf2docText(
+          `正在整理解析结果（已用时 ${fmtElapsed()}）`,
+          `Finishing parsed result (elapsed ${fmtElapsed()})`
+        )
+        return
+      }
+      if (st === 'finalizing') {
+        title.textContent = pdf2docText('即将完成', 'Almost done')
+        sub.textContent = pdf2docText(
+          `正在收尾（已用时 ${fmtElapsed()}）`,
+          `Finalizing (elapsed ${fmtElapsed()})`
+        )
+        return
+      }
+
+      // parsing
+      title.textContent =
+        output === 'docx'
+          ? pdf2docText('解析中', 'Parsing')
+          : pdf2docText('解析中', 'Parsing')
+      sub.textContent = pdf2docText(
+        `已用时 ${fmtElapsed()}`,
+        `Elapsed ${fmtElapsed()}`
+      )
+    }
+
+    const tick = () => {
+      if (state.closed) return
+      if (state.closable) return
+      render()
+    }
+
+    const cleanup = () => {
+      if (state.closed) return
+      state.closed = true
+      try {
+        if (state.timer) clearInterval(state.timer)
+      } catch {}
+      state.timer = null
+      try {
+        if (state.onKeyDown) document.removeEventListener('keydown', state.onKeyDown, true)
+      } catch {}
+      state.onKeyDown = null
+      try {
+        document.body.removeChild(overlay)
+      } catch {}
+      __pdf2docActiveProgress__ = null
+    }
+
+    const allowClose = () => {
+      state.closable = true
+      actions.classList.add('show')
+      cancelWrap.classList.add('hide')
+    }
+
+    btnClose.onclick = () => cleanup()
+
+    const markCancelled = () => {
+      if (state.closed) return
+      if (state.cancelRequested) return
+      state.cancelRequested = true
+      state.stage = 'cancelled'
+      bars.style.display = 'none'
+      error.classList.remove('show')
+      error.textContent = ''
+      btnCancel.disabled = true
+      allowClose()
+      render()
+    }
+
+    const onCancel = opt && typeof opt.onCancel === 'function' ? opt.onCancel : null
+    if (!onCancel) {
+      // 没有取消能力时，不展示“终止解析”，避免误导用户。
+      cancelWrap.classList.add('hide')
+    }
+    btnCancel.onclick = () => {
+      if (!onCancel) return
+      markCancelled()
+      try { onCancel() } catch {}
+    }
+
+    // 不允许点背景关闭（解析中/成功前）。
+    overlay.addEventListener('click', (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+    })
+    dialog.addEventListener('click', (e) => {
+      e.stopPropagation()
+    })
+
+    state.onKeyDown = (e) => {
+      if (!e) return
+      const key = e.key || ''
+      if (key !== 'Escape') return
+      if (!state.closable) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      cleanup()
+    }
+    document.addEventListener('keydown', state.onKeyDown, true)
+
+    document.body.appendChild(overlay)
+
+    state.timer = setInterval(tick, 250)
+    render()
+
+    const api = {
+      setStage(nextStage) {
+        if (state.closed) return
+        state.stage = String(nextStage || 'parsing')
+        render()
+      },
+      fail(message) {
+        if (state.closed) return
+        title.textContent = pdf2docText('解析失败', 'Parse failed')
+        sub.textContent = pdf2docText(
+          `已用时 ${fmtElapsed()}`,
+          `Elapsed ${fmtElapsed()}`
+        )
+        bars.style.display = 'none'
+        error.textContent = String(message || pdf2docText('解析失败', 'Parse failed'))
+        error.classList.add('show')
+        allowClose()
+      },
+      close() {
+        cleanup()
+      },
+      cancelled() {
+        markCancelled()
+      }
+    }
+
+    __pdf2docActiveProgress__ = api
+    return api
   }
   
   function openSettingsDialog(context, cfg) {
@@ -1530,7 +1926,8 @@ async function showTranslateConfirmDialog(context, cfg, fileName, pages) {
         const res = await context.http.fetch(apiUrl, {
           method: 'GET',
           headers: {
-            Authorization: 'Bearer ' + t
+            Authorization: 'Bearer ' + t,
+            'X-PDF2DOC-Version': PDF2DOC_COMPAT_VERSION
           }
         })
 
@@ -1771,7 +2168,8 @@ export async function activate(context) {
       const enabledTokens = getEnabledApiTokens(cfg).map(it => it.token).filter(Boolean)
       const primaryToken = getPrimaryApiToken(cfg)
       const headers = {
-        Authorization: 'Bearer ' + (primaryToken || '')
+        Authorization: 'Bearer ' + (primaryToken || ''),
+        'X-PDF2DOC-Version': PDF2DOC_COMPAT_VERSION
       }
       if (enabledTokens.length > 1) {
         headers['X-Api-Tokens'] = JSON.stringify(enabledTokens)
@@ -1821,13 +2219,15 @@ export async function activate(context) {
         },
         {
           label: pdf2docText('选择文件', 'Choose file'),
-        onClick: async () => {
-          let loadingId = null
-          try {
-            const cfg = await loadConfig(context)
-            if (!hasAnyApiToken(cfg)) {
-              context.ui.notice(
-                pdf2docText('请先在插件设置中配置密钥', 'Please configure the PDF2Doc token in plugin settings first'),
+         onClick: async () => {
+           let loadingId = null
+           let parseOverlay = null
+           let cancelSource = null
+           try {
+             const cfg = await loadConfig(context)
+             if (!hasAnyApiToken(cfg)) {
+               context.ui.notice(
+                 pdf2docText('请先在插件设置中配置密钥', 'Please configure the PDF2Doc token in plugin settings first'),
                 'err'
               )
               return
@@ -1835,36 +2235,47 @@ export async function activate(context) {
 
             const file = await pickPdfFile()
 
-            // 解析前做额度风险提示：当 PDF 页数超过剩余额度的 50% 时提示用户
-            if (typeof context.getPdfPageCount === 'function') {
-              try {
-                const buf = await file.arrayBuffer()
-                const ok = await confirmQuotaRiskBeforeParse(context, cfg, buf)
-                if (!ok) return
-              } catch {}
-            }
+             // 解析前额度风险提示：每次解析前都提示一次（用户要求）。
+             try {
+               const buf = await file.arrayBuffer()
+               const ok = await confirmQuotaRiskBeforeParse(context, cfg, buf)
+               if (!ok) return
+             } catch {
+               const ok = await confirmQuotaRiskBeforeParse(context, cfg, null)
+               if (!ok) return
+             }
 
-            if (context.ui.showNotification) {
-              loadingId = context.ui.showNotification(
-                pdf2docText('正在解析 PDF，请稍候...', 'Parsing PDF, please wait...'),
-                {
-                  type: 'info',
-                  duration: 0
-                }
-              )
-            } else {
-              context.ui.notice(
-                pdf2docText('正在解析 PDF，请稍候...', 'Parsing PDF, please wait...'),
-                'ok',
-                3000
-              )
-            }
+             cancelSource = createPdf2DocCancelSource()
+             parseOverlay = openPdf2DocProgressOverlay({
+               output: cfg.defaultOutput,
+               onCancel: () => {
+                 try { if (cancelSource) cancelSource.cancel() } catch {}
+               }
+             })
+             if (!parseOverlay) {
+               if (context.ui.showNotification) {
+                 loadingId = context.ui.showNotification(
+                   pdf2docText('正在解析 PDF，请稍候...', 'Parsing PDF, please wait...'),
+                  {
+                    type: 'info',
+                    duration: 0
+                  }
+                )
+              } else {
+                context.ui.notice(
+                  pdf2docText('正在解析 PDF，请稍候...', 'Parsing PDF, please wait...'),
+                  'ok',
+                  3000
+                )
+               }
+             }
 
-            const result = await uploadAndParsePdfFile(context, cfg, file, cfg.defaultOutput)
+             const result = await uploadAndParsePdfFile(context, cfg, file, cfg.defaultOutput, cancelSource)
 
-            if (loadingId && context.ui.hideNotification) {
-              context.ui.hideNotification(loadingId)
-            }
+             if (parseOverlay) parseOverlay.setStage('post')
+             if (loadingId && context.ui.hideNotification) {
+               context.ui.hideNotification(loadingId)
+             }
 
             if (result.format === 'markdown' && result.markdown) {
               const baseName = file && file.name ? file.name.replace(/\.pdf$/i, '') : 'document'
@@ -1891,6 +2302,11 @@ export async function activate(context) {
               const merged = current ? current + '\n\n' + localized : localized
               context.setEditorValue(merged)
 
+              if (parseOverlay) {
+                parseOverlay.close()
+                parseOverlay = null
+              }
+
               const pagesInfo = result.pages
                 ? pdf2docText('（' + result.pages + ' 页）', ' (' + result.pages + ' pages)')
                 : ''
@@ -1912,6 +2328,7 @@ export async function activate(context) {
                 )
               }
             } else if (result.format === 'docx' && result.docx_url) {
+              if (parseOverlay) parseOverlay.setStage('finalizing')
               let docxFileName = 'document.docx'
               if (file && file.name) {
                 docxFileName = file.name.replace(/\.pdf$/i, '') + '.docx'
@@ -1933,6 +2350,11 @@ export async function activate(context) {
                 }, 100)
                 downloadSuccess = true
 
+                if (parseOverlay) {
+                  parseOverlay.close()
+                  parseOverlay = null
+                }
+
                 context.ui.notice(
                   pdf2docText(
                     'docx 文件已开始下载，请查看浏览器下载栏（' + (result.pages || '?') + ' 页）',
@@ -1948,30 +2370,61 @@ export async function activate(context) {
               }
 
               if (!downloadSuccess) {
+                if (parseOverlay) {
+                  parseOverlay.close()
+                  parseOverlay = null
+                }
                 showDocxDownloadDialog(result.docx_url, result.pages || 0)
               }
             } else {
+              if (parseOverlay) {
+                parseOverlay.close()
+                parseOverlay = null
+              }
               context.ui.notice(
                 pdf2docText('解析成功，但返回格式未知', 'Parse succeeded but returned unknown format'),
                 'err'
               )
             }
           } catch (err) {
+            if (isPdf2DocCancelledError(err)) {
+              if (parseOverlay && typeof parseOverlay.cancelled === 'function') {
+                parseOverlay.cancelled()
+              }
+              if (loadingId && context.ui.hideNotification) {
+                try {
+                  context.ui.hideNotification(loadingId)
+                } catch {}
+              }
+              context.ui.notice(
+                pdf2docText('已终止解析（已解析的内容会正常扣除页数）', 'Parsing cancelled (parsed content will still be billed)'),
+                'info'
+              )
+              return
+            }
+            if (parseOverlay) {
+              parseOverlay.fail(
+                pdf2docText(
+                  'PDF 解析失败：' + (err && err.message ? err.message : String(err)),
+                  'PDF parse failed: ' + (err && err.message ? err.message : String(err))
+                )
+              )
+            }
             if (loadingId && context.ui.hideNotification) {
               try {
                 context.ui.hideNotification(loadingId)
               } catch {}
             }
-              context.ui.notice(
-                pdf2docText(
-                  'PDF 解析失败：' + (err && err.message ? err.message : String(err)),
-                  'PDF parse failed: ' + (err && err.message ? err.message : String(err))
-                ),
-                'err'
-              )
-            }
+            context.ui.notice(
+              pdf2docText(
+                'PDF 解析失败：' + (err && err.message ? err.message : String(err)),
+                'PDF parse failed: ' + (err && err.message ? err.message : String(err))
+              ),
+              'err'
+            )
           }
-        },
+        }
+      },
         {
           label: pdf2docText('选择图片 (To MD)', 'Choose image (To MD)'),
           onClick: async () => {
@@ -2051,6 +2504,8 @@ export async function activate(context) {
         label: pdf2docText('To MD', 'To MD'),
         onClick: async () => {
           let loadingId = null
+          let parseOverlay = null
+          let cancelSource = null
           try {
             const cfg = await loadConfig(context)
             if (!hasAnyApiToken(cfg)) {
@@ -2079,28 +2534,38 @@ export async function activate(context) {
             const bytes = await context.readFileBinary(path)
             const fileName = path.split(/[\\/]+/).pop() || 'document.pdf'
 
-            // 解析前做额度风险提示：当 PDF 页数超过剩余额度的 50% 时提示用户
+            // 解析前额度风险提示：每次解析前都提示一次（用户要求）。
             const ok = await confirmQuotaRiskBeforeParse(context, cfg, bytes)
             if (!ok) return
 
-            if (context.ui.showNotification) {
-              loadingId = context.ui.showNotification(
-                pdf2docText('正在解析为MD，中间可能闪烁，完成前请勿关闭程序！', 'Parsing to Markdown. The sidebar may flicker; please do not close the app until it finishes.'),
-                {
-                  type: 'info',
-                  duration: 0
-                }
-              )
-            } else {
-              context.ui.notice(
-                pdf2docText('正在解析为MD，中间可能闪烁，完成前请勿关闭程序！', 'Parsing to Markdown. The sidebar may flicker; please do not close the app until it finishes.'),
-                'ok',
-                3000
-              )
+            cancelSource = createPdf2DocCancelSource()
+            parseOverlay = openPdf2DocProgressOverlay({
+              output: 'markdown',
+              onCancel: () => {
+                try { if (cancelSource) cancelSource.cancel() } catch {}
+              }
+            })
+            if (!parseOverlay) {
+              if (context.ui.showNotification) {
+                loadingId = context.ui.showNotification(
+                  pdf2docText('正在解析为MD，中间可能闪烁，完成前请勿关闭程序！', 'Parsing to Markdown. The sidebar may flicker; please do not close the app until it finishes.'),
+                  {
+                    type: 'info',
+                    duration: 0
+                  }
+                )
+              } else {
+                context.ui.notice(
+                  pdf2docText('正在解析为MD，中间可能闪烁，完成前请勿关闭程序！', 'Parsing to Markdown. The sidebar may flicker; please do not close the app until it finishes.'),
+                  'ok',
+                  3000
+                )
+              }
             }
 
-            const result = await parsePdfBytes(context, cfg, bytes, fileName, 'markdown')
+            const result = await parsePdfBytes(context, cfg, bytes, fileName, 'markdown', cancelSource)
 
+            if (parseOverlay) parseOverlay.setStage('post')
             if (loadingId && context.ui.hideNotification) {
               context.ui.hideNotification(loadingId)
             }
@@ -2134,6 +2599,11 @@ export async function activate(context) {
                 context.setEditorValue(merged)
               }
 
+              if (parseOverlay) {
+                parseOverlay.close()
+                parseOverlay = null
+              }
+
               const pagesInfo = result.pages
                 ? pdf2docText('（' + result.pages + ' 页）', ' (' + result.pages + ' pages)')
                 : ''
@@ -2155,12 +2625,39 @@ export async function activate(context) {
                 )
               }
             } else {
+              if (parseOverlay) {
+                parseOverlay.close()
+                parseOverlay = null
+              }
               context.ui.notice(
                 pdf2docText('解析成功，但返回格式不是 Markdown', 'Parse succeeded but returned format is not Markdown'),
                 'err'
               )
             }
           } catch (err) {
+            if (isPdf2DocCancelledError(err)) {
+              if (parseOverlay && typeof parseOverlay.cancelled === 'function') {
+                parseOverlay.cancelled()
+              }
+              if (loadingId && context.ui.hideNotification) {
+                try {
+                  context.ui.hideNotification(loadingId)
+                } catch {}
+              }
+              context.ui.notice(
+                pdf2docText('已终止解析（已解析的内容会正常扣除页数）', 'Parsing cancelled (parsed content will still be billed)'),
+                'info'
+              )
+              return
+            }
+            if (parseOverlay) {
+              parseOverlay.fail(
+                pdf2docText(
+                  'PDF 解析失败：' + (err && err.message ? err.message : String(err)),
+                  'PDF parse failed: ' + (err && err.message ? err.message : String(err))
+                )
+              )
+            }
             if (loadingId && context.ui.hideNotification) {
               try {
                 context.ui.hideNotification(loadingId)
@@ -2180,6 +2677,8 @@ export async function activate(context) {
         label: pdf2docText('To Docx', 'To Docx'),
         onClick: async () => {
           let loadingId = null
+          let parseOverlay = null
+          let cancelSource = null
           try {
             const cfg = await loadConfig(context)
             if (!hasAnyApiToken(cfg)) {
@@ -2208,28 +2707,38 @@ export async function activate(context) {
             const bytes = await context.readFileBinary(path)
             const fileName = path.split(/[\\/]+/).pop() || 'document.pdf'
 
-            // 解析前做额度风险提示：当 PDF 页数超过剩余额度的 50% 时提示用户
+            // 解析前额度风险提示：每次解析前都提示一次（用户要求）。
             const ok = await confirmQuotaRiskBeforeParse(context, cfg, bytes)
             if (!ok) return
 
-            if (context.ui.showNotification) {
-              loadingId = context.ui.showNotification(
-                pdf2docText('正在解析当前 PDF 为 Docx...', 'Parsing current PDF to DOCX...'),
-                {
-                  type: 'info',
-                  duration: 0
-                }
-              )
-            } else {
-              context.ui.notice(
-                pdf2docText('正在解析当前 PDF 为 Docx...', 'Parsing current PDF to DOCX...'),
-                'ok',
-                3000
-              )
+            cancelSource = createPdf2DocCancelSource()
+            parseOverlay = openPdf2DocProgressOverlay({
+              output: 'docx',
+              onCancel: () => {
+                try { if (cancelSource) cancelSource.cancel() } catch {}
+              }
+            })
+            if (!parseOverlay) {
+              if (context.ui.showNotification) {
+                loadingId = context.ui.showNotification(
+                  pdf2docText('正在解析当前 PDF 为 Docx...', 'Parsing current PDF to DOCX...'),
+                  {
+                    type: 'info',
+                    duration: 0
+                  }
+                )
+              } else {
+                context.ui.notice(
+                  pdf2docText('正在解析当前 PDF 为 Docx...', 'Parsing current PDF to DOCX...'),
+                  'ok',
+                  3000
+                )
+              }
             }
 
-            const result = await parsePdfBytes(context, cfg, bytes, fileName, 'docx')
+            const result = await parsePdfBytes(context, cfg, bytes, fileName, 'docx', cancelSource)
 
+            if (parseOverlay) parseOverlay.setStage('finalizing')
             if (loadingId && context.ui.hideNotification) {
               context.ui.hideNotification(loadingId)
             }
@@ -2256,6 +2765,11 @@ export async function activate(context) {
                 }, 100)
                 downloadSuccess = true
 
+                if (parseOverlay) {
+                  parseOverlay.close()
+                  parseOverlay = null
+                }
+
                 context.ui.notice(
                   pdf2docText(
                     'docx 文件已开始下载，请查看浏览器下载栏（' + (result.pages || '?') + ' 页）',
@@ -2271,15 +2785,46 @@ export async function activate(context) {
               }
 
               if (!downloadSuccess) {
+                if (parseOverlay) {
+                  parseOverlay.close()
+                  parseOverlay = null
+                }
                 showDocxDownloadDialog(result.docx_url, result.pages || 0)
               }
             } else {
+              if (parseOverlay) {
+                parseOverlay.close()
+                parseOverlay = null
+              }
               context.ui.notice(
                 pdf2docText('解析成功，但返回格式不是 Docx', 'Parse succeeded but returned format is not DOCX'),
                 'err'
               )
             }
           } catch (err) {
+            if (isPdf2DocCancelledError(err)) {
+              if (parseOverlay && typeof parseOverlay.cancelled === 'function') {
+                parseOverlay.cancelled()
+              }
+              if (loadingId && context.ui.hideNotification) {
+                try {
+                  context.ui.hideNotification(loadingId)
+                } catch {}
+              }
+              context.ui.notice(
+                pdf2docText('已终止解析（已解析的内容会正常扣除页数）', 'Parsing cancelled (parsed content will still be billed)'),
+                'info'
+              )
+              return
+            }
+            if (parseOverlay) {
+              parseOverlay.fail(
+                pdf2docText(
+                  'PDF 解析失败：' + (err && err.message ? err.message : String(err)),
+                  'PDF parse failed: ' + (err && err.message ? err.message : String(err))
+                )
+              )
+            }
             if (loadingId && context.ui.hideNotification) {
               try {
                 context.ui.hideNotification(loadingId)
@@ -2300,6 +2845,8 @@ export async function activate(context) {
         onClick: async () => {
           let loadingId = null
           const loadingRef = { id: null }
+          let parseOverlay = null
+          let cancelSource = null
           try {
             const ai =
               typeof context.getPluginAPI === 'function'
@@ -2383,24 +2930,33 @@ export async function activate(context) {
                 }
                 const bytes = await context.readFileBinary(path)
 
-                // 解析前做额度风险提示：当 PDF 页数超过剩余额度的 50% 时提示用户
+                // 解析前额度风险提示：每次解析前都提示一次（用户要求）。
                 const ok = await confirmQuotaRiskBeforeParse(context, cfg, bytes)
                 if (!ok) return
 
-                if (context.ui.showNotification) {
-                  loadingId = context.ui.showNotification(
-                    pdf2docText('正在解析当前 PDF...', 'Parsing current PDF...'),
-                    {
-                      type: 'info',
-                      duration: 0
-                    }
-                  )
-                } else {
-                  context.ui.notice(
-                    pdf2docText('正在解析当前 PDF...', 'Parsing current PDF...'),
-                    'ok',
-                    3000
-                  )
+                cancelSource = createPdf2DocCancelSource()
+                parseOverlay = openPdf2DocProgressOverlay({
+                  output: 'markdown',
+                  onCancel: () => {
+                    try { if (cancelSource) cancelSource.cancel() } catch {}
+                  }
+                })
+                if (!parseOverlay) {
+                  if (context.ui.showNotification) {
+                    loadingId = context.ui.showNotification(
+                      pdf2docText('正在解析当前 PDF...', 'Parsing current PDF...'),
+                      {
+                        type: 'info',
+                        duration: 0
+                      }
+                    )
+                  } else {
+                    context.ui.notice(
+                      pdf2docText('正在解析当前 PDF...', 'Parsing current PDF...'),
+                      'ok',
+                      3000
+                    )
+                  }
                 }
 
                 const result = await parsePdfBytes(
@@ -2408,8 +2964,10 @@ export async function activate(context) {
                   cfg,
                   bytes,
                   fileName,
-                  'markdown'
+                  'markdown',
+                  cancelSource
                 )
+                if (parseOverlay) parseOverlay.setStage('post')
                 if (result.format === 'markdown' && result.markdown) {
                   const baseNameInner = fileName
                     ? fileName.replace(/\.pdf$/i, '')
@@ -2448,43 +3006,55 @@ export async function activate(context) {
                 return
               }
 
-              // 解析前做额度风险提示：当 PDF 页数超过剩余额度的 50% 时提示用户
-              if (typeof context.getPdfPageCount === 'function') {
-                try {
-                  const buf = await file.arrayBuffer()
-                  const ok = await confirmQuotaRiskBeforeParse(context, cfg, buf)
-                  if (!ok) return
-                } catch {}
-              }
+               // 解析前额度风险提示：每次解析前都提示一次（用户要求）。
+               try {
+                 const buf = await file.arrayBuffer()
+                 const ok = await confirmQuotaRiskBeforeParse(context, cfg, buf)
+                 if (!ok) return
+               } catch {
+                 const ok = await confirmQuotaRiskBeforeParse(context, cfg, null)
+                 if (!ok) return
+               }
 
-              if (context.ui.showNotification) {
-                if (loadingId && context.ui.hideNotification) {
-                  try {
-                    context.ui.hideNotification(loadingId)
-                  } catch {}
-                  loadingId = null
+              cancelSource = createPdf2DocCancelSource()
+              parseOverlay = openPdf2DocProgressOverlay({
+                output: 'markdown',
+                onCancel: () => {
+                  try { if (cancelSource) cancelSource.cancel() } catch {}
                 }
-                loadingId = context.ui.showNotification(
-                  pdf2docText('正在解析选中的 PDF...', 'Parsing selected PDF...'),
-                  {
-                    type: 'info',
-                    duration: 0
+              })
+              if (!parseOverlay) {
+                if (context.ui.showNotification) {
+                  if (loadingId && context.ui.hideNotification) {
+                    try {
+                      context.ui.hideNotification(loadingId)
+                    } catch {}
+                    loadingId = null
                   }
-                )
-              } else {
-                context.ui.notice(
-                  pdf2docText('正在解析选中的 PDF...', 'Parsing selected PDF...'),
-                  'ok',
-                  3000
-                )
+                  loadingId = context.ui.showNotification(
+                    pdf2docText('正在解析选中的 PDF...', 'Parsing selected PDF...'),
+                    {
+                      type: 'info',
+                      duration: 0
+                    }
+                  )
+                } else {
+                  context.ui.notice(
+                    pdf2docText('正在解析选中的 PDF...', 'Parsing selected PDF...'),
+                    'ok',
+                    3000
+                  )
+                }
               }
 
               const result = await uploadAndParsePdfFile(
                 context,
                 cfg,
                 file,
-                'markdown'
+                'markdown',
+                cancelSource
               )
+              if (parseOverlay) parseOverlay.setStage('post')
               if (result.format === 'markdown' && result.markdown) {
                 const baseNameFile =
                   file && file.name
@@ -2508,6 +3078,10 @@ export async function activate(context) {
                 try {
                   context.ui.hideNotification(loadingId)
                 } catch {}
+              }
+              if (parseOverlay) {
+                parseOverlay.close()
+                parseOverlay = null
               }
               context.ui.notice(
                 pdf2docText(
@@ -2554,6 +3128,11 @@ export async function activate(context) {
                 context.setEditorValue(mergedOrigin)
               }
             } catch {}
+
+            if (parseOverlay) {
+              parseOverlay.close()
+              parseOverlay = null
+            }
 
             if (context.ui.showNotification) {
               if (loadingId && context.ui.hideNotification) {
@@ -2702,6 +3281,30 @@ export async function activate(context) {
               } catch {}
             }
           } catch (err) {
+            if (isPdf2DocCancelledError(err)) {
+              if (parseOverlay && typeof parseOverlay.cancelled === 'function') {
+                parseOverlay.cancelled()
+              }
+              if (loadingId && context.ui.hideNotification) {
+                try {
+                  context.ui.hideNotification(loadingId)
+                } catch {}
+              }
+              context.ui.notice(
+                pdf2docText('已终止解析（已解析的内容会正常扣除页数）', 'Parsing cancelled (parsed content will still be billed)'),
+                'info',
+                4000
+              )
+              return
+            }
+            if (parseOverlay) {
+              parseOverlay.fail(
+                pdf2docText(
+                  'PDF 解析失败：' + (err && err.message ? err.message : String(err)),
+                  'PDF parse failed: ' + (err && err.message ? err.message : String(err))
+                )
+              )
+            }
             if (loadingId && context.ui.hideNotification) {
               try {
                 context.ui.hideNotification(loadingId)
