@@ -213,6 +213,91 @@ let katexCssLoaded = false
 let hljsLoaded = false
 let mermaidReady = false
 
+// KaTeX 渲染在大文档（特别是大量公式）场景下非常容易把 UI 线程卡死。
+// 这里用时间切片把长任务切开：功能不变，但不会“切阅读模式像死机”。
+let _katexMod: any | null = null
+const _katexHtmlCache = new Map<string, string>()
+// 这是个纯性能缓存：命中就赚，溢出就清，别搞复杂的 LRU。
+const KATEX_HTML_CACHE_MAX = 1500
+const KATEX_HTML_CACHE_MAX_LATEX_LEN = 512
+let _renderPreviewSeq = 0
+
+async function getKatexMod(): Promise<any> {
+  if (_katexMod) return _katexMod
+  _katexMod = await import('katex')
+  return _katexMod
+}
+
+function nowMs(): number {
+  try { return (performance && typeof performance.now === 'function') ? performance.now() : Date.now() } catch { return Date.now() }
+}
+
+async function yieldToUi(): Promise<void> {
+  // setTimeout(0) 足够让出一次事件循环，避免长任务阻塞渲染/输入。
+  await new Promise<void>((r) => setTimeout(r, 0))
+}
+
+function renderKatexToHtmlCached(katexMod: any, latex: string, displayMode: boolean): string {
+  const src = latex || ''
+  // 大公式缓存意义不大，只会吃内存；小公式重复率高，缓存很划算。
+  const canCache = src.length > 0 && src.length <= KATEX_HTML_CACHE_MAX_LATEX_LEN
+  const key = canCache ? `${displayMode ? 'B' : 'I'}:${src}` : ''
+  if (canCache) {
+    const hit = _katexHtmlCache.get(key)
+    if (hit != null) return hit
+  }
+  const html = katexMod.default.renderToString(src, { throwOnError: false, displayMode })
+  if (canCache) {
+    if (_katexHtmlCache.size >= KATEX_HTML_CACHE_MAX) _katexHtmlCache.clear()
+    _katexHtmlCache.set(key, html)
+  }
+  return html
+}
+
+async function renderKatexPlaceholders(root: HTMLElement, forPrint?: boolean, seq?: number): Promise<void> {
+  const nodes = Array.from(root.querySelectorAll('.md-math-inline, .md-math-block')) as HTMLElement[]
+  if (nodes.length < 1) return
+
+  let katexMod: any
+  try { katexMod = await getKatexMod() } catch (e) { try { console.error('[KaTeX] 模块加载失败：', e) } catch {} ; return }
+  if (typeof seq === 'number' && seq !== _renderPreviewSeq) return
+
+  // CSS 动态加载失败时由 critical style 兜底。
+  try {
+    if (!katexCssLoaded) {
+      await import('katex/dist/katex.min.css')
+      katexCssLoaded = true
+      ensureKatexCriticalStyle()
+    }
+  } catch {}
+
+  // 打印/导出：必须一次性渲染完；交互预览：切片渲染避免卡顿。
+  const timeSlice = !forPrint
+  const budgetMs = 12
+  let sliceStart = nowMs()
+
+  for (let i = 0; i < nodes.length; i++) {
+    if (typeof seq === 'number' && seq !== _renderPreviewSeq) return
+    const el = nodes[i]
+    const latex = el.getAttribute('data-math') || ''
+    const displayMode = el.classList.contains('md-math-block')
+    try {
+      el.innerHTML = renderKatexToHtmlCached(katexMod, latex, displayMode)
+    } catch {
+      // 失败就退回纯文本：宁可丑一点，也别吞内容。
+      try { el.textContent = latex } catch {}
+    }
+    if (timeSlice) {
+      const t = nowMs()
+      if ((t - sliceStart) > budgetMs) {
+        await yieldToUi()
+        if (typeof seq === 'number' && seq !== _renderPreviewSeq) return
+        sliceStart = nowMs()
+      }
+    }
+  }
+}
+
 const KATEX_CRITICAL_STYLE_ID = 'flymd-katex-critical-style'
 function ensureKatexCriticalStyle() {
   try {
@@ -3055,6 +3140,7 @@ type RenderPreviewOptions = {
 
 // 渲染预览（带安全消毒）
 async function renderPreview(opts?: RenderPreviewOptions) {
+  const seq = ++_renderPreviewSeq
   console.log('=== 开始渲染预览 ===')
   // 首次预览开始打点
   try { if (!(renderPreview as any)._firstLogged) { (renderPreview as any)._firstLogged = true; logInfo('打点:首次预览开始') } } catch {}
@@ -3062,6 +3148,7 @@ async function renderPreview(opts?: RenderPreviewOptions) {
   try { setPreviewKind('md') } catch {}
   const { mdHost } = ensurePreviewHosts()
   await ensureRenderer()
+  if (seq !== _renderPreviewSeq) return
   let raw = editor.value
   // 所见模式：用一个“.”标记插入点，优先不破坏 Markdown 结构
   try {
@@ -3198,50 +3285,7 @@ async function renderPreview(opts?: RenderPreviewOptions) {
     const buf = document.createElement('div') as HTMLDivElement
     buf.className = 'preview-body'
     buf.innerHTML = safe
-    // 与所见模式一致：在消毒之后，用 KaTeX 对占位元素进行实际渲染
-    // 🔍 添加可视化调试面板
-    // 【方案：使用与所见模式完全相同的方式】
-    // 所见模式工作正常，直接复制其成功方案
-    // 渲染 KaTeX 数学公式（阅读模式）
-    try {
-      const mathNodes = Array.from(buf.querySelectorAll('.md-math-inline, .md-math-block')) as HTMLElement[]
-
-      if (mathNodes.length > 0) {
-        // 使用所见模式的导入方式
-        const katex = await import('katex')
-
-        // 加载 CSS（只加载一次）
-        if (!katexCssLoaded) {
-          await import('katex/dist/katex.min.css')
-          katexCssLoaded = true
-
-          // 手动注入关键 CSS 兜底：限定在预览区，避免污染所见模式
-          ensureKatexCriticalStyle()
-        }
-
-        // 渲染每个数学节点
-        for (const el of mathNodes) {
-          try {
-            const value = el.getAttribute('data-math') || ''
-            const displayMode = el.classList.contains('md-math-block')
-
-            // 清空元素
-            el.innerHTML = ''
-
-            // 使用 katex.default.render()（与所见模式相同）
-            katex.default.render(value, el, {
-              throwOnError: false,
-              displayMode: displayMode,
-            })
-          } catch (e) {
-            // 渲染失败时回退到纯文本
-            el.textContent = el.getAttribute('data-math') || ''
-          }
-        }
-      }
-    } catch (mainErr) {
-      console.error('[KaTeX 阅读模式] 渲染失败:', mainErr)
-    }
+    // KaTeX 渲染放到 DOM 提交之后，并使用时间切片避免长任务卡死（见 renderKatexPlaceholders）。
     // 任务列表映射与事件绑定（仅阅读模式）
     try {
       if (!wysiwyg) {
@@ -3323,6 +3367,7 @@ async function renderPreview(opts?: RenderPreviewOptions) {
     // 一次性替换预览 DOM
     try {
       try { injectPreviewMeta(buf, previewMeta) } catch {}
+      if (seq !== _renderPreviewSeq) return
       mdHost.innerHTML = ''
       mdHost.appendChild(buf)
       // 预览脚注增强：跳转 + 悬浮
@@ -3332,12 +3377,14 @@ async function renderPreview(opts?: RenderPreviewOptions) {
         if (typeof enhance === 'function') enhance(mdHost)
       } catch {}
       try { decorateCodeBlocks(mdHost) } catch {}
+      // 公式多的文档（例如 solag.md）这里是主要性能瓶颈：切片渲染避免 UI “假死”。
+      try { await renderKatexPlaceholders(buf, !!opts?.forPrint, seq) } catch {}
       // 便签模式：为待办项添加推送和提醒按钮，并自动调整窗口高度
       try { if (stickyNoteMode) { addStickyTodoButtons(); scheduleAdjustStickyHeight() } } catch {}
       // 预览更新后自动刷新大纲（节流由内部逻辑与渲染频率保障）
       try { renderOutlinePanel() } catch {}
     } catch {}
-  } catch {} finally { try { preview.classList.remove('rendering') } catch {} }
+  } catch {} finally { try { if (seq === _renderPreviewSeq) preview.classList.remove('rendering') } catch {} }
   // 重新计算所见模式锚点表
   try { if (wysiwyg) { _wysiwygAnchors = buildAnchors(preview) } } catch {}
   // 所见模式下，确保“模拟光标 _”在预览区可见
