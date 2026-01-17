@@ -1278,11 +1278,27 @@ type DocPos = {
   ts: number
 }
 let _docPosSaveTimer: number | null = null
+let _docPosMapCache: Record<string, DocPos> | null = null
+let _docPosMapLoading: Promise<Record<string, DocPos>> | null = null
 async function getDocPosMap(): Promise<Record<string, DocPos>> {
   try {
     if (!store) return {}
-    const m = await store.get('docPos')
-    return (m && typeof m === 'object') ? (m as Record<string, DocPos>) : {}
+    if (_docPosMapCache) return _docPosMapCache
+    if (_docPosMapLoading) return await _docPosMapLoading
+    _docPosMapLoading = (async () => {
+      try {
+        const m = await store.get('docPos')
+        const map = (m && typeof m === 'object') ? (m as Record<string, DocPos>) : {}
+        _docPosMapCache = map
+        return map
+      } catch {
+        _docPosMapCache = {}
+        return {}
+      } finally {
+        _docPosMapLoading = null
+      }
+    })()
+    return await _docPosMapLoading
   } catch { return {} }
 }
 async function saveCurrentDocPosNow() {
@@ -1306,7 +1322,19 @@ async function saveCurrentDocPosNow() {
 function scheduleSaveDocPos() {
   try {
     if (_docPosSaveTimer != null) { clearTimeout(_docPosSaveTimer); _docPosSaveTimer = null }
-    _docPosSaveTimer = window.setTimeout(() => { void saveCurrentDocPosNow() }, 400)
+    _docPosSaveTimer = window.setTimeout(() => {
+      // 这个保存会触发 store 序列化/IO，放到空闲时做，避免滚动/大文档场景偶发卡顿。
+      try {
+        const ric: any = (globalThis as any).requestIdleCallback
+        if (typeof ric === 'function') {
+          ric(() => { void saveCurrentDocPosNow() }, { timeout: 2000 })
+        } else {
+          setTimeout(() => { void saveCurrentDocPosNow() }, 0)
+        }
+      } catch {
+        void saveCurrentDocPosNow()
+      }
+    }, 400)
   } catch {}
 }
 async function restoreDocPosIfAny(path?: string) {
@@ -4829,20 +4857,85 @@ async function setLibraryRoot(p: string) {
 let _outlineScrollBound = false
 let _outlineActiveId = ''
 let _outlineRaf = 0
-function getOutlineContext(): { mode: 'wysiwyg'|'preview'|'source'; scrollEl: HTMLElement | null; bodyEl: HTMLElement | null; heads: HTMLElement[] } {
+let _outlineActiveEl: HTMLElement | null = null
+type OutlineHeadsCache = {
+  mode: 'wysiwyg'|'preview'|'source'
+  scrollEl: HTMLElement
+  bodyEl: HTMLElement
+  ids: string[]
+  tops: number[]
+}
+let _outlineHeadsCache: OutlineHeadsCache | null = null
+
+function clearOutlineHeadsCache() {
+  _outlineHeadsCache = null
+}
+
+function cssEscapeCompat(s: string): string {
+  try {
+    const ce = (globalThis as any)?.CSS?.escape
+    if (typeof ce === 'function') return ce(String(s))
+  } catch {}
+  // 兜底：只处理最容易把选择器搞炸的字符，足够应付我们生成的 slug。
+  return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function buildOutlineHeadsCacheFromCtx(ctx: { mode: 'wysiwyg'|'preview'|'source'; scrollEl: HTMLElement | null; bodyEl: HTMLElement | null; heads: HTMLElement[] }): OutlineHeadsCache | null {
+  try {
+    if (!ctx.scrollEl || !ctx.bodyEl) return null
+    const heads = ctx.heads && ctx.heads.length > 0
+      ? ctx.heads
+      : (Array.from(ctx.bodyEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[])
+    if (heads.length < 1) return null
+    const ids: string[] = []
+    const tops: number[] = []
+    for (const h of heads) {
+      const id = (h.getAttribute('id') || '').trim()
+      if (!id) continue
+      // offsetTop 不触发布局回流，适合在滚动同步里使用。
+      const t = (h as any).offsetTop
+      ids.push(id)
+      tops.push(Number.isFinite(t) ? t : 0)
+    }
+    if (ids.length < 1) return null
+
+    // 兜底：某些布局下 offsetTop 可能全部为 0，禁用缓存，回退到旧逻辑。
+    let allZero = true
+    for (const t of tops) { if (t > 0) { allZero = false; break } }
+    if (allZero) return null
+
+    return { mode: ctx.mode, scrollEl: ctx.scrollEl, bodyEl: ctx.bodyEl, ids, tops }
+  } catch {
+    return null
+  }
+}
+
+function ensureOutlineHeadsCacheFromCtx(ctx: { mode: 'wysiwyg'|'preview'|'source'; scrollEl: HTMLElement | null; bodyEl: HTMLElement | null; heads: HTMLElement[] }): OutlineHeadsCache | null {
+  try {
+    if (!ctx.scrollEl || !ctx.bodyEl) return null
+    const cached = _outlineHeadsCache
+    if (cached && cached.mode === ctx.mode && cached.scrollEl === ctx.scrollEl && cached.bodyEl === ctx.bodyEl) return cached
+    const next = buildOutlineHeadsCacheFromCtx(ctx)
+    _outlineHeadsCache = next
+    return next
+  } catch {
+    return null
+  }
+}
+function getOutlineContext(needHeads = true): { mode: 'wysiwyg'|'preview'|'source'; scrollEl: HTMLElement | null; bodyEl: HTMLElement | null; heads: HTMLElement[] } {
   try {
     if (wysiwyg) {
       const rootEl = document.getElementById('md-wysiwyg-root') as HTMLElement | null
       const scrollEl = (document.querySelector('#md-wysiwyg-root .scrollView') as HTMLElement | null) || rootEl
       const bodyEl = document.querySelector('#md-wysiwyg-root .ProseMirror') as HTMLElement | null
-      const heads = bodyEl ? Array.from(bodyEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[] : []
+      const heads = (needHeads && bodyEl) ? (Array.from(bodyEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[]) : []
       if (scrollEl && bodyEl) return { mode: 'wysiwyg', scrollEl, bodyEl, heads }
     }
   } catch {}
   try {
     const scrollEl = document.querySelector('.preview') as HTMLElement | null
     const bodyEl = document.querySelector('.preview .preview-body') as HTMLElement | null
-    const heads = bodyEl ? Array.from(bodyEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[] : []
+    const heads = (needHeads && bodyEl) ? (Array.from(bodyEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[]) : []
     if (scrollEl && bodyEl) return { mode: 'preview', scrollEl, bodyEl, heads }
   } catch {}
   return { mode: 'source', scrollEl: null, bodyEl: null, heads: [] }
@@ -4858,25 +4951,55 @@ function bindOutlineScrollSync() {
   _outlineScrollBound = _outlineScrollBoundPreview || _outlineScrollBoundWysiwyg
 }
 function onOutlineScroll() {
-  if (_outlineRaf) cancelAnimationFrame(_outlineRaf)
-  _outlineRaf = requestAnimationFrame(() => { try { updateOutlineActive() } catch {} })
+  // 滚动事件可能非常密集：同一帧里只调度一次，别反复 cancel/re-request。
+  if (_outlineRaf) return
+  _outlineRaf = requestAnimationFrame(() => {
+    _outlineRaf = 0
+    try { updateOutlineActive() } catch {}
+  })
 }
 function updateOutlineActive() {
   try {
-    const { scrollEl: pv, bodyEl: body } = getOutlineContext()
+    // 滚动同步只需要 scrollTop，不需要每帧 querySelectorAll('h1..')。
+    const { scrollEl: pv, bodyEl: body } = getOutlineContext(false)
     const outline = document.getElementById('lib-outline') as HTMLDivElement | null
     if (!pv || !body || !outline || outline.classList.contains('hidden')) return
-    const heads = Array.from(body.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[]
-    if (heads.length === 0) return
-    const pvRect = pv.getBoundingClientRect()
-    const threshold = pvRect.top + 60
-    let active: HTMLElement | null = null
-    for (const h of heads) { const r = h.getBoundingClientRect(); if (r.top <= threshold) active = h; else break }
-    if (!active) active = heads[0]
-    const id = active.getAttribute('id') || ''
+    // 先走“缓存 + 二分”路径，避免滚动时大量 getBoundingClientRect() 触发布局。
+    const cache = ensureOutlineHeadsCacheFromCtx({ mode: (wysiwyg ? 'wysiwyg' : (mode === 'preview' ? 'preview' : 'source')), scrollEl: pv, bodyEl: body, heads: [] })
+    let id = ''
+    try {
+      if (cache && cache.scrollEl === pv && cache.bodyEl === body && cache.ids.length > 0) {
+        const y = (pv.scrollTop || 0) + 60
+        let lo = 0, hi = cache.tops.length - 1, best = 0
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1
+          if (cache.tops[mid] <= y) { best = mid; lo = mid + 1 } else { hi = mid - 1 }
+        }
+        id = cache.ids[Math.max(0, Math.min(cache.ids.length - 1, best))] || ''
+      }
+    } catch {}
+    // 缓存不可用就回退旧逻辑（保持兼容性）
+    if (!id) {
+      const hs = Array.from(body.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[]
+      if (hs.length === 0) return
+      const pvRect = pv.getBoundingClientRect()
+      const threshold = pvRect.top + 60
+      let active: HTMLElement | null = null
+      for (const h of hs) { const r = h.getBoundingClientRect(); if (r.top <= threshold) active = h; else break }
+      if (!active) active = hs[0]
+      id = (active.getAttribute('id') || '').trim()
+    }
     if (!id || id === _outlineActiveId) return
     _outlineActiveId = id
-    outline.querySelectorAll('.ol-item').forEach((el) => { (el as HTMLDivElement).classList.toggle('active', (el as HTMLDivElement).dataset.id === id) })
+    // 别每次都扫一遍所有目录项；只更新“旧 active”和“新 active”两项。
+    try { _outlineActiveEl?.classList.remove('active') } catch {}
+    const nextEl = outline.querySelector(`.ol-item[data-id="${cssEscapeCompat(id)}"]`) as HTMLElement | null
+    if (nextEl) {
+      try { nextEl.classList.add('active') } catch {}
+      _outlineActiveEl = nextEl
+    } else {
+      _outlineActiveEl = null
+    }
   } catch {}
 }
 
@@ -4885,11 +5008,15 @@ function renderOutlinePanel() {
   try {
     const outline = document.getElementById('lib-outline') as HTMLDivElement | null
     if (!outline) return
+    // 大纲 DOM 可能被整体重建：清理状态，避免持有旧节点引用。
+    try { _outlineActiveEl = null } catch {}
+    try { _outlineActiveId = '' } catch {}
+    clearOutlineHeadsCache()
     const container = document.querySelector('.container') as HTMLDivElement | null
     // PDF：优先读取书签目录
     try { if ((currentFilePath || '').toLowerCase().endsWith('.pdf')) { void renderPdfOutline(outline); return } } catch {}
     // 优先从当前上下文（WYSIWYG/预览）提取标题（仅在对应模式下启用）
-    const ctx = getOutlineContext()
+    const ctx = getOutlineContext(true)
     const heads = ctx.heads
     // level: 标题级别；id: DOM 锚点或逻辑标识；text: 显示文本；offset: 源码中的大致字符偏移（仅源码模式下用于跳转）
     const items: { level: number; id: string; text: string; offset?: number }[] = []
