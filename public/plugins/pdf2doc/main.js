@@ -706,6 +706,15 @@ async function parseImageBytes(context, cfg, bytes, filename, cancelSource) {
 async function localizeMarkdownImages(context, markdown, opt) {
   const text = typeof markdown === 'string' ? markdown : ''
   if (!text) return text
+
+  const onProgress = opt && typeof opt.onProgress === 'function' ? opt.onProgress : null
+  const report = (done, total) => {
+    if (!onProgress) return
+    try {
+      onProgress(done, total)
+    } catch {}
+  }
+
   if (!context || typeof context.downloadFileToCurrentFolder !== 'function') {
     // 宿主不支持本地下载时，仍然可以尝试将 HTML img 标签转换为 Markdown 语法，避免图片在预览中不可见
     let fallback = text
@@ -758,11 +767,17 @@ async function localizeMarkdownImages(context, markdown, opt) {
 
   // 限制最多处理的图片数量，避免极端大文档导致卡顿
   const maxImages = 50
+  const totalToProcess = Math.min(maxImages, urlMap.size)
   let index = 0
+
+  if (totalToProcess > 0) {
+    report(0, totalToProcess)
+  }
 
   for (const [url] of urlMap.entries()) {
     if (index >= maxImages) break
     index += 1
+    report(index, totalToProcess)
 
     let suggestedName = ''
     try {
@@ -817,6 +832,10 @@ async function localizeMarkdownImages(context, markdown, opt) {
     } catch {
       // 防御性兜底，出现异常时跳过该图片
     }
+  }
+
+  if (totalToProcess > 0) {
+    report(totalToProcess, totalToProcess)
   }
 
   let result = text
@@ -1520,6 +1539,8 @@ async function showTranslateConfirmDialog(context, cfg, fileName, pages) {
       closable: false,
       closed: false,
       cancelRequested: false,
+      postDone: 0,
+      postTotal: 0,
       timer: null,
       onKeyDown: null
     }
@@ -1553,11 +1574,21 @@ async function showTranslateConfirmDialog(context, cfg, fileName, pages) {
         return
       }
       if (st === 'post') {
-        title.textContent = pdf2docText('整理中', 'Finishing')
-        sub.textContent = pdf2docText(
-          `正在整理解析结果（已用时 ${fmtElapsed()}）`,
-          `Finishing parsed result (elapsed ${fmtElapsed()})`
-        )
+        const total = state.postTotal || 0
+        const done = state.postDone || 0
+        if (total > 0) {
+          title.textContent = pdf2docText('处理图片', 'Processing images')
+          sub.textContent = pdf2docText(
+            `正在处理图片 ${Math.min(done, total)}/${total}（已用时 ${fmtElapsed()}）`,
+            `Processing images ${Math.min(done, total)}/${total} (elapsed ${fmtElapsed()})`
+          )
+        } else {
+          title.textContent = pdf2docText('整理中', 'Finishing')
+          sub.textContent = pdf2docText(
+            `正在整理解析结果（已用时 ${fmtElapsed()}）`,
+            `Finishing parsed result (elapsed ${fmtElapsed()})`
+          )
+        }
         return
       }
       if (st === 'finalizing') {
@@ -1667,6 +1698,16 @@ async function showTranslateConfirmDialog(context, cfg, fileName, pages) {
         if (state.closed) return
         state.stage = String(nextStage || 'parsing')
         render()
+      },
+      setPostProgress(done, total) {
+        if (state.closed) return
+        const d = typeof done === 'number' && Number.isFinite(done) ? done : parseInt(done || '0', 10) || 0
+        const t = typeof total === 'number' && Number.isFinite(total) ? total : parseInt(total || '0', 10) || 0
+        state.postDone = Math.max(0, d)
+        state.postTotal = Math.max(0, t)
+        if (String(state.stage || '') === 'post') {
+          render()
+        }
       },
       fail(message) {
         if (state.closed) return
@@ -2314,7 +2355,12 @@ export async function activate(context) {
                 .replace(/[\\/:*?"<>|]+/g, '_')
                 .trim() || 'document'
               const localized = await localizeMarkdownImages(context, result.markdown, {
-                baseName: safeBaseName
+                baseName: safeBaseName,
+                onProgress: (done, total) => {
+                  if (parseOverlay && typeof parseOverlay.setPostProgress === 'function') {
+                    parseOverlay.setPostProgress(done, total)
+                  }
+                }
               })
 
               // 解析 PDF（通过文件选择）时，同时：
@@ -2610,7 +2656,12 @@ export async function activate(context) {
                 .replace(/[\\/:*?"<>|]+/g, '_')
                 .trim() || 'document'
               const localized = await localizeMarkdownImages(context, result.markdown, {
-                baseName: safeBaseName
+                baseName: safeBaseName,
+                onProgress: (done, total) => {
+                  if (parseOverlay && typeof parseOverlay.setPostProgress === 'function') {
+                    parseOverlay.setPostProgress(done, total)
+                  }
+                }
               })
               let savedPath = ''
               if (typeof context.saveMarkdownToCurrentFolder === 'function') {
@@ -3012,7 +3063,14 @@ export async function activate(context) {
                   markdown = await localizeMarkdownImages(
                     context,
                     result.markdown,
-                    { baseName: baseNameInner }
+                    {
+                      baseName: baseNameInner,
+                      onProgress: (done, total) => {
+                        if (parseOverlay && typeof parseOverlay.setPostProgress === 'function') {
+                          parseOverlay.setPostProgress(done, total)
+                        }
+                      }
+                    }
                   )
                   pages = result.pages || '?'
                 } else {
@@ -3100,7 +3158,14 @@ export async function activate(context) {
                 markdown = await localizeMarkdownImages(
                   context,
                   result.markdown,
-                  { baseName: baseNameFile }
+                  {
+                    baseName: baseNameFile,
+                    onProgress: (done, total) => {
+                      if (parseOverlay && typeof parseOverlay.setPostProgress === 'function') {
+                        parseOverlay.setPostProgress(done, total)
+                      }
+                    }
+                  }
                 )
                 pages = result.pages || '?'
               } else {
