@@ -24,12 +24,16 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     strictPort: true
   },
-  // 生产构建：分包与剥离 console/debugger；开发：预打包重库
+  // TS/JS 转译目标：让 dev（HMR）和 build 的语法落在同一兼容范围内，避免 macOS 12 WKWebView 直接解析失败。
+  // 生产构建：分包与剥离 console/debugger；开发：仅设置 target。
   esbuild: mode === 'production' ? {
+    target: 'es2020',
     // 生产环境去掉 console/debugger，减小体积并避免多余日志
     drop: ['console', 'debugger'],
     legalComments: 'none' // 移除许可注释，减小体积
-  } : {},
+  } : {
+    target: 'es2020',
+  },
   optimizeDeps: {
     // 开发时预构建大型依赖，加快热更新（仅影响 dev，不改变生产包）
     include: [
@@ -49,7 +53,10 @@ export default defineConfig(({ mode }) => ({
     exclude: []
   },
   build: {
-    target: 'es2022', // 现代浏览器目标，生成更小的代码
+    // macOS 12（Monterey）的 WKWebView 对部分 ES2022 语法/特性兼容不稳定，
+    // 实测会导致“窗口打开但内容全黑/全空白”（脚本解析失败直接不执行）。
+    // 这里退回到 es2020，换取更稳的跨平台运行。
+    target: 'es2020',
     cssCodeSplit: true, // CSS 代码分割
     cssMinify: true, // CSS 压缩
     reportCompressedSize: false, // 禁用 gzip 大小报告，加快构建
