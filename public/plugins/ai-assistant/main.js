@@ -5258,8 +5258,36 @@ function aiGuardCheckText(text){
   // 内容拦截：只做本地硬规则（不做配置 UI）。
   // 你的要求：强规则命中 >=2 才拒绝；弱规则命中 >=4 才拒绝。
   const strongRules = [
-    /(口交|肛交|轮奸|兽交|乱伦|亂倫|幼女|未成年.*性|肉棒)/i,
-    /\b(rape|incest|bestiality|cumshot|blowjob|handjob|masturbat(?:e|ion)?|child\s*sex(?:ual)?)\b/i
+    // 强规则：每个词/模式出现一次，只算一次命中（同一个词重复出现不叠加）。
+    /口交/i,
+    /肛交/i,
+    /轮奸/i,
+    /兽交/i,
+    /乱伦/i,
+    /亂倫/i,
+    /幼女/i,
+    /未成年.*性/i,
+    /肉棒/i,
+    /约炮/i,
+    /援交/i,
+    /卖淫/i,
+    /嫖娼/i,
+    /性骚扰/i,
+    /猥亵/i,
+    /性虐待/i,
+    /sm虐待/i,
+    /恋童/i,
+    /幼齿/i,
+    /淫秽/i,
+    /黄色/i,
+    /\brape\b/i,
+    /\bincest\b/i,
+    /\bbestiality\b/i,
+    /\bcumshot\b/i,
+    /\bblowjob\b/i,
+    /\bhandjob\b/i,
+    /\bmasturbat(?:e|ion)?\b/i,
+    /\bchild\s*sex(?:ual)?\b/i
   ]
   let strongHits = 0
   for (const re of strongRules) {
@@ -5268,7 +5296,7 @@ function aiGuardCheckText(text){
   if (strongHits >= 2) return { reason: '强规则命中' }
 
   const weakRules = [
-    /(阴茎|龟头|睾丸|阴道|乳头|裸体|裸露|性交|做爱|高潮|成人视频|A片)/,
+    /(阴茎|龟头|睾丸|阴道|乳头|裸体|裸露|性交|做爱|高潮|成人视频|A片|勃起|性暗示|情色|色情|性器官|私处|欲望|性欲|按摩|特殊服务|一夜情|炮友|性玩具|阴毛|体毛|抚摸|挑逗)/,
     /(手淫|自慰|射精|精液)/,
     /(强奸|迷奸|奸淫)/,
     /(操我)/,
