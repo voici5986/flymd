@@ -59,7 +59,7 @@ FlyMD 是一款轻量级、高性能的本地 Markdown 编辑器,支持 PDF 高�
 ---
 
 
-## APDF高精度解析（插件）
+## PDF高精度解析（插件）
 
 <img width="1074" height="765" alt="image" src="https://github.com/user-attachments/assets/9d9a845f-e75a-4ad3-a7bb-274017f64165" />
 
