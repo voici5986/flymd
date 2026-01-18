@@ -30,57 +30,16 @@ FlyMD 是一款轻量级、高性能的本地 Markdown 编辑器,支持 PDF 高�
 
 ## 目录
 
-- [安卓版（Beta）](#安卓版beta)
-- [新功能：AI小说引擎（插件）](#新功能ai小说引擎插件)
 - [核心特性](#核心特性)
 - [功能演示](#功能演示)
+- [PDF高精度解析（插件）](#pdf高精度解析插件)
+- [AI小说引擎（插件）](#ai小说引擎插件)
+- [安卓版（Beta）](#安卓版beta)
 - [快速开始](#快速开始)
 - [扩展开发](#扩展开发)
 - [性能与技术](#性能与技术)
 - [社区与支持](#社区与支持)
 - [其他信息](#其他信息)
-
----
-
-## 安卓版（Beta）
-
-**已适配插件**
-- WebDAV同步
-- Rag知识库
-- 待办推送
-- 待办日记（日记/待办）
-- typecho管理
-- AI助手
-
-### 录音转文字/语音输入
-
-<img src="https://github.com/user-attachments/assets/815d5bc2-d367-451a-bfa5-f54f5cc91c5a" alt="录音转文字演示" width="400">
-
----
-
-
-## PDF高精度解析（插件）
-
-<img width="1074" height="765" alt="image" src="https://github.com/user-attachments/assets/9d9a845f-e75a-4ad3-a7bb-274017f64165" />
-
-
-
-
-## AI小说引擎（插件）
-
-✅ 自动生成至少3个剧情走向
-
-✅ 智能伏笔回收+自动审计
-
-✅ 进度脉络自动更新，多级并发召回
-
-✅ 人物状态管理、章节字数统计，草稿审定，结构清晰
-
-✅ 支持多模型协作 & 可配合Git版本控制插件
-
-✅ 独有后端Agent工具 分段管理，逻辑严密
-
-<img width="970" height="710" alt="AI Novel Engine" src="https://github.com/user-attachments/assets/005545ee-6377-4f5a-9ae8-e21f7f3330d9" />
 
 ---
 
@@ -143,17 +102,55 @@ FlyMD 是一款轻量级、高性能的本地 Markdown 编辑器,支持 PDF 高�
 
 <img width="1065" height="726" alt="2123769743dff2e78a75b3bc3544fa9e" src="https://github.com/user-attachments/assets/dd82577d-eebf-415b-bcd3-96dc3e23ac7e" />
 
-### PDF 高精度解析 + 翻译
-
-**示例为高精度解析插件，同时提供MinerU解析插件，根据需求自行选择**
-
-<img src="https://github.com/user-attachments/assets/2a512b4b-7083-41d9-9b84-f9b411b849f1" alt="PDF高精度解析翻译" width="800">
-
 ### AI 对话联动 + 桌面便签
 
 **十种颜色可选 · 透明度自定义 · 支持可视化交互**
 
 <img src="https://github.com/user-attachments/assets/016617fa-1971-4711-8c5e-1398a1b0aa52" alt="AI对话联动推送和便签" width="800">
+
+---
+
+## PDF高精度解析（插件）
+
+**示例为高精度解析插件，同时提供MinerU解析插件，根据需求自行选择**
+
+<img width="1074" height="765" alt="PDF高精度解析" src="https://github.com/user-attachments/assets/9d9a845f-e75a-4ad3-a7bb-274017f64165" />
+
+<img src="https://github.com/user-attachments/assets/2a512b4b-7083-41d9-9b84-f9b411b849f1" alt="PDF高精度解析翻译" width="800">
+
+---
+
+## AI小说引擎（插件）
+
+✅ 自动生成至少3个剧情走向
+
+✅ 智能伏笔回收+自动审计
+
+✅ 进度脉络自动更新，多级并发召回
+
+✅ 人物状态管理、章节字数统计，草稿审定，结构清晰
+
+✅ 支持多模型协作 & 可配合Git版本控制插件
+
+✅ 独有后端Agent工具 分段管理，逻辑严密
+
+<img width="970" height="710" alt="AI Novel Engine" src="https://github.com/user-attachments/assets/005545ee-6377-4f5a-9ae8-e21f7f3330d9" />
+
+---
+
+## 安卓版（Beta）
+
+**已适配插件**
+- WebDAV同步
+- Rag知识库
+- 待办推送
+- 待办日记（日记/待办）
+- typecho管理
+- AI助手
+
+### 录音转文字/语音输入
+
+<img src="https://github.com/user-attachments/assets/815d5bc2-d367-451a-bfa5-f54f5cc91c5a" alt="录音转文字演示" width="400">
 
 ---
 

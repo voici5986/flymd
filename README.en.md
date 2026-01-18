@@ -27,49 +27,16 @@ FlyMD is a lightweight, high-performance local Markdown editor supporting high-p
 
 ## Table of Contents
 
-- [Android Version (Beta)](#android-version-beta)
-- [New Feature: AI Novel Engine (Plugin)](#new-feature-ai-novel-engine-plugin)
 - [Core Features](#core-features)
 - [Feature Demonstrations](#feature-demonstrations)
+- [PDF High-Precision Parsing (Plugin)](#pdf-high-precision-parsing-plugin)
+- [AI Novel Engine (Plugin)](#ai-novel-engine-plugin)
+- [Android Version (Beta)](#android-version-beta)
 - [Getting Started](#getting-started)
 - [Extension Development](#extension-development)
 - [Performance & Technology](#performance--technology)
 - [Community & Support](#community--support)
 - [Other Information](#other-information)
-
----
-
-## Android Version (Beta)
-
-**Adapted Plugins**
-- WebDAV Sync
-- RAG Knowledge Base
-- Todo Push
-- Todo Diary (Diary/Todo)
-- Typecho Management
-- AI Assistant
-
-### Voice-to-Text / Voice Input
-
-<img src="https://github.com/user-attachments/assets/815d5bc2-d367-451a-bfa5-f54f5cc91c5a" alt="Voice-to-text demo" width="400">
-
----
-
-## New Feature: AI Novel Engine (Plugin)
-
-✅ Auto-generate at least 3 plot directions
-
-✅ Smart foreshadowing callback + automatic audit
-
-✅ Automatic progress updates, multi-level concurrent retrieval
-
-✅ Character state management, chapter word count, draft review, clear structure
-
-✅ Support for multi-model collaboration & compatible with Git version control plugin
-
-✅ Unique backend Agent tool for segmented management, rigorous logic
-
-<img width="970" height="710" alt="AI Novel Engine" src="https://github.com/user-attachments/assets/005545ee-6377-4f5a-9ae8-e21f7f3330d9" />
 
 ---
 
@@ -129,17 +96,55 @@ FlyMD is a lightweight, high-performance local Markdown editor supporting high-p
 
 <img width="1065" height="726" alt="Date-based todo summary and reminders" src="https://github.com/user-attachments/assets/dd82577d-eebf-415b-bcd3-96dc3e23ac7e" />
 
-### High-Precision PDF Parsing + Translation
-
-**Example of the High-Precision Parsing plugin; a MinerU-based parsing plugin is also available depending on your needs.**
-
-<img src="https://github.com/user-attachments/assets/2a512b4b-7083-41d9-9b84-f9b411b849f1" alt="PDF High-Precision Parsing and Translation" width="800">
-
 ### AI Dialogue Integration + Desktop Sticky Notes
 
 **Ten Color Options · Customizable Transparency · Interactive Visual Controls**
 
 <img src="https://github.com/user-attachments/assets/016617fa-1971-4711-8c5e-1398a1b0aa52" alt="AI Dialogue Integration and Sticky Notes" width="800">
+
+---
+
+## PDF High-Precision Parsing (Plugin)
+
+**Example of the High-Precision Parsing plugin; a MinerU-based parsing plugin is also available depending on your needs.**
+
+<img width="1074" height="765" alt="PDF High-Precision Parsing" src="https://github.com/user-attachments/assets/9d9a845f-e75a-4ad3-a7bb-274017f64165" />
+
+<img src="https://github.com/user-attachments/assets/2a512b4b-7083-41d9-9b84-f9b411b849f1" alt="PDF High-Precision Parsing and Translation" width="800">
+
+---
+
+## AI Novel Engine (Plugin)
+
+✅ Auto-generate at least 3 plot directions
+
+✅ Smart foreshadowing callback + automatic audit
+
+✅ Automatic progress updates, multi-level concurrent retrieval
+
+✅ Character state management, chapter word count, draft review, clear structure
+
+✅ Support for multi-model collaboration & compatible with Git version control plugin
+
+✅ Unique backend Agent tool for segmented management, rigorous logic
+
+<img width="970" height="710" alt="AI Novel Engine" src="https://github.com/user-attachments/assets/005545ee-6377-4f5a-9ae8-e21f7f3330d9" />
+
+---
+
+## Android Version (Beta)
+
+**Adapted Plugins**
+- WebDAV Sync
+- RAG Knowledge Base
+- Todo Push
+- Todo Diary (Diary/Todo)
+- Typecho Management
+- AI Assistant
+
+### Voice-to-Text / Voice Input
+
+<img src="https://github.com/user-attachments/assets/815d5bc2-d367-451a-bfa5-f54f5cc91c5a" alt="Voice-to-text demo" width="400">
 
 ---
 
