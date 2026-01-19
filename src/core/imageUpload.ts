@@ -3,6 +3,7 @@
 
 import type { AnyUploaderConfig } from '../uploader/types'
 import { uploadImageToCloud } from '../uploader/upload'
+import { toDocRelativeImagePathIfInImages } from '../utils/localImageSrcResolve'
 
 export type EditorMode = 'edit' | 'preview'
 
@@ -29,6 +30,8 @@ export interface ImageUploadDeps {
   getUserPicturesDir(): Promise<string | null>
   // 图床与转码配置
   getAlwaysSaveLocalImages(): Promise<boolean>
+  // 本地图片链接写法：仅影响写入 Markdown（不改渲染与已有内容）
+  getPreferRelativeLocalImages(): Promise<boolean>
   getUploaderConfig(): Promise<AnyUploaderConfig | null>
   getTranscodePrefs(): Promise<{ convertToWebp: boolean; webpQuality: number; saveLocalAsWebp: boolean }>
   // 文件写入与 dataURL 工具
@@ -199,11 +202,21 @@ export function createImageUploader(deps: ImageUploadDeps) {
 
         // ===== 步骤 3: 决定最终 URL =====
         if (localPath) {
-          const needAngle =
-            /[\s()]/.test(localPath) ||
-            /^[a-zA-Z]:/.test(localPath) ||
-            /\\/.test(localPath)
-          const mdUrl = needAngle ? `<${localPath}>` : localPath
+          let mdUrl: string = localPath
+          try {
+            const preferRel = await deps.getPreferRelativeLocalImages()
+            if (preferRel) {
+              const rel = toDocRelativeImagePathIfInImages(localPath, deps.getCurrentFilePath())
+              if (rel) mdUrl = rel
+            }
+          } catch {}
+          if (mdUrl === localPath) {
+            const needAngle =
+              /[\s()]/.test(localPath) ||
+              /^[a-zA-Z]:/.test(localPath) ||
+              /\\/.test(localPath)
+            mdUrl = needAngle ? `<${localPath}>` : localPath
+          }
           replaceUploadingPlaceholder(deps, id, `![${fname}](${mdUrl})`)
           return
         }

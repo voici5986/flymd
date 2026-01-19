@@ -4,6 +4,7 @@ import type { Node as ProseNode, Schema } from '@milkdown/prose/model'
 import type { AnyUploaderConfig } from '../../../uploader/types'
 import { uploadImageToCloud } from '../../../uploader/upload'
 import { transcodeToWebpIfNeeded } from '../../../utils/image'
+import { toDocRelativeImagePathIfInImages } from '../../../utils/localImageSrcResolve'
 // 本地保存：在未启用图床或开启“总是保存到本地”时，将粘贴/拖拽的图片写入 images/ 或默认粘贴目录
 // 文件保存交给外层（main.ts）以避免在插件侧直接依赖 Tauri 插件
 
@@ -37,6 +38,9 @@ function redactUploaderCfg(upCfg: AnyUploaderConfig | null): any {
 
 async function getAlwaysLocal(): Promise<boolean> {
   try { const fn = (window as any).flymdAlwaysSaveLocalImages; return typeof fn === 'function' ? !!(await fn()) : false } catch { return false }
+}
+async function getPreferRelativeLocalImages(): Promise<boolean> {
+  try { const fn = (window as any).flymdPreferRelativeLocalImages; return typeof fn === 'function' ? !!(await fn()) : false } catch { return false }
 }
 async function getCurrentPath(): Promise<string | null> {
   try { const fn = (window as any).flymdGetCurrentFilePath; return typeof fn === 'function' ? (await fn()) : null } catch { return null }
@@ -165,7 +169,15 @@ export const uploader: Uploader = async (files, schema) => {
     } else if (localPath) {
       // 如果图床失败或未启用，但本地保存成功，使用本地路径
       finalUrl = toFileUri(localPath)
-      console.log('[Paste] 使用本地路径, 转换后的 fileUri:', finalUrl)
+      try {
+        const preferRel = await getPreferRelativeLocalImages()
+        if (preferRel) {
+          const cur = await getCurrentPath()
+          const rel = toDocRelativeImagePathIfInImages(localPath, cur)
+          if (rel) finalUrl = rel
+        }
+      } catch {}
+      console.log('[Paste] 使用本地路径, url:', finalUrl)
     }
 
     // 5) 创建图片节点

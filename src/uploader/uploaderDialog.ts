@@ -58,6 +58,7 @@ export async function openUploaderDialog(deps: UploaderDialogDeps): Promise<void
   const inputProvider = overlay.querySelector('#upl-provider') as HTMLSelectElement
   const inputEnabled = overlay.querySelector('#upl-enabled') as HTMLInputElement
   const inputAlwaysLocal = overlay.querySelector('#upl-always-local') as HTMLInputElement
+  const inputLocalPreferRelative = overlay.querySelector('#upl-local-prefer-relative') as HTMLInputElement
   const inputAk = overlay.querySelector('#upl-ak') as HTMLInputElement
   const inputSk = overlay.querySelector('#upl-sk') as HTMLInputElement
   const inputBucket = overlay.querySelector('#upl-bucket') as HTMLInputElement
@@ -208,6 +209,7 @@ export async function openUploaderDialog(deps: UploaderDialogDeps): Promise<void
       if (inputProvider) inputProvider.value = provider
       inputEnabled.checked = !!up?.enabled
       inputAlwaysLocal.checked = !!up?.alwaysLocal
+      if (inputLocalPreferRelative) inputLocalPreferRelative.checked = !!up?.localPreferRelative
       inputAk.value = up?.accessKeyId || ''
       inputSk.value = up?.secretAccessKey || ''
       inputBucket.value = up?.bucket || ''
@@ -267,6 +269,7 @@ export async function openUploaderDialog(deps: UploaderDialogDeps): Promise<void
           provider: getProvider(),
           enabled: !!inputEnabled.checked,
           alwaysLocal: !!inputAlwaysLocal.checked,
+          localPreferRelative: !!inputLocalPreferRelative?.checked,
           accessKeyId: inputAk.value.trim(),
           secretAccessKey: inputSk.value.trim(),
           bucket: inputBucket.value.trim(),
@@ -321,6 +324,7 @@ export async function openUploaderDialog(deps: UploaderDialogDeps): Promise<void
     })
     inputEnabled.addEventListener('change', () => { void applyImmediate() })
     inputAlwaysLocal.addEventListener('change', () => { void applyImmediate() })
+    inputLocalPreferRelative?.addEventListener('change', () => { void applyImmediate() })
     inputImglaToken?.addEventListener('change', () => { void applyImmediate(); void refreshImglaStrategies(); void refreshImglaAlbums() })
     inputImglaBaseUrl?.addEventListener('change', () => { void refreshImglaStrategies(); void refreshImglaAlbums() })
     // 下拉选择策略时同步数字输入，并立即保存
@@ -357,6 +361,7 @@ export async function openUploaderDialog(deps: UploaderDialogDeps): Promise<void
         provider: getProvider(),
         enabled: !!inputEnabled.checked,
         alwaysLocal: !!inputAlwaysLocal.checked,
+        localPreferRelative: !!inputLocalPreferRelative?.checked,
         accessKeyId: inputAk.value.trim(),
         secretAccessKey: inputSk.value.trim(),
         bucket: inputBucket.value.trim(),

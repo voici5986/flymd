@@ -17,6 +17,7 @@ import { uploader } from './plugins/paste'
 import { protectExcelDollarRefs, unprotectExcelDollarRefs } from '../../utils/excelFormula'
 import { getPasteUrlTitleFetchEnabled } from '../../core/pasteUrlTitle'
 import { guessSyncedDocImageAbsPath } from '../../utils/localImagePath'
+import { resolveLocalImageAbsPathFromSrc } from '../../utils/localImageSrcResolve'
 import { mermaidPlugin } from './plugins/mermaid'
 import { mathInlineViewPlugin, mathBlockViewPlugin } from './plugins/math'
 import { htmlMediaPlugin } from './plugins/htmlMedia'
@@ -233,9 +234,22 @@ function rewriteLocalImagesToAsset() {
         if (!imgEl.getAttribute('data-flymd-src-raw')) {
           imgEl.setAttribute('data-flymd-src-raw', raw)
         }
-        const abs = toLocalAbsFromSrc(raw)
-        if (!abs) return
         void (async () => {
+          // 快路径：绝对路径/file:// 可同步识别，无需取 currentFilePath
+          const absFast = toLocalAbsFromSrc(raw)
+          if (absFast) {
+            const r = await toDataUrl(absFast)
+            if (r?.dataUrl) {
+              try { imgEl.setAttribute('data-abs-path', r.absPath) } catch {}
+              if (imgEl.src !== r.dataUrl) imgEl.src = r.dataUrl
+            }
+            return
+          }
+
+          // 相对路径：依赖当前文档路径作为 base
+          const cur = await getCurrentFilePath()
+          const abs = resolveLocalImageAbsPathFromSrc(raw, cur)
+          if (!abs) return
           const r = await toDataUrl(abs)
           if (r?.dataUrl) {
             try { imgEl.setAttribute('data-abs-path', r.absPath) } catch {}

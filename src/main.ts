@@ -40,6 +40,7 @@ import { uploadImageFromContextMenu } from './uploader/manualImageUpload'
 import { transcodeToWebpIfNeeded } from './utils/image'
 import { protectExcelDollarRefs } from './utils/excelFormula'
 import { guessSyncedDocImageAbsPath } from './utils/localImagePath'
+import { resolveLocalImageAbsPathFromSrc, toDocRelativeImagePathIfInImages } from './utils/localImageSrcResolve'
 import {
   copySelectionAsRichHtmlWithEmbeddedImages,
   hasSelectionInside,
@@ -2976,6 +2977,14 @@ wysiwygCaretEl.id = 'wysiwyg-caret'
             <div class="upl-hint" id="upl-hint-alwaysLocal">${t('upl.hint.alwaysLocal')}</div>
             <div class="upl-hint" id="upl-hint-webdavDragImport">${t('upl.hint.webdavDragImport')}</div>
           </div>
+          <label for="upl-local-prefer-relative">${t('upl.localPreferRelative')}</label>
+          <div class="upl-field">
+            <label class="switch">
+              <input id="upl-local-prefer-relative" type="checkbox" />
+              <span class="trk"></span><span class="kn"></span>
+            </label>
+            <div class="upl-hint" id="upl-hint-localPreferRelative">${t('upl.hint.localPreferRelative')}</div>
+          </div>
 
           <div class="upl-group" data-upl-provider="s3">
             <label for="upl-ak">${t('upl.ak')}</label>
@@ -3498,7 +3507,6 @@ async function renderPreview(opts?: RenderPreviewOptions) {
   })
   // 处理本地图片路径为 asset: URL，确保在 Tauri 中可显示
   try {
-    const base = currentFilePath ? currentFilePath.replace(/[\\/][^\\/]*$/, '') : null
     mdHost.querySelectorAll('img[src]').forEach((img) => {
       // WYSIWYG: nudge caret after image render when editor has no scroll space
       try {
@@ -3526,60 +3534,9 @@ async function renderPreview(opts?: RenderPreviewOptions) {
       try {
         const el = img as HTMLImageElement
         const src = el.getAttribute('src') || ''
-        let srcDec = src
-        try {
-          // 尽力解码 URL 编码的反斜杠（%5C）与其它字符，便于后续本地路径识别
-          srcDec = decodeURIComponent(src)
-        } catch {}
-        // 跳过已可用的协议
-        if (/^(data:|blob:|asset:|https?:)/i.test(src)) return
-        const isWinDrive = /^[a-zA-Z]:/.test(srcDec)
-        const isUNC = /^\\\\/.test(srcDec)
-        const isUnixAbs = /^\//.test(srcDec)
-        // base 不存在且既不是绝对路径、UNC、Windows 盘符，也不是 file: 时，直接忽略
-        if (!base && !(isWinDrive || isUNC || isUnixAbs || /^file:/i.test(src) || /^(?:%5[cC]){2}/.test(src))) return
-        let abs: string
-        if (isWinDrive || isUNC || isUnixAbs) {
-          abs = srcDec
-          if (isWinDrive) {
-            // 统一 Windows 盘符路径分隔符
-            abs = abs.replace(/\//g, '\\')
-          }
-          if (isUNC) {
-            // 确保 UNC 使用反斜杠
-            abs = abs.replace(/\//g, '\\')
-          }
-        } else if (/^(?:%5[cC]){2}/.test(src)) {
-          // 处理被编码的 UNC：%5C%5Cserver%5Cshare%5C...
-          try {
-            const unc = decodeURIComponent(src)
-            abs = unc.replace(/\//g, '\\')
-          } catch { abs = src.replace(/%5[cC]/g, '\\') }
-        } else if (/^file:/i.test(src)) {
-          // 处理 file:// 形式，本地文件 URI 转为本地系统路径
-          try {
-            const u = new URL(src)
-            let p = u.pathname || ''
-            // Windows 场景：/D:/path => D:/path
-            if (/^\/[a-zA-Z]:\//.test(p)) p = p.slice(1)
-            p = decodeURIComponent(p)
-            // 统一为 Windows 反斜杠，交由 convertFileSrc 处理
-            if (/^[a-zA-Z]:\//.test(p)) p = p.replace(/\//g, '\\')
-            abs = p
-          } catch {
-            abs = src.replace(/^file:\/\//i, '')
-          }
-        } else {
-          const sep = base.includes('\\') ? '\\' : '/'
-          const parts = (base + sep + src).split(/[\\/]+/)
-          const stack: string[] = []
-          for (const p of parts) {
-            if (!p || p === '.') continue
-            if (p === '..') { stack.pop(); continue }
-            stack.push(p)
-          }
-          abs = base.includes('\\') ? stack.join('\\') : '/' + stack.join('/')
-        }
+        const abs0 = resolveLocalImageAbsPathFromSrc(src, currentFilePath)
+        if (!abs0) return
+        let abs: string = abs0
         // 若图片路径来自其他设备（WebDAV 同步后常见）：旧绝对路径会失效。
         // 这里在加载失败时，尝试把它映射到“当前文档同目录 images/”下的同名文件。
         let triedRemap = false
@@ -3891,6 +3848,7 @@ const _imageUploader = createImageUploader({
   getDefaultPasteDir: () => getDefaultPasteDir(),
   getUserPicturesDir: () => getUserPicturesDir(),
   getAlwaysSaveLocalImages: () => getAlwaysSaveLocalImages(),
+  getPreferRelativeLocalImages: () => getPreferRelativeLocalImages(),
   getUploaderConfig: () => getUploaderConfig(),
   getTranscodePrefs: () => getTranscodePrefs(),
   writeBinaryFile: async (path: string, bytes: Uint8Array) => { await writeFile(path as any, bytes as any) },
@@ -5572,6 +5530,7 @@ try {
     ;(window as any).flymdGetCurrentFilePath = () => currentFilePath
     ;(window as any).flymdGetDefaultPasteDir = () => getDefaultPasteDir()
     ;(window as any).flymdAlwaysSaveLocalImages = () => getAlwaysSaveLocalImages()
+    ;(window as any).flymdPreferRelativeLocalImages = () => getPreferRelativeLocalImages()
     ;(window as any).flymdSaveImageToLocalAndGetPath = (file: File, name: string, force?: boolean) => saveImageToLocalAndGetPath(file, name, force)
   }
 } catch {}
@@ -5698,6 +5657,16 @@ async function getAlwaysSaveLocalImages(): Promise<boolean> {
     const up = await store.get('uploader')
     if (!up || typeof up !== 'object') return false
     return !!(up as any).alwaysLocal
+  } catch { return false }
+}
+
+// 读取“本地图片写入相对路径”配置（仅影响插入行为，不改已有内容）
+async function getPreferRelativeLocalImages(): Promise<boolean> {
+  try {
+    if (!store) return false
+    const up = await store.get('uploader')
+    if (!up || typeof up !== 'object') return false
+    return !!(up as any).localPreferRelative
   } catch { return false }
 }
 
@@ -7380,6 +7349,7 @@ function applyI18nUi() {
         }
         setLabel('upl-enabled', t('upl.enable'))
         setLabel('upl-always-local', t('upl.alwaysLocal'))
+        setLabel('upl-local-prefer-relative', t('upl.localPreferRelative'))
         setLabel('upl-provider', t('upl.provider'))
         setLabel('upl-ak', t('upl.ak'))
         setLabel('upl-sk', t('upl.sk'))
@@ -7418,6 +7388,7 @@ function applyI18nUi() {
 
         setText('upl-provider-hint', t('upl.provider.hint'))
         setText('upl-hint-alwaysLocal', t('upl.hint.alwaysLocal'))
+        setText('upl-hint-localPreferRelative', t('upl.hint.localPreferRelative'))
         setText('upl-hint-endpoint', t('upl.endpoint.hint'))
         setText('upl-hint-domain', t('upl.domain.hint'))
         setText('upl-hint-template', t('upl.template.hint'))
@@ -9115,13 +9086,17 @@ function bindEvents() {
                 const sep = base.includes('\\') ? '\\' : '/'
                 const imgDir = base + sep + 'images'
                 try { await ensureDir(imgDir) } catch {}
+                const preferRel = await getPreferRelativeLocalImages()
                 for (const f of imgFiles) {
                   try {
                     const dst = imgDir + sep + f.name
                     const buf = new Uint8Array(await f.arrayBuffer())
                     await writeFile(dst as any, buf as any)
-                    const needAngle = /[\s()]/.test(dst) || /^[a-zA-Z]:/.test(dst) || /\\/.test(dst)
-                    const mdUrl = needAngle ? `<${dst}>` : dst
+                    const rel = preferRel ? toDocRelativeImagePathIfInImages(dst, currentFilePath) : null
+                    const mdUrl = rel || (() => {
+                      const needAngle = /[\s()]/.test(dst) || /^[a-zA-Z]:/.test(dst) || /\\/.test(dst)
+                      return needAngle ? `<${dst}>` : dst
+                    })()
                     partsLocal.push(`![${f.name}](${mdUrl})`)
                   } catch {}
                 }
@@ -9433,14 +9408,18 @@ function bindEvents() {
                     const sep = base.includes('\\') ? '\\' : '/'
                     const imgDir = base + sep + 'images'
                     try { await ensureDir(imgDir) } catch {}
+                    const preferRel = await getPreferRelativeLocalImages()
                     for (const p of imgs) {
                       try {
                         const name = (p.split(/[\\/]+/).pop() || 'image')
                         const dst = imgDir + sep + name
                         const bytes = await readFile(p as any)
                         await writeFile(dst as any, bytes as any)
-                        const needAngle = /[\s()]/.test(dst) || /^[a-zA-Z]:/.test(dst) || /\\/.test(dst)
-                        const mdUrl = needAngle ? `<${dst}>` : dst
+                        const rel = preferRel ? toDocRelativeImagePathIfInImages(dst, currentFilePath) : null
+                        const mdUrl = rel || (() => {
+                          const needAngle = /[\s()]/.test(dst) || /^[a-zA-Z]:/.test(dst) || /\\/.test(dst)
+                          return needAngle ? `<${dst}>` : dst
+                        })()
                         partsLocal.push(`![${name}](${mdUrl})`)
                       } catch {}
                     }
