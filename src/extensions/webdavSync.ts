@@ -3,7 +3,7 @@
 // - 仅按最后修改时间比较；新者覆盖旧者；不做合并
 
 import { Store } from '@tauri-apps/plugin-store'
-import { getActiveLibraryRoot, getActiveLibraryId } from '../utils/library'
+import { getActiveLibraryRoot, getActiveLibraryId, getActiveLibraryName } from '../utils/library'
 import { readDir, stat, readFile, writeFile, mkdir, exists, open as openFileHandle, BaseDirectory, remove } from '@tauri-apps/plugin-fs'
 import { appLocalDataDir } from '@tauri-apps/api/path'
 import { ask } from '@tauri-apps/plugin-dialog'
@@ -942,6 +942,55 @@ function sanitizeHttpHosts(list: any): string[] {
   return out
 }
 
+// 旧版默认值：不要轻易改，会破坏老用户的远端目录布局
+const LEGACY_DEFAULT_ROOT_PATH = '/flymd'
+
+function sanitizeRemoteRootNameFromLibraryName(name: string): string {
+  const raw = String(name || '').trim()
+  if (!raw) return ''
+  // WebDAV 路径本质是 URL path：尽量避免会导致 URL 解析歧义的字符
+  let s = raw.replace(/[\\/]+/g, '-').replace(/\s+/g, '-')
+  s = s.replace(/[?#%]+/g, '-')
+  s = s.replace(/-+/g, '-').replace(/^-+/, '').replace(/-+$/, '')
+  return s
+}
+
+function normalizeRootPathInput(input: string): string {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+  let p = raw.replace(/\\/g, '/')
+  if (!p.startsWith('/')) p = '/' + p
+  p = p.replace(/\/+$/, '')
+  return p || '/'
+}
+
+function looksLikeUserConfiguredSync(raw: any): boolean {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
+  const base = typeof raw.baseUrl === 'string' ? raw.baseUrl.trim() : ''
+  const user = typeof raw.username === 'string' ? raw.username.trim() : ''
+  const pass = typeof raw.password === 'string' ? raw.password.trim() : ''
+  const enabled = raw.enabled === true
+  const onStartup = raw.onStartup === true
+  const onShutdown = raw.onShutdown === true
+  return !!(base || user || pass || enabled || onStartup || onShutdown)
+}
+
+async function getDefaultWebdavRootPathForActiveLibrary(): Promise<string> {
+  // 先用“库名”（用户可重命名），拿不到再回退到库根目录的目录名
+  try {
+    const name = await getActiveLibraryName()
+    const seg = sanitizeRemoteRootNameFromLibraryName(name || '')
+    if (seg) return '/' + seg
+  } catch {}
+  try {
+    const root = await getActiveLibraryRoot()
+    const last = String(root || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || ''
+    const seg = sanitizeRemoteRootNameFromLibraryName(last)
+    if (seg) return '/' + seg
+  } catch {}
+  return LEGACY_DEFAULT_ROOT_PATH
+}
+
 // 旧版同步配置是否为“全局配置”形态（未按库拆分）
 function isLegacySyncConfigShape(raw: any): boolean {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
@@ -956,7 +1005,9 @@ function isLegacySyncConfigShape(raw: any): boolean {
 }
 
 // 从存储的原始对象构造完整配置（带默认值），保持向后兼容
-function buildWebdavConfigFromRaw(raw: any): WebdavSyncConfig {
+function buildWebdavConfigFromRaw(raw: any, defaultRootPathForEmptyConfig: string): WebdavSyncConfig {
+  const rawRoot = typeof raw?.rootPath === 'string' ? raw.rootPath : ''
+  const rootPath = normalizeRootPathInput(rawRoot) || (looksLikeUserConfiguredSync(raw) ? LEGACY_DEFAULT_ROOT_PATH : defaultRootPathForEmptyConfig)
   const cfg: WebdavSyncConfig = {
     enabled: raw?.enabled === true,
     onStartup: raw?.onStartup === true,
@@ -968,7 +1019,7 @@ function buildWebdavConfigFromRaw(raw: any): WebdavSyncConfig {
     baseUrl: String(raw?.baseUrl || ''),
     username: String(raw?.username || ''),
     password: String(raw?.password || ''),
-    rootPath: String(raw?.rootPath || '/flymd'),
+    rootPath,
     clockSkewMs: Number(raw?.clockSkewMs) || 0,
     conflictStrategy: raw?.conflictStrategy || 'newest',
     skipRemoteScanMinutes: Number(raw?.skipRemoteScanMinutes) >= 0 ? Number(raw?.skipRemoteScanMinutes) : 5,
@@ -1026,7 +1077,10 @@ export async function getWebdavSyncConfig(): Promise<WebdavSyncConfig> {
   }
 
   const rawCfg = libId ? profiles[libId] || {} : {}
-  return buildWebdavConfigFromRaw(rawCfg)
+  const defaultRoot = await (async () => {
+    try { return await getDefaultWebdavRootPathForActiveLibrary() } catch { return LEGACY_DEFAULT_ROOT_PATH }
+  })()
+  return buildWebdavConfigFromRaw(rawCfg, defaultRoot)
 }
 
 // 判断当前库是否已经显式配置过 WebDAV（用于 UI 提示）
@@ -1051,8 +1105,9 @@ export async function isWebdavConfiguredForActiveLibrary(): Promise<boolean> {
     const user = typeof cfg.username === 'string' ? cfg.username.trim() : ''
     const pass = typeof cfg.password === 'string' ? cfg.password.trim() : ''
     const enabled = cfg.enabled === true
-    const root = typeof cfg.rootPath === 'string' ? cfg.rootPath.trim() : ''
-    return !!(base || user || pass || enabled || (root && root !== '/flymd'))
+    const onStartup = cfg.onStartup === true
+    const onShutdown = cfg.onShutdown === true
+    return !!(base || user || pass || enabled || onStartup || onShutdown)
   }
 
   // 旧形态：整份 sync 就是一份配置，视为“已配置”
@@ -1061,8 +1116,9 @@ export async function isWebdavConfiguredForActiveLibrary(): Promise<boolean> {
     const user = typeof raw.username === 'string' ? raw.username.trim() : ''
     const pass = typeof raw.password === 'string' ? raw.password.trim() : ''
     const enabled = raw.enabled === true
-    const root = typeof raw.rootPath === 'string' ? raw.rootPath.trim() : ''
-    return !!(base || user || pass || enabled || (root && root !== '/flymd'))
+    const onStartup = raw.onStartup === true
+    const onShutdown = raw.onShutdown === true
+    return !!(base || user || pass || enabled || onStartup || onShutdown)
   }
 
   return false
@@ -1748,7 +1804,7 @@ async function ensureEncryptionSaltReady(
   const key = (cfg.encryptKey || '').trim()
   if (!key || key.length < 8) return cfg
 
-  const remoteRoot = (cfg.rootPath || '/flymd').replace(/\/+$/, '')
+  const remoteRoot = String(cfg.rootPath || '').replace(/\/+$/, '')
   const remotePath = (remoteRoot ? (remoteRoot + '/') : '/') + REMOTE_ENC_META_FILE
 
   let localSalt = (cfg.encryptSalt || '').trim()
@@ -2032,7 +2088,7 @@ export async function syncNow(reason: SyncReason): Promise<{ uploaded: number; d
     }
 
     // 获取上次同步的元数据
-    const profileState = await loadSyncMetadataProfile({ localRoot, baseUrl, remoteRoot: cfg.rootPath || '/flymd' })
+    const profileState = await loadSyncMetadataProfile({ localRoot, baseUrl, remoteRoot: cfg.rootPath })
     await syncLog('[profile] key=' + profileState.profile.key + ' fresh=' + profileState.isFreshProfile + (profileState.legacyDetected ? ' legacy-detected' : ''))
     const forceSafePull = profileState.isFreshProfile && profileState.legacyDetected
     if (forceSafePull) {
@@ -3071,7 +3127,7 @@ export async function openWebdavSyncDialog(): Promise<void> {
             </div>
             <label for="sync-root">Root Path</label>
             <div class="upl-field">
-              <input id="sync-root" type="text" placeholder="/flymd"/>
+              <input id="sync-root" type="text" placeholder="/&lt;库名&gt;"/>
               <div class="upl-hint">${t('sync.root.hint')}</div>
             </div>
             <label for="sync-user">${t('sync.user')}</label>
@@ -3124,6 +3180,9 @@ export async function openWebdavSyncDialog(): Promise<void> {
   const elHttpHostsSections = overlay.querySelectorAll('.sync-http-hosts') as NodeListOf<HTMLElement>
   const elHttpHostsList = overlay.querySelector('#sync-http-hosts-list') as HTMLDivElement | null
 
+  const defaultRootPath = await (async () => {
+    try { return await getDefaultWebdavRootPathForActiveLibrary() } catch { return LEGACY_DEFAULT_ROOT_PATH }
+  })()
   const cfg = await getWebdavSyncConfig()
   elEnabled.checked = !!cfg.enabled
   elOnStartup.checked = !!cfg.onStartup
@@ -3135,7 +3194,8 @@ export async function openWebdavSyncDialog(): Promise<void> {
   elSkipMinutes.value = String(cfg.skipRemoteScanMinutes !== undefined ? cfg.skipRemoteScanMinutes : 5)
   elLogRetentionDays.value = String(clampInt((cfg as any)?.logRetentionDays, 1, 90, DEFAULT_SYNC_LOG_RETENTION_DAYS))
   elBase.value = cfg.baseUrl || ''
-  elRoot.value = cfg.rootPath || '/flymd'
+  elRoot.placeholder = defaultRootPath
+  elRoot.value = cfg.rootPath || defaultRootPath
   elUser.value = cfg.username || ''
   elPass.value = cfg.password || ''
   elAllowHttp.checked = cfg.allowHttpInsecure === true
@@ -3286,7 +3346,7 @@ export async function openWebdavSyncDialog(): Promise<void> {
         confirmDeleteRemote: elConfirmDeleteRemote.checked,
         skipRemoteScanMinutes: Math.max(0, Number(elSkipMinutes.value) || 5),
         baseUrl: elBase.value.trim(),
-        rootPath: elRoot.value.trim() || '/flymd',
+        rootPath: normalizeRootPathInput(elRoot.value) || defaultRootPath,
         username: elUser.value,
         password: elPass.value,
         allowHttpInsecure: elAllowHttp.checked,

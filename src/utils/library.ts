@@ -92,6 +92,19 @@ export async function getActiveLibraryId(): Promise<string | null> {
   return libs[0]?.id ?? null
 }
 
+export async function getActiveLibrary(): Promise<Library | null> {
+  const libs = await getLibraries()
+  if (libs.length === 0) return null
+  const id = await getActiveLibraryId()
+  const lib = libs.find(x => x.id === id) ?? libs[0]
+  return lib ?? null
+}
+
+export async function getActiveLibraryName(): Promise<string | null> {
+  const lib = await getActiveLibrary()
+  return lib?.name ?? null
+}
+
 export async function setActiveLibraryId(id: string): Promise<void> {
   const store = await getStore()
   const libs = await getLibraries()
@@ -107,10 +120,7 @@ export async function setActiveLibraryId(id: string): Promise<void> {
 }
 
 export async function getActiveLibraryRoot(): Promise<string | null> {
-  const libs = await getLibraries()
-  if (libs.length === 0) return null
-  const id = await getActiveLibraryId()
-  const lib = libs.find(x => x.id === id) ?? libs[0]
+  const lib = await getActiveLibrary()
   return lib?.root ?? null
 }
 
