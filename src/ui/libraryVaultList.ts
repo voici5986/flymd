@@ -24,12 +24,18 @@ export function initLibraryVaultList(container: HTMLElement, deps: LibraryVaultL
       container.classList.remove('hidden')
       container.innerHTML = ''
 
-      for (const lib of visible) {
+      // 最多显示 8 个图标
+      const maxIcons = 8
+      const toShow = visible.slice(0, maxIcons)
+
+      for (const lib of toShow) {
         const btn = document.createElement('button')
         btn.type = 'button'
         btn.className = 'lib-vault-item' + (lib.id === activeId ? ' active' : '')
-        btn.textContent = lib.name || lib.id
-        btn.title = lib.root
+        // 显示库名首字母作为图标
+        const name = lib.name || lib.id
+        btn.textContent = name.charAt(0).toUpperCase()
+        btn.title = name
         btn.addEventListener('click', async () => {
           try {
             if (lib.id === activeId) return

@@ -1555,11 +1555,12 @@ body > .block-menu { display: none !important; }
 .library .lib-search-btn svg { width: 16px; height: 16px; }
 
 /* 库侧栏：库列表（多库快速切换） */
-.library .lib-vault-list { display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow: auto; padding: 2px 0; }
+/* 库图标栏 */
+.library .lib-vault-list { display: flex; flex-direction: row; gap: 4px; padding: 2px 8px; }
 .library .lib-vault-list.hidden { display: none; }
-.library .lib-vault-item { -webkit-app-region: no-drag; width: 100%; text-align: left; border: none; background: transparent; color: var(--muted); cursor: pointer; padding: 5px 8px; border-radius: var(--radius-md); font-size: 12px; transition: background var(--transition-fast), color var(--transition-fast); }
+.library .lib-vault-item { -webkit-app-region: no-drag; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; border-radius: 50%; font-size: 10px; font-weight: 500; transition: all var(--transition-fast); }
 .library .lib-vault-item:hover { background: var(--hover-bg); color: var(--fg); }
-.library .lib-vault-item.active { background: rgba(37, 99, 235, 0.12); color: var(--fg); font-weight: 600; }
+.library .lib-vault-item.active { border-color: var(--accent, #2563eb); color: var(--accent, #2563eb); background: transparent; }
 
 /* 快速文件搜索 Quick Switcher */
 .quick-search-overlay {
@@ -6346,6 +6347,20 @@ body.dark-mode .lib-vault-btn {
 
 body.dark-mode .lib-vault-btn:hover {
   background: var(--hover-bg) !important;
+}
+
+body.dark-mode .lib-vault-item {
+  background: transparent;
+  color: #6b7280;
+}
+body.dark-mode .lib-vault-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+}
+body.dark-mode .lib-vault-item.active {
+  border-color: #60a5fa;
+  color: #60a5fa;
+  background: transparent;
 }
 
 body.dark-mode .lib-search-btn {
