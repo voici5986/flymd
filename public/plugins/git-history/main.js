@@ -977,6 +977,22 @@ export async function activate(context) {
     }
   } catch {}
 
+  // 在 Ribbon 栏注册快捷按钮
+  if (typeof context.addRibbonButton === 'function') {
+    context.addRibbonButton({
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6"/><path d="M18 9a9 9 0 0 0-9 9"/></svg>',
+      iconType: 'svg',
+      title: gitText('打开 Git 版本管理侧栏', 'Open Git history sidebar'),
+      onClick: async () => {
+        ensurePanel(context)
+        setPanelVisible(!panelVisible)
+        if (panelVisible) {
+          await refreshAll(context)
+        }
+      }
+    })
+  }
+
   // 菜单：放到扩展菜单下
   context.addMenuItem({
     label: gitText('Git 版本', 'Git History'),
