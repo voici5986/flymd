@@ -1659,10 +1659,12 @@ fn main() {
   #[cfg(target_os = "macos")]
   let builder = builder.plugin(init_macos_open_plugin());
 
-  // 桌面端：给命令面板注册原生加速键 CmdOrCtrl+Shift+P。
-  // 关键点：PDF 预览是 iframe 加载本地 PDF，键盘事件不会冒泡到主文档；
-  //         只能靠原生层捕获，再转发给前端。
-  #[cfg(desktop)]
+  // 桌面端：不使用原生 Menu（Linux/GTK 会在窗口顶部生成 menubar），
+  // 所有菜单与快捷键入口统一放在前端 UI 内实现。
+  //
+  // 例外：Windows 上 PDF 预览使用 iframe 加载本地 PDF，键盘事件不会冒泡到主文档，
+  // 仅靠前端监听容易失效；这里保留一个“隐藏菜单 + 原生加速键”，用于稳定呼出命令面板。
+  #[cfg(all(desktop, target_os = "windows"))]
   let builder = builder
     .menu(|handle| {
       use tauri::menu::{Menu, MenuItem, Submenu};
@@ -1758,28 +1760,11 @@ fn main() {
       }
       // 其它初始化逻辑
       if let Some(win) = app.get_webview_window("main") {
-        // 非 macOS：默认隐藏菜单栏，避免新增菜单影响现有 UI（但加速键仍然可用）。
-        //
-        // 注意：Linux/GTK 下菜单栏（menubar）有时会在窗口“真正可见/realize”之后才挂载；
-        // 若在 setup 阶段过早调用 hide_menu，可能会静默失败，导致窗口顶部出现一条额外菜单栏。
-        // 这里做一次立即隐藏 + Linux 下延迟重试，确保不露出 menubar。
-        #[cfg(not(target_os = "macos"))]
+        // Windows：隐藏 menubar 但保留加速键（用于 PDF iframe 场景下也能呼出命令面板）。
+        #[cfg(target_os = "windows")]
         {
-          let _ = win.hide_menu();
           let _ = app.handle().hide_menu();
-
-          #[cfg(target_os = "linux")]
-          {
-            let win2 = win.clone();
-            let app2 = app.handle().clone();
-            std::thread::spawn(move || {
-              for _ in 0..10 {
-                std::thread::sleep(Duration::from_millis(50));
-                let _ = app2.hide_menu();
-                let _ = win2.hide_menu();
-              }
-            });
-          }
+          let _ = win.hide_menu();
         }
 
         #[cfg(target_os = "windows")]
