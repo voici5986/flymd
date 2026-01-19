@@ -1341,6 +1341,21 @@ async function deleteRecord(context, rec) {
 export async function activate(context) {
   // 插件激活时只挂菜单，不做其他副作用
   _ctx = context
+
+  // 在 Ribbon 栏注册快捷按钮
+  if (typeof context.addRibbonButton === 'function') {
+    context.addRibbonButton({
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
+      iconType: 'svg',
+      title: s3gText('查看并管理图床图片', 'Browse and manage images'),
+      onClick: async () => {
+        const panel = ensurePanel(context)
+        panel.style.display = 'flex'
+        await refreshList(context)
+      }
+    })
+  }
+
   context.addMenuItem({
     label: s3gText('图床相册', 'Image Gallery'),
     title: s3gText('查看并管理图床图片（S3/R2 或 ImgLa）', 'Browse and manage images from S3/R2 or ImgLa'),
