@@ -7,6 +7,9 @@ const CFG_KEY = 'aiNovel.config'
 const DRAFT_KEY = 'aiNovel.lastDraft'
 const AI_LOCALE_LS_KEY = 'flymd.locale'
 
+// 资料文件：全局硬约束（每次咨询/续写/全自动续写都自动注入到 constraints）
+const AIN_GLOBAL_HARD_CONSTRAINTS_FILE = '09_全局硬约束.md'
+
 // fetch 的硬超时：避免网络/CORS 卡死导致 UI 永久无响应（给足时间，不影响正常长请求）
 const API_FETCH_TIMEOUT_MS = 200000
 
@@ -1435,6 +1438,59 @@ async function getBibleDocText(ctx, cfg) {
   }
 }
 
+function _ainGlobalHardConstraintsDocTemplate() {
+  return t(
+    '# 全局硬约束\n\n- （可选：语气、节奏、视角、禁写项、变更单……每章都生效）\n',
+    '# Global hard constraints\n\n- (Optional: tone/pacing/POV/no-go/change log... Applies to every chapter)\n'
+  )
+}
+
+function _ainStripDocHeading(mdText) {
+  try {
+    const t0 = _ainDiffNormEol(safeText(mdText || '')).replace(/^\uFEFF/, '')
+    const lines = t0.split('\n')
+    let i = 0
+    while (i < lines.length && !String(lines[i] || '').trim()) i++
+    if (i < lines.length && /^#\s+/.test(String(lines[i] || ''))) {
+      i++
+      while (i < lines.length && !String(lines[i] || '').trim()) i++
+    }
+    return lines.slice(i).join('\n').trim()
+  } catch {
+    return safeText(mdText || '').trim()
+  }
+}
+
+async function getGlobalHardConstraintsDocText(ctx, cfg) {
+  try {
+    if (!ctx) return ''
+    const inf = await inferProjectDir(ctx, cfg)
+    if (!inf) return ''
+    const abs = joinFsPath(inf.projectAbs, AIN_GLOBAL_HARD_CONSTRAINTS_FILE)
+    const raw = safeText(await readTextAny(ctx, abs))
+    const s = _ainStripDocHeading(raw).trim()
+    if (!s) return ''
+    const lim = (cfg && cfg.ctx && cfg.ctx.maxGlobalHardConstraintsChars != null)
+      ? Math.max(0, cfg.ctx.maxGlobalHardConstraintsChars | 0)
+      : 7000
+    return sliceHeadTail(s, Math.max(200, lim), 0.6).trim()
+  } catch {
+    return ''
+  }
+}
+
+async function writeGlobalHardConstraintsDoc(ctx, cfg, hardConstraintsText) {
+  if (!ctx) throw new Error(t('写入失败：ctx 为空', 'Write failed: ctx missing'))
+  const inf = await inferProjectDir(ctx, cfg)
+  if (!inf) throw new Error(t('未发现项目：请先创建/选择项目', 'No project: create/select a project first'))
+
+  const abs = joinFsPath(inf.projectAbs, AIN_GLOBAL_HARD_CONSTRAINTS_FILE)
+  const body = safeText(hardConstraintsText || '').trim()
+  const doc = body ? ('# 全局硬约束\n\n' + body + '\n') : '# 全局硬约束\n\n'
+  await writeTextAny(ctx, abs, doc)
+  return { abs, projectRel: inf.projectRel, file: AIN_GLOBAL_HARD_CONSTRAINTS_FILE }
+}
+
 function _ainCharStateSplitH2Blocks(mdText) {
   const text = _ainDiffNormEol(mdText)
   const re = /^##\s+.*$/gm
@@ -1658,15 +1714,27 @@ async function style_append_block(ctx, cfg, blockText, title) {
 
 async function mergeConstraintsWithCharStateOnly(ctx, cfg, localConstraints) {
   // 仅注入“人物状态”，用于生成/更新其它资料文件时避免把“人物风格”自身循环塞回去
-  const base = mergeConstraints(cfg, localConstraints)
+  const g = getGlobalConstraints(cfg)
+  const l = (localConstraints == null ? '' : String(localConstraints)).trim()
+  const doc = await getGlobalHardConstraintsDocText(ctx, cfg)
   try {
     const cs = await getCharStateConstraintsText(ctx, cfg)
-    if (!cs) return base
-    if (base && /【人物状态/u.test(base)) return base
-    if (base) return base + '\n\n' + cs
+
+    let out = ''
+    if (g) out = g
+    if (doc && !(out && /【全局硬约束/u.test(out))) {
+      out = out ? (out + '\n\n' + '【全局硬约束】\n' + doc) : ('【全局硬约束】\n' + doc)
+    }
+    if (l) out = out ? (out + '\n' + l) : l
+
+    if (!cs) return out
+    if (out && /【人物状态/u.test(out)) return out
+    if (out) return out + '\n\n' + cs
     return cs
   } catch {
-    return base
+    const base = mergeConstraints(cfg, localConstraints)
+    if (!doc || (base && /【全局硬约束/u.test(base))) return base
+    return base ? (base + '\n\n' + '【全局硬约束】\n' + doc) : ('【全局硬约束】\n' + doc)
   }
 }
 
@@ -5557,6 +5625,39 @@ async function openWriteWithChoiceDialog(ctx) {
   )
   sec.appendChild(extra.wrap)
 
+  const rowGlobalHard = mkBtnRow()
+  const btnWriteGlobalHard = document.createElement('button')
+  btnWriteGlobalHard.className = 'ain-btn gray'
+  btnWriteGlobalHard.textContent = t('写入/覆盖全局硬约束资料', 'Write/overwrite global constraints meta')
+  rowGlobalHard.appendChild(btnWriteGlobalHard)
+  sec.appendChild(rowGlobalHard)
+  const hintGlobalHard = document.createElement('div')
+  hintGlobalHard.className = 'ain-muted'
+  hintGlobalHard.textContent = t(
+    '备注：为全局硬约束将写入文件 ' + AIN_GLOBAL_HARD_CONSTRAINTS_FILE + ' 作为每章撰写的硬约束。',
+    'Note: Writes into ' + AIN_GLOBAL_HARD_CONSTRAINTS_FILE + ' as global hard constraints for every chapter.'
+  )
+  sec.appendChild(hintGlobalHard)
+
+  btnWriteGlobalHard.onclick = async () => {
+    try {
+      cfg = await loadCfg(ctx)
+      const body = safeText(extra.ta.value).trim()
+      const action = body ? t('写入/覆盖', 'Write/overwrite') : t('清空', 'Clear')
+      const ok = await _ainConfirm(
+        action +
+        t('全局硬约束：将写入文件 ', ' global hard constraints into ') +
+        AIN_GLOBAL_HARD_CONSTRAINTS_FILE +
+        t('。\n\n继续？', '\n\nContinue?')
+      )
+      if (!ok) return
+      const r = await writeGlobalHardConstraintsDoc(ctx, cfg, body)
+      ctx.ui.notice(t('已写入全局硬约束：', 'Global hard constraints written: ') + r.file, 'ok', 2000)
+    } catch (e) {
+      ctx.ui.notice(t('写入失败：', 'Write failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
   // 网文排版：仅对“生成的正文”做前端提行；不改 prompt，避免引入成本与不确定性
   const typesetLine = document.createElement('label')
   typesetLine.style.display = 'flex'
@@ -7744,6 +7845,39 @@ async function openAutoWriteDialog(ctx) {
   )
   sec.appendChild(inpExtra.wrap)
 
+  const rowGlobalHard = mkBtnRow()
+  const btnWriteGlobalHard = document.createElement('button')
+  btnWriteGlobalHard.className = 'ain-btn gray'
+  btnWriteGlobalHard.textContent = t('写入/覆盖全局硬约束资料', 'Write/overwrite global constraints meta')
+  rowGlobalHard.appendChild(btnWriteGlobalHard)
+  sec.appendChild(rowGlobalHard)
+  const hintGlobalHard = document.createElement('div')
+  hintGlobalHard.className = 'ain-muted'
+  hintGlobalHard.textContent = t(
+    '备注：为全局硬约束将写入文件 ' + AIN_GLOBAL_HARD_CONSTRAINTS_FILE + ' 作为每章撰写的硬约束。',
+    'Note: Writes into ' + AIN_GLOBAL_HARD_CONSTRAINTS_FILE + ' as global hard constraints for every chapter.'
+  )
+  sec.appendChild(hintGlobalHard)
+
+  btnWriteGlobalHard.onclick = async () => {
+    try {
+      cfg = await loadCfg(ctx)
+      const body = safeText(inpExtra.ta.value).trim()
+      const action = body ? t('写入/覆盖', 'Write/overwrite') : t('清空', 'Clear')
+      const ok = await _ainConfirm(
+        action +
+        t('全局硬约束：将写入文件 ', ' global hard constraints into ') +
+        AIN_GLOBAL_HARD_CONSTRAINTS_FILE +
+        t('。\n\n继续？', '\n\nContinue?')
+      )
+      if (!ok) return
+      const r = await writeGlobalHardConstraintsDoc(ctx, cfg, body)
+      ctx.ui.notice(t('已写入全局硬约束：', 'Global hard constraints written: ') + r.file, 'ok', 2000)
+    } catch (e) {
+      ctx.ui.notice(t('写入失败：', 'Write failed: ') + (e && e.message ? e.message : String(e)), 'err', 2600)
+    }
+  }
+
   const autoTitleLine = document.createElement('label')
   autoTitleLine.style.display = 'flex'
   autoTitleLine.style.gap = '8px'
@@ -9572,19 +9706,28 @@ function mergeConstraints(cfg, localConstraints) {
 }
 
 async function mergeConstraintsWithCharState(ctx, cfg, localConstraints) {
-  const base = mergeConstraints(cfg, localConstraints)
+  const g = getGlobalConstraints(cfg)
+  const l = (localConstraints == null ? '' : String(localConstraints)).trim()
+  const doc = await getGlobalHardConstraintsDocText(ctx, cfg)
   try {
     const cs = await getCharStateConstraintsText(ctx, cfg)
     const st = await getStyleConstraintsText(ctx, cfg)
 
-    let out = base
+    let out = ''
+    if (g) out = g
+    if (doc && !(out && /【全局硬约束/u.test(out))) {
+      out = out ? (out + '\n\n' + '【全局硬约束】\n' + doc) : ('【全局硬约束】\n' + doc)
+    }
+    if (l) out = out ? (out + '\n' + l) : l
     // 用户手动写了【人物状态】就别重复注入
     if (cs && !(out && /【人物状态/u.test(out))) out = out ? (out + '\n\n' + cs) : cs
     // 用户手动写了【人物风格】就别重复注入
     if (st && !(out && /【人物风格/u.test(out))) out = out ? (out + '\n\n' + st) : st
     return out
   } catch {
-    return base
+    const base = mergeConstraints(cfg, localConstraints)
+    if (!doc || (base && /【全局硬约束/u.test(base))) return base
+    return base ? (base + '\n\n' + '【全局硬约束】\n' + doc) : ('【全局硬约束】\n' + doc)
   }
 }
 
@@ -11450,6 +11593,7 @@ async function openBootstrapDialog(ctx) {
     await writeTextAny(ctx, joinFsPath(projectAbs, '04_人物关系.md'), safeText(rels.ta.value).trim() || t('# 人物关系\n\n- A ↔ B：关系/矛盾/利益\n', '# Relations\n\n- A ↔ B: relation/conflict/stakes\n'))
     await writeTextAny(ctx, joinFsPath(projectAbs, '05_章节大纲.md'), safeText(outline.ta.value).trim() || t('# 章节大纲\n\n- 第 1 章：\n- 第 2 章：\n', '# Outline\n\n- Chapter 1:\n- Chapter 2:\n'))
     await writeTextAny(ctx, joinFsPath(projectAbs, '06_人物状态.md'), t('# 人物状态\n\n- （自动维护：每次更新会追加一个“快照”，用于续写上下文）\n', '# Character states\n\n- (Auto-maintained snapshots for writing context)\n'))
+    await writeTextAny(ctx, joinFsPath(projectAbs, AIN_GLOBAL_HARD_CONSTRAINTS_FILE), _ainGlobalHardConstraintsDocTemplate())
     await writeTextAny(ctx, joinFsPath(projectAbs, '.ainovel/index.json'), JSON.stringify({ version: 1, created_at: now }, null, 2))
   
     cfg = await saveCfg(ctx, { currentProjectRel: projectRel })
@@ -13102,7 +13246,7 @@ async function openImportExistingDialog(ctx) {
     try {
       if (!(await fileExists(ctx, joinFsPath(base, '00_项目.md')))) {
         const name = inf.projectName || safeFileName(fsBaseName(base), '项目')
-        const metaMd = ['# ' + name, '', '- 本项目由“导入现有文稿（初始化资料）”创建资料文件。', '- 资料文件：01_进度脉络/02_世界设定/03_主要角色/04_人物关系/05_章节大纲/06_人物状态', ''].join('\n')
+        const metaMd = ['# ' + name, '', '- 本项目由“导入现有文稿（初始化资料）”创建资料文件。', '- 资料文件：01_进度脉络/02_世界设定/03_主要角色/04_人物关系/05_章节大纲/06_人物状态/09_全局硬约束', ''].join('\n')
         await writeTextAny(ctx, joinFsPath(base, '00_项目.md'), metaMd)
       }
     } catch {}
@@ -13112,6 +13256,7 @@ async function openImportExistingDialog(ctx) {
     try { if (!(await fileExists(ctx, joinFsPath(base, '04_人物关系.md')))) await writeTextAny(ctx, joinFsPath(base, '04_人物关系.md'), '# 人物关系\n\n') } catch {}
     try { if (!(await fileExists(ctx, joinFsPath(base, '05_章节大纲.md')))) await writeTextAny(ctx, joinFsPath(base, '05_章节大纲.md'), '# 章节大纲\n\n') } catch {}
     try { if (!(await fileExists(ctx, joinFsPath(base, '06_人物状态.md')))) await writeTextAny(ctx, joinFsPath(base, '06_人物状态.md'), '# 人物状态\n\n') } catch {}
+    try { if (!(await fileExists(ctx, joinFsPath(base, AIN_GLOBAL_HARD_CONSTRAINTS_FILE)))) await writeTextAny(ctx, joinFsPath(base, AIN_GLOBAL_HARD_CONSTRAINTS_FILE), _ainGlobalHardConstraintsDocTemplate()) } catch {}
   }
 
   btnWrite.onclick = async () => {
@@ -14205,11 +14350,15 @@ async function openProjectManagerDialog(ctx) {
       ctx.ui.notice(t('当前环境不支持打开文件', 'openFileByPath not available'), 'err', 2000)
       return
     }
-    const files = ['01_进度脉络.md', '02_世界设定.md', '03_主要角色.md', '04_人物关系.md', '05_章节大纲.md', '06_人物状态.md']
+    const files = ['01_进度脉络.md', '02_世界设定.md', '03_主要角色.md', '04_人物关系.md', '05_章节大纲.md', '06_人物状态.md', AIN_GLOBAL_HARD_CONSTRAINTS_FILE]
     for (let i = 0; i < files.length; i++) {
       const p = joinFsPath(it.projectAbs, files[i])
       if (!(await fileExists(ctx, p))) {
-        await writeTextAny(ctx, p, '# ' + files[i].replace(/\\.md$/i, '') + '\n')
+        if (files[i] === AIN_GLOBAL_HARD_CONSTRAINTS_FILE) {
+          await writeTextAny(ctx, p, _ainGlobalHardConstraintsDocTemplate())
+        } else {
+          await writeTextAny(ctx, p, '# ' + files[i].replace(/\\.md$/i, '') + '\n')
+        }
       }
       try { await ctx.openFileByPath(p) } catch {}
     }
