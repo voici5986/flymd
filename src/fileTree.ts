@@ -101,6 +101,10 @@ let _watchRefreshTimer: number | null = null
 let _watchRefreshRunning = false
 let _watchRefreshPending = false
 
+// 渲染也可能被多处触发（切库/监听/手动刷新），必须支持“后来的覆盖先来的”，避免中途清空造成闪烁
+let _renderJobId = 0
+let _renderLoadingTimer: number | null = null
+
 function resetWatchRefreshScheduler() {
   try {
     if (_watchRefreshTimer != null) {
@@ -1115,82 +1119,109 @@ async function buildDir(root: string, dir: string, parent: HTMLElement) {
 }
 
 async function renderRoot(root: string) {
-  if (!state.container) return
-  state.container.innerHTML = ''
-  const topRow = document.createElement('div')
-  topRow.className = 'lib-node lib-dir'
-  ;(topRow as any).dataset.path = root
-  const tg = makeTg(); const ico = makeFolderIcon(root, true); const label = document.createElement('span'); label.className='lib-name'; label.textContent = nameOf(root) || root
-  // 根目录也可能被省略号截断：悬浮显示完整路径
-  label.title = root
-  topRow.title = root
-  topRow.appendChild(tg); topRow.appendChild(ico); topRow.appendChild(label)
-  const kids = document.createElement('div')
-  kids.className = 'lib-children'
-  state.container.appendChild(topRow)
-  state.container.appendChild(kids)
-  const rootExpanded = state.expanded.has(root)
-  topRow.classList.toggle('expanded', rootExpanded)
-  kids.style.display = rootExpanded ? '' : 'none'
-  if (rootExpanded) await buildDir(root, root, kids)
+  const container = state.container
+  if (!container) return
 
-  // 刷新后恢复选中态
+  const jobId = ++_renderJobId
+  // 上一次渲染可能还在跑：先取消它的“加载提示”，并把旧树保留在屏幕上
   try {
-    if (state.selected) {
-      const all = Array.from(state.container.querySelectorAll('.lib-node')) as HTMLElement[]
-      const hit = all.find((el) => (el as any).dataset?.path === state.selected)
-      if (hit) { hit.classList.add('selected') }
-    }
-  } catch {}
-
-  // 根节点的拖放处理
-  topRow.addEventListener('dragover', (ev) => {
-    ev.preventDefault()
-    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
-    topRow.classList.add('selected')
-    console.log('[拖动] 拖动到根文件夹:', root)
-  })
-  topRow.addEventListener('dragenter', (ev) => { try { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'; topRow.classList.add('selected') } catch {} })
-  topRow.addEventListener('dragleave', () => { topRow.classList.remove('selected') })
-  topRow.addEventListener('drop', async (ev) => {
     try {
-      ev.preventDefault(); topRow.classList.remove('selected')
-      const src = ev.dataTransfer?.getData('text/plain') || ''
-      if (!src) return
-      const dst = join(root, nameOf(src))
-      if (src === dst) return
-      if (!isInside(root, src) || !isInside(root, dst)) return alert(t('ft.move.within'))
-      let finalDst = dst
-      if (await exists(dst)) {
-        const choice = await conflictModal(t('ft.exists'), [t('action.overwrite'), t('action.renameAuto'), t('action.cancel')], 1)
-        if (choice === 2) return
-        if (choice === 1) {
-          const nm = nameOf(src)
-          const stem = nm.replace(/(\.[^.]+)$/,''); const ext = nm.match(/(\.[^.]+)$/)?.[1] || ''
-          let i=1, cand=''
-          do { cand = `${stem} ${++i}${ext}` } while (await exists(join(root, cand)))
-          finalDst = join(root, cand)
-          await moveFileSafe(src, finalDst)
+      if (_renderLoadingTimer != null) { clearTimeout(_renderLoadingTimer); _renderLoadingTimer = null }
+      try { container.style.opacity = '' } catch {}
+      _renderLoadingTimer = window.setTimeout(() => {
+        try {
+          if (_renderJobId !== jobId) return
+          if (state.container !== container) return
+          container.style.opacity = '0.65'
+        } catch {}
+      }, 120)
+    } catch {}
+    const topRow = document.createElement('div')
+    topRow.className = 'lib-node lib-dir'
+    ;(topRow as any).dataset.path = root
+    const tg = makeTg(); const ico = makeFolderIcon(root, true); const label = document.createElement('span'); label.className='lib-name'; label.textContent = nameOf(root) || root
+    // 根目录也可能被省略号截断：悬浮显示完整路径
+    label.title = root
+    topRow.title = root
+    topRow.appendChild(tg); topRow.appendChild(ico); topRow.appendChild(label)
+    const kids = document.createElement('div')
+    kids.className = 'lib-children'
+    const rootExpanded = state.expanded.has(root)
+    topRow.classList.toggle('expanded', rootExpanded)
+    kids.style.display = rootExpanded ? '' : 'none'
+    if (rootExpanded) await buildDir(root, root, kids)
+
+    // 关键点：直到新树准备好，才一次性替换旧树；中间不出现“空白态”，自然就不闪
+    if (_renderJobId !== jobId) return
+    if (state.container !== container) return
+    container.replaceChildren(topRow, kids)
+
+    // 刷新后恢复选中态
+    try {
+      if (state.selected) {
+        const all = Array.from(container.querySelectorAll('.lib-node')) as HTMLElement[]
+        const hit = all.find((el) => (el as any).dataset?.path === state.selected)
+        if (hit) { hit.classList.add('selected') }
+      }
+    } catch {}
+
+    // 根节点的拖放处理
+    topRow.addEventListener('dragover', (ev) => {
+      ev.preventDefault()
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
+      topRow.classList.add('selected')
+      console.log('[拖动] 拖动到根文件夹:', root)
+    })
+    topRow.addEventListener('dragenter', (ev) => { try { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'; topRow.classList.add('selected') } catch {} })
+    topRow.addEventListener('dragleave', () => { topRow.classList.remove('selected') })
+    topRow.addEventListener('drop', async (ev) => {
+      try {
+        ev.preventDefault(); topRow.classList.remove('selected')
+        const src = ev.dataTransfer?.getData('text/plain') || ''
+        if (!src) return
+        const dst = join(root, nameOf(src))
+        if (src === dst) return
+        if (!isInside(root, src) || !isInside(root, dst)) return alert(t('ft.move.within'))
+        let finalDst = dst
+        if (await exists(dst)) {
+          const choice = await conflictModal(t('ft.exists'), [t('action.overwrite'), t('action.renameAuto'), t('action.cancel')], 1)
+          if (choice === 2) return
+          if (choice === 1) {
+            const nm = nameOf(src)
+            const stem = nm.replace(/(\.[^.]+)$/,''); const ext = nm.match(/(\.[^.]+)$/)?.[1] || ''
+            let i=1, cand=''
+            do { cand = `${stem} ${++i}${ext}` } while (await exists(join(root, cand)))
+            finalDst = join(root, cand)
+            await moveFileSafe(src, finalDst)
+          } else {
+            await moveFileSafe(src, dst)
+          }
         } else {
           await moveFileSafe(src, dst)
         }
-      } else {
-        await moveFileSafe(src, dst)
-      }
-      try { await state.opts?.onMoved?.(src, finalDst) } catch {}
-      await refresh()
-      console.log('[拖动] 移动完成:', src, '→', finalDst)
-    } catch (err) { console.error('[拖动] 移动失败:', err) }
-  })
+        try { await state.opts?.onMoved?.(src, finalDst) } catch {}
+        await refresh()
+        console.log('[拖动] 移动完成:', src, '→', finalDst)
+      } catch (err) { console.error('[拖动] 移动失败:', err) }
+    })
 
-  topRow.addEventListener('click', async () => {
-    const was = state.expanded.has(root)
-    const now = !was
-    setExpandedState(root, now)
-    kids.style.display = now ? '' : 'none'
-    topRow.classList.toggle('expanded', now)
-    if (now && kids.childElementCount === 0) await buildDir(root, root, kids)
-  })
+    topRow.addEventListener('click', async () => {
+      const was = state.expanded.has(root)
+      const now = !was
+      setExpandedState(root, now)
+      kids.style.display = now ? '' : 'none'
+      topRow.classList.toggle('expanded', now)
+      if (now && kids.childElementCount === 0) await buildDir(root, root, kids)
+    })
+  } finally {
+    // 只有当前任务才能收尾，避免旧任务把新任务的 loading/透明度干掉
+    try {
+      if (_renderJobId === jobId) {
+        if (_renderLoadingTimer != null) { clearTimeout(_renderLoadingTimer); _renderLoadingTimer = null }
+        try { container.style.opacity = '' } catch {}
+      }
+    } catch {}
+  }
 }
 
 // 内部刷新函数，不重新设置监听
@@ -1269,6 +1300,10 @@ async function refresh() {
 async function init(container: HTMLElement, opts: FileTreeOptions) {
   state.container = container; state.opts = opts
   loadFolderOrder()
+  // 视觉上“别闪”：我们会保留旧树直到新树准备好，这里再补一个轻量淡化过渡
+  try {
+    if (!container.style.transition) container.style.transition = 'opacity 0.12s ease'
+  } catch {}
   // 兜底：在整个文件树区域内允许 dragover，避免出现全局"禁止"光标
   try {
     container.addEventListener('dragover', (ev) => { ev.preventDefault() })

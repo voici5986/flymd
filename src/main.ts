@@ -7219,6 +7219,7 @@ async function refreshLibraryUiAndTree(refreshTree = true) {
 
   if (!refreshTree) return
   try {
+    try { const s = await getLibrarySort(); fileTree.setSort(s) } catch {}
     const treeEl = document.getElementById('lib-tree') as HTMLDivElement | null
     if (treeEl && !fileTreeReady) {
       await fileTree.init(treeEl, {
@@ -7231,7 +7232,6 @@ async function refreshLibraryUiAndTree(refreshTree = true) {
     } else if (treeEl) {
       await fileTree.refresh()
     }
-    try { const s = await getLibrarySort(); fileTree.setSort(s); await fileTree.refresh() } catch {}
   } catch {}
 }
 
@@ -8832,6 +8832,7 @@ function bindEvents() {
     let root = await getLibraryRoot()
     if (!root) root = await pickLibraryRoot()
     try { await refreshLibraryUiAndTree(false) } catch {}
+    try { const s = await getLibrarySort(); fileTree.setSort(s) } catch {}
     const treeEl = document.getElementById('lib-tree') as HTMLDivElement | null
     if (treeEl && !fileTreeReady) {
       await fileTree.init(treeEl, {
@@ -8844,7 +8845,6 @@ function bindEvents() {
     } else if (treeEl) {
       await fileTree.refresh()
     }
-    try { const s = await getLibrarySort(); fileTree.setSort(s); await fileTree.refresh() } catch {}
   }
 
   // Ribbon 文件树切换按钮
@@ -9385,7 +9385,7 @@ function bindEvents() {
     const chooseBtn = document.getElementById('lib-choose') as HTMLButtonElement | null
     const refreshBtn = document.getElementById('lib-refresh') as HTMLButtonElement | null
     if (chooseBtn) chooseBtn.addEventListener('click', guard(async () => { await showLibraryMenu() }))
-    if (refreshBtn) refreshBtn.addEventListener('click', guard(async () => { const treeEl = document.getElementById('lib-tree') as HTMLDivElement | null; if (treeEl && !fileTreeReady) { await fileTree.init(treeEl, { getRoot: getLibraryRoot, onOpenFile: async (p: string) => { await openFile2(p) }, onOpenNewFile: async (p: string) => { await openFile2(p); mode='edit'; preview.classList.add('hidden'); try { (editor as HTMLTextAreaElement).focus() } catch {} }, onMoved: async (src: string, dst: string) => { try { if (currentFilePath === src) { currentFilePath = dst as any; refreshTitle() } } catch {} } }); fileTreeReady = true } else if (treeEl) { await fileTree.refresh() } try { const s = await getLibrarySort(); fileTree.setSort(s); await fileTree.refresh() } catch {} }))
+  if (refreshBtn) refreshBtn.addEventListener('click', guard(async () => { try { const s = await getLibrarySort(); fileTree.setSort(s) } catch {} const treeEl = document.getElementById('lib-tree') as HTMLDivElement | null; if (treeEl && !fileTreeReady) { await fileTree.init(treeEl, { getRoot: getLibraryRoot, onOpenFile: async (p: string) => { await openFile2(p) }, onOpenNewFile: async (p: string) => { await openFile2(p); mode='edit'; preview.classList.add('hidden'); try { (editor as HTMLTextAreaElement).focus() } catch {} }, onMoved: async (src: string, dst: string) => { try { if (currentFilePath === src) { currentFilePath = dst as any; refreshTitle() } } catch {} } }); fileTreeReady = true } else if (treeEl) { await fileTree.refresh() } }))
   } catch {}
   // 关于弹窗：点击遮罩或“关闭”按钮关闭
   const overlay = document.getElementById('about-overlay') as HTMLDivElement | null
