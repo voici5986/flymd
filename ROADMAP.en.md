@@ -2,6 +2,17 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v1.2.4
+- Added: Option to insert local images using relative paths (e.g. `images/xxx.png`) for better cross-device sync (toggle in Image Host settings)
+- Added: Improved local image save path strategy: prefer `images/` next to the current document; for unsaved docs use the default paste directory (fallback to the user Pictures directory)
+- Added: Library settings dialog: sidebar visibility toggle, custom ordering, and per-library WebDAV toggle + remote root path
+- Improved: Library sidebar vault list supports showing multiple libraries for quick switching, with styling tweaks
+- Improved: WebDAV default remote root is now derived from the current library name/path (keeps legacy `/flymd` behavior for existing configured setups)
+- Updated: Built-in “Image Gallery” v0.1.8 (time-based sorting)
+- Updated: Built-in “AI Assistant” v0.4.6 (styling tweaks)
+- Updated: Built-in “AI Novel Engine” v0.6.8
+- Fixed: Menubar issues on Linux; on Windows, hide the menubar on startup while keeping accelerators
+
 ## Update v1.2.3
 - Added: Built-in WebDAV sync log viewer (highlights the latest sync session; one-click clear; configurable retention days with auto-pruning)
 - Improved: Built-in “Git History” v0.1.4 (Ribbon shortcut; reduced Windows console flicker when spawning `git` via `CREATE_NO_WINDOW`)
