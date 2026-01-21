@@ -53,15 +53,6 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
             <span id="lib-settings-cur-name"></span>
           </div>
 
-          <label>${t('lib.settings.sidebar') || '库切换器显示'}</label>
-          <div class="upl-inline-row">
-            <label class="switch" for="lib-settings-sidebar-visible">
-              <input id="lib-settings-sidebar-visible" type="checkbox"/>
-              <span class="slider"></span>
-            </label>
-            <span class="upl-hint">${t('lib.settings.sidebar.hint') || '影响侧栏内/垂直标题栏的库切换器；不影响顶部切换菜单'}</span>
-          </div>
-
           <label>${t('lib.settings.switcher') || '库切换位置'}</label>
           <div class="upl-inline-row">
             <select id="lib-settings-switcher-pos" class="lib-settings-select">
@@ -116,7 +107,6 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
   overlay.querySelector('#lib-settings-cancel')?.addEventListener('click', close)
 
   const elCurName = overlay.querySelector('#lib-settings-cur-name') as HTMLSpanElement
-  const elSidebarVisible = overlay.querySelector('#lib-settings-sidebar-visible') as HTMLInputElement
   const elSwitcherPos = overlay.querySelector('#lib-settings-switcher-pos') as HTMLSelectElement
   const elWebdavEnabled = overlay.querySelector('#lib-settings-webdav-enabled') as HTMLInputElement
   const elWebdavRoot = overlay.querySelector('#lib-settings-webdav-root') as HTMLInputElement
@@ -162,7 +152,6 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
       if (!selectedLibId) return
       const lib = libs0.find(x => x.id === selectedLibId)
       elCurName.textContent = lib?.name || (t('lib.menu') || '库')
-      elSidebarVisible.checked = draftSidebarVisible.get(selectedLibId) !== false
       const w = draftWebdav.get(selectedLibId)
       if (w) {
         elWebdavEnabled.checked = !!w.enabled
@@ -190,14 +179,6 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
     await ensureWebdavDraftLoaded(selectedLibId)
     syncSelectedUiFromDraft()
   }
-
-  elSidebarVisible.addEventListener('change', () => {
-    try {
-      if (!selectedLibId) return
-      draftSidebarVisible.set(selectedLibId, !!elSidebarVisible.checked)
-      renderList()
-    } catch {}
-  })
 
   elWebdavEnabled.addEventListener('change', () => {
     try {
@@ -268,7 +249,6 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
         cb.addEventListener('change', () => {
           try {
             draftSidebarVisible.set(lib.id, !!cb.checked)
-            if (lib.id === selectedLibId) elSidebarVisible.checked = !!cb.checked
           } catch {}
         })
         const cbText = document.createElement('span')
@@ -329,7 +309,6 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
 
   overlay.querySelector('#lib-settings-save')?.addEventListener('click', async () => {
     try {
-      if (selectedLibId) draftSidebarVisible.set(selectedLibId, !!elSidebarVisible.checked)
       const vis: Record<string, boolean> = {}
       for (const [k, v] of draftSidebarVisible.entries()) vis[k] = !!v
       await applyLibrariesSettings({ orderIds: draftOrderIds, sidebarVisibleById: vis })
