@@ -7529,7 +7529,7 @@ const _quickSearch = createQuickSearch({
 })
 async function showQuickSearch() { await _quickSearch.show() }
 
-// 库选择菜单：列出已保存库、切换/新增/重命名/删除
+// 库选择菜单：列出已保存库并切换；库的增删改名统一放到“库设置”
 async function showLibraryMenu() {
   // 优先使用 ribbon 顶部的库选择器按钮，回退到旧版 lib-choose
   const anchor = (document.getElementById('btn-library') || document.getElementById('lib-choose')) as HTMLButtonElement | null
@@ -7553,27 +7553,9 @@ async function showLibraryMenu() {
     items.push({ label: (t('lib.settings.title') || '库设置') + '…', action: async () => {
       try {
         await openLibrarySettingsDialog({
-          onRefreshUi: async () => { await refreshLibraryUiAndTree(false) },
+          onRefreshUi: async (opt) => { await refreshLibraryUiAndTree(!!opt?.rebuildTree) },
         })
       } catch {}
-    } })
-    items.push({ label: '新增库…', action: async () => { const p = await pickLibraryRoot(); if (p) await refreshLibraryUiAndTree(true) } })
-    items.push({ label: '重命名当前库…', action: async () => {
-      const id = await getActiveLibraryId(); if (!id) return
-      const libs2 = await getLibraries()
-      const cur = libs2.find(x => x.id === id)
-      const oldName = cur?.name || ''
-      const name = await openRenameDialog(oldName, '')
-      if (!name || name === oldName) return
-      try { await renameLib(id, name) } catch {}
-      await refreshLibraryUiAndTree(false)
-    } })
-    items.push({ label: '删除当前库', action: async () => {
-      const id = await getActiveLibraryId(); if (!id) return
-      const ok = await ask('确认删除当前库？')
-      if (!ok) return
-      try { await removeLib(id) } catch {}
-      await refreshLibraryUiAndTree(true)
     } })
     showTopMenu(anchor, items)
   } catch {}

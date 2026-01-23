@@ -3780,6 +3780,8 @@ body.sticky-note-mode .width-bubble {
 /* 插入链接 对话框 */
 .link-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 60; }
 .link-overlay.hidden { display: none; }
+/* 重命名对话框需要覆盖在“库设置”等 upl-overlay 之上 */
+#rename-overlay { z-index: 80; }
 .link-dialog { width: 420px; max-width: calc(100% - 40px); background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .link-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; }
 .link-body { padding: 14px 16px 16px 16px; }
@@ -4186,17 +4188,41 @@ body.sticky-note-mode .width-bubble {
 .lib-settings-cur { display: flex; align-items: center; min-height: 28px; font-weight: 600; }
 .lib-settings-sep { height: 1px; background: var(--border); margin: 16px 0; opacity: 0.9; }
 .lib-settings-subtitle { font-size: 13px; font-weight: 700; color: var(--fg); margin-bottom: 10px; opacity: 0.9; }
+.lib-settings-subtitle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.lib-settings-subtitle-row .lib-settings-subtitle { margin-bottom: 0; }
+.lib-settings-add-btn { flex-shrink: 0; }
+.lib-settings-subtitle-row button.btn-secondary {
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: rgba(127,127,127,0.08);
+  color: var(--fg);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition-normal);
+  white-space: nowrap;
+}
+.lib-settings-subtitle-row button.btn-secondary:hover:not(:disabled) {
+  background: var(--active-bg);
+  transform: translateY(-1px);
+}
 .lib-settings-list { display: flex; flex-direction: column; gap: 6px; }
 .lib-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; background: rgba(127,127,127,0.04); }
 .lib-settings-row.active { background: rgba(37, 99, 235, 0.08); border-color: rgba(37, 99, 235, 0.25); }
 .lib-settings-row.selected { border-color: rgba(37, 99, 235, 0.55); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15) inset; }
-.lib-settings-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.lib-settings-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.lib-settings-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.lib-settings-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 .lib-settings-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .lib-settings-cb { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); user-select: none; }
 .lib-settings-cb input { width: 14px; height: 14px; }
 .lib-settings-order-btn { -webkit-app-region: no-drag; cursor: pointer; border: 1px solid var(--border); background: rgba(127,127,127,0.08); color: var(--fg); border-radius: 10px; padding: 6px 10px; font-size: 12px; line-height: 1; transition: all var(--transition-normal); }
 .lib-settings-order-btn:hover:not(:disabled) { background: var(--active-bg); transform: translateY(-1px); }
 .lib-settings-order-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.lib-settings-order-btn.danger { border-color: rgba(239, 68, 68, 0.35); color: rgb(239, 68, 68); background: rgba(239, 68, 68, 0.08); }
+.lib-settings-order-btn.danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); }
 .lib-settings-webdav-actions { margin-top: 8px; }
 
 /* === UI 美化补充（库侧栏与图床设置）=== */

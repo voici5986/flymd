@@ -2,12 +2,21 @@
 // 关键点：不改库 id；不改已有 WebDAV 配置的默认兼容策略
 
 import { t } from '../i18n'
-import { getLibraries, getActiveLibraryId, applyLibrariesSettings, getLibSwitcherPosition, setLibSwitcherPosition, type LibSwitcherPosition } from '../utils/library'
+import { getLibraries, getActiveLibraryId, applyLibrariesSettings, getLibSwitcherPosition, setLibSwitcherPosition, upsertLibrary, renameLibrary, removeLibrary, type LibSwitcherPosition } from '../utils/library'
 import { getWebdavSyncConfigForLibrary, setWebdavSyncConfigForLibrary, openWebdavSyncDialog } from '../extensions/webdavSync'
+import { openRenameDialog } from './linkDialogs'
+import { ask, open } from '@tauri-apps/plugin-dialog'
 
 type Opts = {
   // 通知外部刷新 UI（例如库侧栏的库列表）
-  onRefreshUi?: () => void | Promise<void>
+  onRefreshUi?: (opt?: { rebuildTree?: boolean }) => void | Promise<void>
+}
+
+function formatRootForDisplay(root: string): string {
+  const s = String(root || '').trim()
+  // 库路径在 store 内统一用 `/`，但 Windows 用户看到 `D:\` 更顺眼
+  if (/^[A-Za-z]:\//.test(s) || s.startsWith('//')) return s.replace(/\//g, '\\')
+  return s
 }
 
 function normalizeRootPathInput(input: string): string {
@@ -28,6 +37,27 @@ function showNotice(msg: string): void {
     }
   } catch {}
   try { console.log('[库设置]', msg) } catch {}
+}
+
+async function confirmDialog(message: string, title: string): Promise<boolean> {
+  try {
+    if (typeof ask === 'function') {
+      try { return !!(await ask(message, { title } as any)) } catch {}
+    }
+  } catch {}
+  try { return typeof confirm === 'function' ? !!confirm(message) : false } catch { return false }
+}
+
+async function pickLibraryRoot(): Promise<string | null> {
+  try {
+    if (typeof open !== 'function') return null
+    const sel = await open({ directory: true, multiple: false } as any)
+    if (!sel) return null
+    const raw = Array.isArray(sel) ? (sel[0] || '') : sel
+    return String(raw || '').trim() || null
+  } catch {
+    return null
+  }
 }
 
 export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> {
@@ -82,7 +112,10 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
 
         <div class="lib-settings-sep"></div>
 
-        <div class="lib-settings-subtitle">${t('lib.settings.order') || '库顺序与侧栏显示'}</div>
+        <div class="lib-settings-subtitle-row">
+          <div class="lib-settings-subtitle">${t('lib.settings.order') || '库顺序与侧栏显示'}</div>
+          <button id="lib-settings-add" type="button" class="btn-secondary lib-settings-add-btn">${t('lib.settings.add') || '新增库…'}</button>
+        </div>
         <div id="lib-settings-list" class="lib-settings-list"></div>
 
         <div class="upl-actions">
@@ -113,8 +146,8 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
   const elList = overlay.querySelector('#lib-settings-list') as HTMLDivElement
   const elOpenWebdav = overlay.querySelector('#lib-settings-open-webdav') as HTMLButtonElement | null
 
-  const libs0 = await getLibraries()
-  const activeId = await getActiveLibraryId()
+  let libs0 = await getLibraries()
+  let activeId = await getActiveLibraryId()
   let selectedLibId = (activeId || libs0[0]?.id || null) as string | null
 
   // 初始化库切换位置设置
@@ -149,7 +182,20 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
 
   function syncSelectedUiFromDraft(): void {
     try {
-      if (!selectedLibId) return
+      if (!selectedLibId) {
+        elCurName.textContent = t('lib.settings.empty') || '暂无库'
+        try { elWebdavEnabled.checked = false } catch {}
+        try { elWebdavEnabled.disabled = true } catch {}
+        try { elWebdavRoot.value = '' } catch {}
+        try { elWebdavRoot.disabled = true } catch {}
+        if (elOpenWebdav) {
+          elOpenWebdav.disabled = true
+          elOpenWebdav.title = ''
+        }
+        return
+      }
+      try { elWebdavEnabled.disabled = false } catch {}
+      try { elWebdavRoot.disabled = false } catch {}
       const lib = libs0.find(x => x.id === selectedLibId)
       elCurName.textContent = lib?.name || (t('lib.menu') || '库')
       const w = draftWebdav.get(selectedLibId)
@@ -232,14 +278,77 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
         const row = document.createElement('div')
         row.className = 'lib-settings-row' + (lib.id === activeId ? ' active' : '') + (lib.id === selectedLibId ? ' selected' : '')
 
-        const name = document.createElement('div')
-        name.className = 'lib-settings-name'
-        name.textContent = lib.name || lib.id
-        name.title = lib.root
-        name.addEventListener('click', () => { void selectLibraryForEditing(lib.id) })
+        const left = document.createElement('div')
+        left.className = 'lib-settings-left'
+        left.addEventListener('click', () => { void selectLibraryForEditing(lib.id) })
+
+        const nameText = document.createElement('div')
+        nameText.className = 'lib-settings-name-text'
+        nameText.textContent = lib.name || lib.id
+
+        const pathText = document.createElement('div')
+        pathText.className = 'lib-settings-path'
+        pathText.textContent = formatRootForDisplay(lib.root)
+        pathText.title = lib.root
+
+        left.appendChild(nameText)
+        left.appendChild(pathText)
 
         const right = document.createElement('div')
         right.className = 'lib-settings-right'
+
+        const btnRename = document.createElement('button')
+        btnRename.type = 'button'
+        btnRename.className = 'lib-settings-order-btn'
+        btnRename.textContent = t('lib.settings.rename') || '重命名'
+        btnRename.addEventListener('click', async (ev) => {
+          try {
+            ev.preventDefault()
+            ev.stopPropagation()
+            const oldName = String(lib.name || '').trim()
+            const nextName = await openRenameDialog(oldName, '')
+            if (!nextName || nextName === oldName) return
+            await renameLibrary(lib.id, nextName)
+            const idx = libs0.findIndex(x => x.id === lib.id)
+            if (idx >= 0) libs0[idx] = { ...libs0[idx], name: nextName }
+            if (opts.onRefreshUi) await opts.onRefreshUi({ rebuildTree: false })
+            syncSelectedUiFromDraft()
+            renderList()
+            showNotice(t('lib.settings.renamed') || '已重命名')
+          } catch {}
+        })
+
+        const btnRemove = document.createElement('button')
+        btnRemove.type = 'button'
+        btnRemove.className = 'lib-settings-order-btn danger'
+        btnRemove.textContent = t('lib.settings.remove') || '删除'
+        btnRemove.addEventListener('click', async (ev) => {
+          try {
+            ev.preventDefault()
+            ev.stopPropagation()
+            const name = String(lib.name || lib.id || '').trim() || lib.id
+            const msg = t('lib.settings.remove.confirm', { name }) || `确认删除库“${name}”？此操作只会从列表移除，不会删除磁盘文件。`
+            const ok = await confirmDialog(msg, t('lib.settings.remove') || '删除')
+            if (!ok) return
+
+            await removeLibrary(lib.id)
+
+            libs0 = libs0.filter(x => x.id !== lib.id)
+            draftOrderIds = draftOrderIds.filter(x => x !== lib.id)
+            draftSidebarVisible.delete(lib.id)
+            dirtyWebdav.delete(lib.id)
+            draftWebdav.delete(lib.id)
+
+            activeId = await getActiveLibraryId()
+            if (selectedLibId === lib.id) selectedLibId = activeId || libs0[0]?.id || null
+            if (selectedLibId) await ensureWebdavDraftLoaded(selectedLibId)
+
+            if (opts.onRefreshUi) await opts.onRefreshUi({ rebuildTree: true })
+            syncSelectedUiFromDraft()
+            renderList()
+            showNotice(t('lib.settings.removed') || '已删除')
+          } catch {}
+        })
 
         const cbWrap = document.createElement('label')
         cbWrap.className = 'lib-settings-cb'
@@ -289,16 +398,41 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
         })
 
         right.appendChild(cbWrap)
+        right.appendChild(btnRename)
+        right.appendChild(btnRemove)
         right.appendChild(btnUp)
         right.appendChild(btnDown)
 
-        row.appendChild(name)
+        row.appendChild(left)
         row.appendChild(right)
         elList.appendChild(row)
       }
     } catch {}
   }
   renderList()
+
+  overlay.querySelector('#lib-settings-add')?.addEventListener('click', async () => {
+    try {
+      const root = await pickLibraryRoot()
+      if (!root) return
+      const lib = await upsertLibrary({ root })
+      const idx = libs0.findIndex(x => x.id === lib.id)
+      if (idx >= 0) libs0[idx] = { ...libs0[idx], ...lib }
+      else libs0 = [...libs0, lib]
+
+      if (!draftOrderIds.includes(lib.id)) draftOrderIds = [...draftOrderIds, lib.id]
+      if (!draftSidebarVisible.has(lib.id)) draftSidebarVisible.set(lib.id, true)
+
+      activeId = await getActiveLibraryId()
+      selectedLibId = lib.id
+      await ensureWebdavDraftLoaded(lib.id)
+
+      if (opts.onRefreshUi) await opts.onRefreshUi({ rebuildTree: true })
+      syncSelectedUiFromDraft()
+      renderList()
+      showNotice(t('lib.settings.added') || '已新增')
+    } catch {}
+  })
 
   overlay.querySelector('#lib-settings-open-webdav')?.addEventListener('click', async () => {
     try {
@@ -335,7 +469,7 @@ export async function openLibrarySettingsDialog(opts: Opts = {}): Promise<void> 
         await setWebdavSyncConfigForLibrary(libId, next)
       }
 
-      if (opts.onRefreshUi) await opts.onRefreshUi()
+      if (opts.onRefreshUi) await opts.onRefreshUi({ rebuildTree: false })
       showNotice(t('common.saved') || '已保存')
       close()
     } catch (e) {
