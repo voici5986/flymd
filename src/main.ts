@@ -10424,3 +10424,5 @@ try {
 import('./tabs/integration').catch(e => console.warn('[Tabs] Failed to load tab system:', e))
 // 初始化源码+阅读分屏（仅源码模式，包装器模式）
 import('./modes/sourcePreviewSplit').catch(e => console.warn('[SplitPreview] Failed to init split view:', e))
+// 初始化库侧栏宽度拖拽（内侧分界线）
+import('./ui/libraryResize').catch(e => console.warn('[LibraryResize] Failed to init library resize:', e))

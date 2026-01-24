@@ -1604,6 +1604,34 @@ body > .block-menu { display: none !important; }
   left: auto;
   border-left: 1px solid var(--border);
 }
+.lib-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px; /* 命中区：别做成 1px，用户拖不到就是垃圾交互 */
+  z-index: 16; /* 高于库(15)与大纲列(14)，避免被遮挡 */
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  /* 禁止被选中/拖拽：这是分隔条，不是内容 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.lib-resize-handle.side-left {
+  /* 贴在“库内侧边界”，并略微压到编辑区，保证好拖 */
+  left: calc(var(--library-width, 240px) - 4px);
+}
+.lib-resize-handle.side-right {
+  right: calc(var(--library-width, 240px) - 4px);
+}
+.lib-resize-handle:hover,
+.lib-resize-handle.dragging {
+  background: rgba(127,127,127,0.14);
+}
+body.lib-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
 .library.hidden {
   opacity: 0;
   pointer-events: none;
