@@ -2,6 +2,9 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v1.2.8
+- Added: Drag-to-resize width for the Library sidebar
+
 ## Update v1.2.7
 - Improved: Moved library add/remove/rename into “Library Settings”; removal only detaches it from the list and won’t delete files on disk
 - Fixed: Window operations like double-click maximize / pull-down restore
