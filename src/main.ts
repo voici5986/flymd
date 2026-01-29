@@ -5745,6 +5745,22 @@ try {
     ;(window as any).flymdOpenInNewInstance = async (path: string) => {
       try { await openPath(path) } catch {}
     }
+    // 在系统文件管理器中打开（Windows: 资源管理器 / macOS: Finder / Linux: 默认文件管理器）
+    ;(window as any).flymdOpenInExplorer = async (path: string, isDir?: boolean) => {
+      try {
+        const p = String(path || '').trim()
+        if (!p) return
+
+        // 文件：打开父目录；文件夹：直接打开该文件夹。
+        const raw = p.replace(/[\\/]+$/, '')
+        let target = isDir ? raw : (raw.replace(/[\\/][^\\/]*$/, '') || raw)
+
+        // Windows 盘符根目录：C: -> C:\ （否则资源管理器会打开“当前目录”而非盘符根）
+        if (/^[A-Za-z]:$/.test(target)) target += '\\'
+
+        await openPath(target)
+      } catch {}
+    }
     // 便签模式：以新实例打开并自动进入便签模式
     ;(window as any).flymdCreateStickyNote = async (path: string) => {
       try {

@@ -99,6 +99,21 @@ export function initLibraryContextMenu(deps: LibraryContextMenuDeps): void {
 
     menu.innerHTML = ''
 
+    // 在系统文件管理器中打开（文件：打开所在目录；文件夹：打开该文件夹）
+    menu.appendChild(mkItem(t('ctx.revealInExplorer'), async () => {
+      try {
+        const win = window as any
+        const openFn = win?.flymdOpenInExplorer as ((p: string, isDir?: boolean) => Promise<void>) | undefined
+        if (typeof openFn !== 'function') {
+          alert('该功能需要在桌面端应用中使用')
+          return
+        }
+        await openFn(path, isDir)
+      } catch (e) {
+        console.error('[库树] 打开资源管理器失败:', e)
+      }
+    }))
+
     // 文件节点专属操作：在新实例中打开 / 生成便签
     if (!isDir) {
       menu.appendChild(mkItem(t('ctx.openNewInstance'), async () => {
