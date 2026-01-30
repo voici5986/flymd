@@ -2,6 +2,12 @@
 
 [简体中文](ROADMAP.md) | [English](ROADMAP.en.md)
 
+## Update v1.2.9
+- Added: Built-in “Document Mindmap (Markmap)” v0.2.0 — render the current Markdown doc as a mindmap (right dock panel, fullscreen overlay, export SVG/PNG, click node to jump)
+- Added: Library tree context menu “Show in File Manager” (file opens its parent folder; folder opens itself)
+- Improved: When there are too many tabs, tab widths are auto-compressed so newly opened tabs are always visible (Obsidian-style)
+- Improved: Document Mindmap panel supports drag-to-resize width and remembers the panel width
+
 ## Update v1.2.8
 - Added: Drag-to-resize width for the Library sidebar
 
